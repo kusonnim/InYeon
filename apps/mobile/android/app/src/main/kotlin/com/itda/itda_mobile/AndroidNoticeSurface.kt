@@ -119,8 +119,9 @@ internal class AndroidNoticeSurface(private val context: Context, private val mo
             .setDeleteIntent(NoticeIntents.pending(context, ref, generation, NoticeDestination.DISMISS))
             .addAction(0, context.getString(R.string.notice_edit), NoticeIntents.pending(context, ref, generation, NoticeDestination.EDIT))
             .addExtras(Bundle().apply { putLong(GENERATION, generation) })
-        // Notify is an upsert. Recheck the card immediately before updating it.
-        if (!update || activeGeneration(ref) == generation) manager.notify(ref.tag, ANDROID_ID, card.build())
+        val notification = card.build()
+        // Notify is an upsert. Keep construction outside the final lookup-to-update window.
+        if (!update || activeGeneration(ref) == generation) manager.notify(ref.tag, ANDROID_ID, notification)
     }
 
     override fun cancel(ref: NoticeRef) = manager.cancel(ref.tag, ANDROID_ID)

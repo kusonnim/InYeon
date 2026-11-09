@@ -9,7 +9,7 @@ copy checked by `dart run tool/sync_fixtures.dart --check`. Python contract chec
 validate schemas and fixtures. Update all consumers in a shared contract PR.
 
 The Android share and notification outboxes use bearer tokens from a Supabase
-user session. The catalog fixture mode and loopback contract mock use synthetic
+user session. The sample library and loopback contract mock use synthetic
 data. Live authentication, transactional persistence, and storage authorization
 require verification against the real adapters.
 
@@ -68,7 +68,7 @@ add temporary privileged credentials to clients to bypass missing server work.
 | Job -> extraction -> summary/recommendations | Worker stages and coverage fixtures | Job claims/leases, real extraction, hosted model |
 | AI result -> persistence | Distinct source/generated/edit fields and failure tests | Transactional guarded writes and retry recovery |
 | Result -> notification update | Android presentation and local suppression, contract mock refresh and mutations | Owner-scoped live detail/edit and notification transactions, device registration, durable dispatch and FCM |
-| Persisted content -> PC web sync | Backend sync endpoint/model and SQL sequence helper | Client sync models/transport, authenticated incremental sync, reconnect/full resync |
+| Persisted content -> mobile and web libraries | Android reads and merges owner-scoped catalog pages against the contract mock. Backend sync endpoint/model and SQL sequence helper exist | Live authenticated catalog reads, incremental sync, reconnect/full resync |
 
 This review establishes architectural feasibility, not a running Android-to-web
 system. Executed local evidence is listed in STATUS and must not be inferred from
@@ -109,10 +109,10 @@ web browser. Keep credentials out of recorded evidence.
 Record command/build/device versions, assertions, failures, and remaining limitations
 in STATUS. Full E2E completion requires actual OS and real adapter execution.
 
-## Phase A3 live dependencies
+## Android live dependencies
 
 - Developer B supplies Supabase JWT verification and owner-scoped durable
-  `GET/PATCH /v1/contents/{id}`, `POST /v1/notification-events`, and
+  `GET /v1/contents`, `GET/PATCH /v1/contents/{id}`, `POST /v1/notification-events`, and
   `POST /v1/contents/{id}/notification/restore`. Mutations need the documented
   conflict fields and idempotency semantics across process restarts. Live share
   registration and private assets also depend on the A2 server adapters.

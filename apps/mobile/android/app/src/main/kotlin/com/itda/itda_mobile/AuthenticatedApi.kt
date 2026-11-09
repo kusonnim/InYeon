@@ -14,8 +14,11 @@ internal class AuthenticatedApi(
         path: String,
         body: JSONObject? = null,
         key: UUID? = null,
+        query: Map<String, String> = emptyMap(),
     ): HttpReply {
-        val url = config.api(path)
+        val url = config.api(path).newBuilder().apply {
+            query.forEach { (name, value) -> addQueryParameter(name, value) }
+        }.build()
         fun send(token: String): HttpReply {
             sessions.requireOwner(owner)
             val headers = mutableMapOf("Authorization" to "Bearer $token")

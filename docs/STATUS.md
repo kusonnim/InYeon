@@ -1,12 +1,12 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A3 Android notification lifecycle.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A4 Android mobile library.**
 
-Android saves shares locally, delivers assigned receipts through an authenticated
-outbox, and presents native notifications for acknowledged content. Upload and
-notification verification uses synthetic Supabase sessions and an OpenAPI mock.
-Live server authorization and storage, AI processing, FCM delivery, and mobile/web
-synchronization remain integration work.
+Android combines saved device originals and the signed-in catalog in one
+library. The A1 receipt, authenticated A2 outbox, and A3 notification lifecycle
+support the refreshed screens. Verification uses synthetic Supabase sessions
+and an OpenAPI mock. Live authorization, storage, analysis, FCM delivery, and
+incremental mobile/web synchronization remain integration work.
 
 ## Delivered foundation
 
@@ -18,10 +18,10 @@ synchronization remain integration work.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private asset transport, native notification lifecycle, Flutter fixture library and registered detail/edit screens | Two-account live API/RLS verification, FCM delivery and catalog synchronization |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private asset transport, native notifications, unified library, versioned editor, account and permission screens | Two-account live API/RLS verification, private attachment preview, incremental sync, FCM delivery |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
-Phase A3 starts from the merged Phase A2 implementation in main at `910461d` (PR #2).
+Phase A4 starts from the merged Phase A3 implementation in main at `348327f` (PR #3).
 
 ## Verification evidence
 
@@ -106,16 +106,32 @@ loopback API and synthetic users.
 See the [Android presentation ADR](decisions/0005-android-notification-presentation.md)
 for the Android issuance and swipe/update race limits.
 
+### Phase A4 Android checks
+
+Local verification used Flutter 3.47.8, Dart 3.13.7, JDK 21, and disposable
+Android 15 / API 35 x86_64 emulators.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, localization generation, canonical fixture check, static analysis, and 17 tests passed. Widget checks covered fixture separation, local originals, catalog merging and errors, account changes, version conflicts, notification routes and restore, and labeled Android tap targets at 320 logical pixels and 2× text scale |
+| Android | Default and mock x86_64 debug APK builds passed and installed. All 31 instrumentation tests passed, including 29 A1–A3 regressions. Lint reported zero errors and six warnings |
+| Visual inspection | Opened the library and details in light and dark Android modes. Checked the dark library at 1.30× system font size and verified the adjusted layout above the gesture bar. Reviewed the account screen and the offline state on the same emulator |
+| Android flows | A share saved in airplane mode opened its original. Reconnection produced one merged synchronized card. The actual notification body opened the item after process termination and **수정하기** opened the editor. A mock HTTP 409 kept the title draft, then a deliberate save preserved the newer server note and original. A real swipe stayed hidden through later analysis, and explicit restore produced one generation-2 card |
+| Android account isolation | Signing out hid the restored card while its server visibility stayed active. Account B saw one redacted device receipt and none of account A's catalog content |
+| Contract mock | Verified owner-bound keyset pagination, invalid cursor recovery, late inserts, cross-owner denial, optimistic version conflicts, and inclusion of archived and dismissed items. App tests and emulator flows used synthetic data |
+| Live integration | Pending B's verified JWT and durable catalog, edit, upload and notification adapters. C's disposable Supabase checks still need two real test identities and private object verification. Incremental sync and FCM remain separate milestones |
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
 
-1. Verify live ingestion, private uploads, notification mutations and edits
-   with B and C using two Supabase identities. Exercise owner isolation,
-   interrupted uploads, expiry, version conflicts and duplicate requests.
-2. Agree on FCM device registration, revocation and dispatch with B, then feed
-   delivery hints into the authoritative refresh path. Repeat delayed,
-   duplicate and cross-account checks with live adapters.
+1. Verify the unified library, ingestion, private uploads, notification
+   mutations and edits in staging with B and C using two Supabase identities.
+   Exercise owner isolation, interrupted uploads, expiry and version conflicts.
+2. Coordinate incremental sync with B and C and FCM device registration,
+   revocation and dispatch with B. Feed delivery hints into the authoritative
+   refresh path and repeat delayed, duplicate and cross-account checks with
+   live adapters.
 
 ### Developer B — Backend and AI
 

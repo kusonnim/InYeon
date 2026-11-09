@@ -17,6 +17,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private var localSharesChannel: MethodChannel? = null
@@ -71,11 +72,18 @@ class MainActivity : FlutterActivity() {
             "com.itda.itda_mobile/local_shares",
         ).apply {
             setMethodCallHandler { call, result ->
-                val executor = if (call.method in setOf("noticeDetails", "editNoticeContent")) contentIo else shareIo
+                val executor = when (call.method) {
+                    "listCatalog", "noticeDetails", "editNoticeContent" -> contentIo
+                    else -> shareIo
+                }
                 executor.execute {
                     try {
                         when (call.method) {
                             "listLocalInbox" -> result.success(outbox.listInbox())
+                            "listCatalog" -> result.success(outbox.listCatalog(call.uploadOwner(), call.argument("cursor")))
+                            "readLocalSource" -> result.success(outbox.readLocalSource(
+                                parseUuid(requireNotNull(call.argument("local_id"))),
+                            ))
                             "signIn" -> signIn(outbox, call, result)
                             "signOut" -> {
                                 outbox.signOut()
@@ -97,9 +105,11 @@ class MainActivity : FlutterActivity() {
                             "noticeStatus" -> result.success(outbox.notices.status(call.noticeRef()))
                             "editNoticeContent" -> {
                                 val version = requireNotNull(call.argument<Number>("expected_version")).toLong()
-                                result.success(outbox.notices.edit(
-                                    call.noticeRef(), version, call.argument("title"), call.argument("user_note"),
-                                ))
+                                val patch = JSONObject().put("expected_version", version)
+                                for (field in listOf("title", "user_note")) {
+                                    if (call.hasArgument(field)) patch.put(field, call.argument<String>(field) ?: JSONObject.NULL)
+                                }
+                                result.success(outbox.notices.edit(call.noticeRef(), patch))
                             }
                             "restoreNotice" -> {
                                 outbox.notices.restore(call.noticeRef())
@@ -174,10 +184,10 @@ class MainActivity : FlutterActivity() {
         result.error((error as? UploadProblem)?.code ?: "local_inbox_unavailable", null, null)
     }
 
-    private fun MethodCall.noticeRef(): NoticeRef {
-        val owner = UploadOwner(parseUuid(requireNotNull(argument("owner_id"))), requireNotNull(argument("realm")))
-        return NoticeRef(owner, parseUuid(requireNotNull(argument("content_id"))))
-    }
+    private fun MethodCall.uploadOwner() =
+        UploadOwner(parseUuid(requireNotNull(argument("owner_id"))), requireNotNull(argument("realm")))
+
+    private fun MethodCall.noticeRef() = NoticeRef(uploadOwner(), parseUuid(requireNotNull(argument("content_id"))))
 
     private fun enableNotices(notices: AndroidNotifications) {
         if (notices.permissionEnabled()) return

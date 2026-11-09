@@ -55,6 +55,26 @@ internal class AndroidOutbox private constructor(context: Context) {
         )
     }
 
+    fun listCatalog(owner: UploadOwner, cursor: String?): String {
+        val config = config ?: throw UploadProblem.auth()
+        val session = sessions ?: throw UploadProblem.auth()
+        val http = UploadHttp(maxResponseBytes = 8L * 1024 * 1024)
+        val page = CatalogApi(AuthenticatedApi(config, session, http)).list(owner, cursor)
+        session.requireOwner(owner)
+        return page
+    }
+
+    fun readLocalSource(localId: UUID): Map<String, Any?> {
+        val share = store.read(localId) ?: throw UploadProblem.permanent("local_share_missing")
+        if (share.progress.owner != null && share.progress.owner != activeOwner()) throw UploadProblem.auth()
+        val receipt = share.receipt
+        return mapOf(
+            "source_text" to receipt.stringOrNull("source_text"),
+            "source_url" to receipt.stringOrNull("source_url"),
+            "filename" to receipt.optJSONObject("attachment")?.stringOrNull("filename"),
+        )
+    }
+
     fun assign(localId: UUID, expectedUserId: UUID) {
         val owner = activeOwner()?.takeIf { it.userId == expectedUserId }
             ?: throw UploadProblem.auth("account_changed")

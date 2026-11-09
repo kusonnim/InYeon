@@ -36,6 +36,12 @@ internal class HttpReply(val status: Int, private val body: String) {
 
     val retryable: Boolean
         get() = status in setOf(408, 429, 500, 502, 503, 504)
+
+    fun expectJson(expected: Int): JSONObject {
+        if (status == expected) return json()
+        if (retryable) throw UploadProblem.retry("http_$status")
+        throw UploadProblem.permanent(if (status == 501) "backend_not_implemented" else "http_$status")
+    }
 }
 
 internal inline fun <T> decodeServer(decode: () -> T): T = try {
@@ -49,7 +55,7 @@ internal inline fun <T> decodeServer(decode: () -> T): T = try {
 }
 
 // One cancellable exchange sequence per worker. The shared client keeps no session state.
-internal class UploadHttp(network: Network? = null) {
+internal class UploadHttp(network: Network? = null, private val maxResponseBytes: Long = 1024L * 1024) {
     private val current = AtomicReference<Call>()
     @Volatile private var stopped = false
     private val transport = if (network == null) client else client.newBuilder()
@@ -96,7 +102,7 @@ internal class UploadHttp(network: Network? = null) {
         try {
             call.execute().use { response ->
                 val body = response.body.source()
-                if (body.request(MAX_RESPONSE_BYTES + 1)) {
+                if (body.request(maxResponseBytes + 1)) {
                     throw UploadProblem.permanent("invalid_server_response")
                 }
                 return HttpReply(response.code, body.readUtf8())
@@ -113,7 +119,6 @@ internal class UploadHttp(network: Network? = null) {
 
     private companion object {
         val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
-        const val MAX_RESPONSE_BYTES = 1024L * 1024
         val client = OkHttpClient.Builder()
             .followRedirects(false)
             .followSslRedirects(false)

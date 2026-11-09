@@ -142,6 +142,14 @@ production. Invalid or expired cursors return a structured `invalid_cursor` erro
 clients discard the cursor and perform a full resync.
 FCM is a hint to fetch authoritative state, not the sync cursor source.
 
+Phase A4 uses the existing owner-scoped content list for the Android library.
+Kotlin sends paginated requests with the A2 session and checks ownership
+before returning content. Flutter keeps the fetched pages in memory for the
+active account and merges them with local receipts by acknowledged server ID.
+Device receipts remain available during offline launches. The sample catalog
+has a separate route. Catalog reads and edits leave native notification
+eligibility tied to acknowledged receipts on this device.
+
 ## Notification lifecycle
 
 Creation establishes active generation 1, revision 1. Revisions track changes

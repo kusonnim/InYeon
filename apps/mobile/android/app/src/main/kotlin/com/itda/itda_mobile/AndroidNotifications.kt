@@ -60,37 +60,36 @@ internal class AndroidNotifications(
     }
 
     fun restore(ref: NoticeRef) {
-        requireAccess(ref)
+        if (!ownsAcknowledgment(ref)) throw UploadProblem.auth()
         if (!lifecycle.requestRestore(ref)) throw UploadProblem.permanent("notification_unavailable")
         schedule(ref, append = true, wait = true)
     }
 
     fun status(ref: NoticeRef): Map<String, Any?> {
-        requireAccess(ref)
+        requireOwner(ref)
         return lifecycle.read(ref)?.summary() ?: emptyMap()
     }
 
     fun details(ref: NoticeRef): Map<String, Any?> {
-        requireAccess(ref)
+        requireOwner(ref)
         return contentResult(ref, fetch(ref, api(UploadHttp())))
     }
 
-    fun edit(ref: NoticeRef, version: Long, title: String?, note: String?): Map<String, Any?> {
-        requireAccess(ref)
-        val body = JSONObject().put("expected_version", version)
-            .put("title", title ?: JSONObject.NULL).put("user_note", note ?: JSONObject.NULL)
-        val reply = api(UploadHttp()).request(ref.owner, "PATCH", contentPath(ref), body)
+    fun edit(ref: NoticeRef, patch: JSONObject): Map<String, Any?> {
+        requireOwner(ref)
+        val reply = api(UploadHttp()).request(ref.owner, "PATCH", contentPath(ref), patch)
         if (reply.status == 409) throw UploadProblem.permanent("version_conflict")
-        return contentResult(ref, reply.expect(200))
+        return contentResult(ref, reply.expectJson(200))
     }
 
     private fun contentResult(ref: NoticeRef, response: JSONObject): Map<String, Any?> {
-        lifecycle.observe(ref, NoticeContent.fromWire(response, ref))
-        requireAccess(ref)
+        val content = NoticeContent.fromWire(response, ref)
+        if (ownsAcknowledgment(ref)) lifecycle.observe(ref, content)
+        requireOwner(ref)
         return mapOf(
             "content" to response.toString(),
             "mode" to config?.mode,
-            "notice" to lifecycle.read(ref)?.summary(),
+            "notice" to (lifecycle.read(ref)?.summary() ?: mapOf("dismissed" to content.state.dismissed)),
         )
     }
 
@@ -137,7 +136,7 @@ internal class AndroidNotifications(
             val current = NoticeContent.fromWire(fetch(ref, api), ref)
             return lifecycle.resolveConflict(ref, event, current)
         }
-        val result = reply.expect(200)
+        val result = reply.expectJson(200)
         val state = decodeServer {
             val state = NoticeState.fromWire(result.getJSONObject("state"), ref)
             val applied = result.getBoolean("applied")
@@ -165,8 +164,8 @@ internal class AndroidNotifications(
         return false
     }
 
-    private fun requireAccess(ref: NoticeRef) {
-        if (!ownsAcknowledgment(ref)) throw UploadProblem.auth()
+    private fun requireOwner(ref: NoticeRef) {
+        if (activeOwner() != ref.owner) throw UploadProblem.auth()
     }
 
     private fun api(http: UploadHttp) = AuthenticatedApi(
@@ -174,15 +173,9 @@ internal class AndroidNotifications(
     )
 
     private fun fetch(ref: NoticeRef, api: AuthenticatedApi): JSONObject =
-        api.request(ref.owner, "GET", contentPath(ref)).expect(200)
+        api.request(ref.owner, "GET", contentPath(ref)).expectJson(200)
 
     private fun contentPath(ref: NoticeRef) = "v1/contents/${ref.contentId}"
-
-    private fun HttpReply.expect(expected: Int): JSONObject {
-        if (status == expected) return json()
-        if (retryable) throw UploadProblem.retry("http_$status")
-        throw UploadProblem.permanent(if (status == 501) "backend_not_implemented" else "http_$status")
-    }
 
     private fun schedule(ref: NoticeRef, append: Boolean = false, wait: Boolean = false) {
         try {
