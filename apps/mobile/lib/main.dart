@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'api/content_api.dart';
 import 'api/fixture_content_api.dart';
 import 'models/content.dart';
+import 'native/share_bridge.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -9,17 +11,23 @@ Future<void> main() async {
   if (mode != 'fixture') {
     throw UnsupportedError('Real API mode requires authenticated session wiring. Phase 0 supports fixture mode.');
   }
-  runApp(ItdaApp(api: await FixtureContentApi.load()));
+  runApp(ItdaApp(
+    api: await FixtureContentApi.load(),
+    shareBridge: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? const AndroidShareBridge()
+        : null,
+  ));
 }
 
 class ItdaApp extends StatelessWidget {
-  const ItdaApp({super.key, required this.api});
+  const ItdaApp({super.key, required this.api, this.shareBridge});
   final ContentApi api;
+  final ShareBridge? shareBridge;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'ITDA',
     theme: ThemeData(colorSchemeSeed: const Color(0xff225c47), useMaterial3: true),
-    home: LibraryScreen(api: api),
+    home: LibraryScreen(api: api, shareBridge: shareBridge),
     onGenerateRoute: (settings) {
       final uri = Uri.tryParse(settings.name ?? '');
       if (uri != null && uri.pathSegments.length == 2 && uri.pathSegments.first == 'contents') {
@@ -30,38 +38,115 @@ class ItdaApp extends StatelessWidget {
   );
 }
 
-const fixtureNotice = 'Phase 0 synthetic fixtures. Sharing, notifications, sign-in and synchronization are planned.';
+const fixtureNotice = 'Sample library · synthetic fixtures';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, required this.api});
+  const LibraryScreen({super.key, required this.api, this.shareBridge});
   final ContentApi api;
+  final ShareBridge? shareBridge;
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 class _LibraryScreenState extends State<LibraryScreen> {
   late final Future<ContentPage> _contents = widget.api.listContents();
+  Future<List<PendingShare>>? _pendingShares;
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    final bridge = widget.shareBridge;
+    if (bridge != null) {
+      _pendingShares = bridge.listPendingShares();
+      _lifecycle = AppLifecycleListener(
+        onResume: () {
+          final shares = bridge.listPendingShares();
+          setState(() {
+            _pendingShares = shares;
+          });
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('ITDA · Saved content')),
-    body: Column(children: [
-      const Padding(padding: EdgeInsets.all(16), child: Text(fixtureNotice)),
-      Expanded(child: FutureBuilder<ContentPage>(future: _contents, builder: (context, snapshot) {
-        if (snapshot.hasError) return const Center(child: Text('Unable to load fixture content.'));
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        return ListView.builder(
-          itemCount: snapshot.data!.items.length,
-          itemBuilder: (context, index) {
-            final content = snapshot.data!.items[index];
-            return ListTile(
-              title: Text(content.title ?? 'Untitled content'),
-              subtitle: Text('Analysis: ${content.analysisStatus.name} · Workflow: ${content.workflowStatus.name}'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).pushNamed('/contents/${content.id}'),
+    body: CustomScrollView(
+      slivers: [
+        if (_pendingShares != null)
+          FutureBuilder<List<PendingShare>>(
+            future: _pendingShares,
+            builder: (context, snapshot) {
+              final shares = snapshot.data ?? const <PendingShare>[];
+              final status = switch (snapshot) {
+                AsyncSnapshot(hasError: true) => 'Unable to load local shares.',
+                AsyncSnapshot(connectionState: ConnectionState.waiting) => null,
+                _ when shares.isEmpty => 'Share from another app to save here.',
+                _ => null,
+              };
+              return SliverList.builder(
+                itemCount: shares.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return ListTile(
+                      title: const Text('Saved on this device'),
+                      subtitle: status == null ? null : Text(status),
+                    );
+                  }
+                  final share = shares[index - 1];
+                  final type = switch (share.inputType) {
+                    InputType.text => 'Text',
+                    InputType.url => 'Link',
+                    InputType.image => 'Image',
+                    InputType.document => 'PDF',
+                  };
+                  return ListTile(
+                    key: ValueKey(share.localId),
+                    title: Text(share.label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('$type · Pending upload'),
+                  );
+                },
+              );
+            },
+          ),
+        const SliverToBoxAdapter(
+          child: Padding(padding: EdgeInsets.all(16), child: Text(fixtureNotice)),
+        ),
+        FutureBuilder<ContentPage>(
+          future: _contents,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return SliverToBoxAdapter(
+                child: Center(
+                  child: snapshot.hasError
+                      ? const Text('Unable to load fixture content.')
+                      : const CircularProgressIndicator(),
+                ),
+              );
+            }
+            return SliverList.builder(
+              itemCount: snapshot.data!.items.length,
+              itemBuilder: (context, index) {
+                final content = snapshot.data!.items[index];
+                return ListTile(
+                  title: Text(content.title ?? 'Untitled content'),
+                  subtitle: Text('Analysis: ${content.analysisStatus.name} · Workflow: ${content.workflowStatus.name}'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).pushNamed('/contents/${content.id}'),
+                );
+              },
             );
           },
-        );
-      })),
-    ]),
+        ),
+      ],
+    ),
   );
 }
 
@@ -91,7 +176,7 @@ class _DetailScreenState extends State<DetailScreen> {
         const Text('AI interpretation', style: TextStyle(fontWeight: FontWeight.bold)),
         Text(content.analysis?.summary ?? (content.analysis == null ? 'Analysis pending.' : 'No grounded summary is available.')),
         Text('Coverage: ${content.analysis?.coverage.name ?? 'Not analyzed'}'),
-        ...?content.analysis?.limitations.map((text) => Text(text)),
+        ...?content.analysis?.limitations.map(Text.new),
         const SizedBox(height: 16),
         const Text('Recommendations', style: TextStyle(fontWeight: FontWeight.bold)),
         if (content.recommendations.isEmpty) const Text('No recommendation is appropriate for this content.'),

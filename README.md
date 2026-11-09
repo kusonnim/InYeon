@@ -7,10 +7,10 @@ link, text, image, or document from Android; ITDA saves it promptly, analyzes th
 accessible source in the background, and keeps the result in a synchronized mobile
 and web library. Suggestions can be actions, information, resources, or nothing.
 
-This repository establishes **Phase 0**: contracts, a private database foundation,
-independent fixture-based client starting points, an API/worker scaffold, tests,
-and contributor knowledge. It is not a deployed product. Real Android ingestion,
-Supabase integration, AI inference, and FCM delivery remain integration work.
+Phase 0 established the contracts, private database foundation, fixture-based
+clients, and API/worker scaffold. Phase A1 adds offline Android share receipt
+and a local outbox. Server uploads, Supabase integration, AI inference, and FCM
+delivery are future integration work.
 
 ## Start here
 
@@ -44,8 +44,6 @@ Mobile:
 
 ```sh
 cd apps/mobile
-flutter create --platforms=android --org com.itda --project-name itda_mobile .
-dart run tool/sync_fixtures.dart
 flutter pub get
 flutter run -d <android-device>
 ```
@@ -57,7 +55,7 @@ before connecting clients to that demo or to future authenticated services.
 ## Repository
 
 ```text
-apps/mobile/           Flutter + Android Kotlin starting point (A)
+apps/mobile/           Flutter app and Kotlin share receiver (A)
 apps/web/              Next.js + TypeScript starting point (C)
 services/backend/      FastAPI, Python worker, tests (B)
 supabase/              PostgreSQL migrations and access tests (C)

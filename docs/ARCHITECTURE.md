@@ -44,6 +44,10 @@ success UI/close. Copy Android temporary content URIs into app-private storage (
 take durable URI permission where supported). A retry reuses the key; independently
 sharing the same URL is a new user action with a new key, not global URL deduplication.
 
+Phase A1 publishes an app-private receipt directory containing the source and its
+pending outbox record in a single atomic rename. Flutter reads local summaries
+through the native bridge. See the [mobile storage details](../apps/mobile/README.md#inbox-and-outbox).
+
 For images/documents, use the upload contract in OpenAPI: authenticated initiation,
 server-selected owner-prefixed object path and expiring upload capability, upload,
 then authenticated completion with server-side object verification. Only completed,

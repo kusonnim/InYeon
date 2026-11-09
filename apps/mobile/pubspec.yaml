@@ -1,5 +1,5 @@
 name: itda_mobile
-description: ITDA Android-first Phase 0 fixture scaffold.
+description: ITDA Android share inbox and fixture library.
 publish_to: none
 version: 0.0.1+1
 environment:

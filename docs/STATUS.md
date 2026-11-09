@@ -1,11 +1,10 @@
 # Implementation status
 
-Last updated: 2026-11-09 (Asia/Seoul). Phase: **0, foundation**.
+Last updated 2026-11-09 (Asia/Seoul). **Phase 0 foundation and Phase A1 local Android receipt.**
 
-This is a local repository foundation, not a deployed or production-ready service.
-Client fixture rendering and the volatile fixture API are executable starting points.
-The complete Android -> real database -> AI -> notification -> web flow is planned.
-Do not interpret mock tests as proof of production durability or authorization.
+Android now saves shares locally. The clients also render the synthetic catalog.
+Authenticated uploads, the real database adapter, AI processing, notification
+delivery, and mobile/web synchronization are planned.
 
 ## Delivered foundation
 
@@ -17,12 +16,10 @@ Do not interpret mock tests as proof of production durability or authorization.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Flutter library/detail, Dart models/API abstractions, bundled checked fixture, Kotlin/Dart native boundaries | Generated Android runner, SDK lockfile, durable share inbox/outbox, uploads, native notifications |
-| Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web | GitHub branch protection, actual remote CI run, team account mapping |
+| Mobile | Android runner and Flutter lockfile, native offline ACTION_SEND receiver, private inbox/outbox, pending list, fixture library and details | Authenticated uploads, synchronization, native notifications |
+| Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
-The original repository contained only `.git`; no existing application code was
-replaced. Local work is on `codex/phase-0-foundation`. No deployment or remote PR
-publication is included in Phase 0.
+Phase A1 builds on the Phase 0 foundation in main.
 
 ## Verification evidence
 
@@ -31,21 +28,18 @@ publication is included in Phase 0.
 | SQL parsing | Passed with temporary pglast 8.7: both migrations (27 and 14 statements), test script (60 statements), all four PL/pgSQL functions |
 | API/SQL consistency | Passed: 9 HTTP model mappings and enums against 12 explicitly owned tables |
 | pgTAP | 33 assertions authored; **not executed** locally because Docker Linux engine is not running and Supabase CLI/psql are absent |
-| Flutter analysis/tests/Android run | **Not executed**: Flutter/Dart unavailable locally; Android execution was not attempted; commands and CI provided |
 | Backend tests | Passed: 13 tests, including mock idempotency/concurrency, owner isolation, version conflict, independent states, source/edit preservation, and worker stage validation |
 | OpenAPI and examples | Passed: specification validation, runtime schema parity, 11 example payload checks |
 | Web tests/typecheck/build | Passed: 2 HTTP adapter tests, `next typegen && tsc --noEmit`, and production `next build --webpack` under Node 24 |
 | Web production HTTP smoke | Passed: library 200 with catalog/fixture marker, detail 200 with source/analysis, missing content 404; test server stopped |
-| Mobile fixture consistency | Passed: packaged catalog bytes match the canonical shared fixture; this does not execute Dart/Flutter |
-| Full real E2E | **Not executed**: real adapters, native implementation and cloud credentials are intentionally absent |
-| GitHub Actions | Workflow definitions provided; no remote run has been triggered or claimed |
+| Full real E2E | Pending authenticated server adapters, analysis, and notification delivery |
+| GitHub Actions | See the PR checks for hosted results |
 | Agent onboarding | Independent repository-only audit completed; retention and client-integration evidence gaps corrected; see [audit record](ONBOARDING_AUDIT.md) |
 
 Python 3.12.14 and uv 0.13.7 were made available for backend verification; Node
 24.15.0 and npm 11.12.1 are present. Initial sandbox DNS restrictions required
 approved dependency-download retries. CI pins Python 3.12, uv 0.13.7, Node 24,
-Flutter 3.47.9 and Supabase CLI 2.118.0. Flutter and Supabase pins need their first
-CI execution; they are not claimed as locally exercised toolchains.
+Flutter 3.47.9 and Supabase CLI 2.118.0.
 
 Unsuccessful local attempts and resolutions: initial sandbox package downloads
 failed DNS resolution; approved downloads completed. Windows sandbox restrictions
@@ -53,20 +47,34 @@ blocked TestClient's asyncio loopback setup; the approved synthetic test run pas
 The default Next.js Turbopack CSS worker could not initialize on this host; web
 scripts now select the supported Webpack path. Sandbox prerender filesystem access
 also failed; the approved production build completed. These resolved environment
-failures do not substitute for the still-pending Flutter/live database checks.
+failures do not substitute for live database checks.
 One upstream Starlette/AnyIO deprecation warning remains in the passing Python run.
+
+### Phase A1 Android checks
+
+Local toolchain was Flutter 3.47.8, Dart 3.13.7, and JDK 21. The device was
+the disposable ITDA_A1 Android 15 / API 35 x86_64 emulator. Device evidence
+covers this emulator.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, `flutter analyze`, five `flutter test` cases, and the canonical fixture check passed |
+| APK | `flutter build apk --debug --target-platform android-x64` passed and the APK installed on the emulator |
+| Native tests | Six `:app:connectedDebugAndroidTest` cases passed. Delaying the commit kept the receiver open, and recreating it yielded one committed receipt before RESULT_OK. The suite also checked replay, private file copies, unreadable URIs, and interrupted writes |
+| Android share sheet | Chrome text and URL and Files PNG and PDF all produced pending receipts with airplane mode enabled and no default network. Chrome and Files returned to the foreground after each share. The text started ITDA cold, and the URL refreshed the existing Flutter library on resume |
+| Restart and file durability | After deleting the synthetic source files and force-stopping ITDA, all four local IDs and client event keys survived. Both private copies still matched the original SHA-256 and the Flutter list showed all four pending entries beside the fixture catalog |
+| Failure paths | An ungranted document URI and a file blocking creation of the inbox directory each produced an error toast and left the receipt count unchanged |
 
 ## Next concrete tasks
 
 ### Developer A — Mobile
 
-1. Bootstrap/commit the Android runner and Flutter lockfile; run analysis, tests,
-   and an emulator/device build before registering any share target.
-2. Implement app-private durable source copies and outbox with stable retry keys;
-   test offline receipt, URI expiry, process death, restart and duplicate retries.
-3. Integrate user session and private uploads with B's authenticated API.
-4. Implement independent notification state, durable local suppression and explicit
-   restoration; body -> details, Edit-only action, stale-generation tests.
+1. Phase A2 integrates user sessions and private uploads with B's authenticated
+   API. Use the local `client_event_id` for ingestion retries and persist asset
+   reservation/completion progress before reconciling the server receipt.
+2. Implement independent notification state, durable local suppression and
+   explicit restoration. Test body-to-details navigation, the Edit action,
+   and stale-generation events.
 
 ### Developer B — Backend and AI
 

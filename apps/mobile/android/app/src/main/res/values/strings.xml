@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ITDA</string>
+    <string name="share_saving">Saving to ITDA</string>
+    <string name="share_saved">Saved on this device</string>
+    <string name="share_empty">Nothing to save from this share.</string>
+    <string name="share_unsupported">ITDA can save text, web links, JPEG, PNG, WebP, and PDF.</string>
+    <string name="share_unreadable">ITDA could not read the shared file. Try sharing it again from the original app.</string>
+    <string name="share_too_large">ITDA could not save this share because it is too large.</string>
+    <string name="share_storage_failed">ITDA could not save this share on your device.</string>
+</resources>
