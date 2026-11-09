@@ -154,14 +154,23 @@ and revision. Replay of its idempotency key cannot create another generation.
 
 Persist local suppression before sending an offline dismissal. A pending local
 dismissal suppresses old FCM/sync updates until reconciled. Merge server events by
-generation/revision, never blindly post from every FCM payload. Use a stable Android
-notification identity per content and `onlyAlertOnce`/equivalent update behavior;
-the API UUID remains canonical and Android integer mapping must avoid collisions.
+generation/revision and treat FCM as a refresh hint. Android uses a stable,
+account-scoped tag containing the content UUID and a fixed integer ID. Updates
+use `onlyAlertOnce`.
 The body opens details, with Edit as the sole quick action. Workflow updates are
 independent. Device loss, permission denial, and delayed FCM do not lose library data.
 
+Phase A3 connects acknowledged A2 content IDs to native Android presentation.
+A private per-owner record stores the last server state, local suppression,
+generation issuance and pending event keys. Unique connected-network
+WorkManager jobs fetch the current content and send versioned mutations with
+the existing Supabase session. Android navigation verifies the active account
+and acknowledged ID before exposing details or the title and notes editor.
+The mock path exercises the same requests. See the
+[Android presentation ADR](decisions/0005-android-notification-presentation.md).
+
 Multi-device delivery eligibility and durable notification dispatch/outbox remain
-open design work. Do not introduce an automatic restore while resolving them.
+open server design work. Restoration remains an explicit user choice.
 
 ## References used for implementation constraints
 

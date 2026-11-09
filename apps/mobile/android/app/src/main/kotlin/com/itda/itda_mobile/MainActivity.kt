@@ -1,17 +1,53 @@
 package com.itda.itda_mobile
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : FlutterActivity() {
     private var localSharesChannel: MethodChannel? = null
     private var updates: EventChannel? = null
     private var sink: EventChannel.EventSink? = null
     private val onChange: () -> Unit = { runOnUiThread { sink?.success(null) } }
+    private val pendingNotice = AtomicReference<NoticeLink?>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        if (savedInstanceState?.getBoolean("notice_consumed") != true) {
+            pendingNotice.set(NoticeIntents.parse(intent))
+        }
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingNotice.set(NoticeIntents.parse(intent))
+        onChange()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("notice_consumed", pendingNotice.get() == null)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (localSharesChannel != null) refreshNotices()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -35,7 +71,8 @@ class MainActivity : FlutterActivity() {
             "com.itda.itda_mobile/local_shares",
         ).apply {
             setMethodCallHandler { call, result ->
-                shareIo.execute {
+                val executor = if (call.method in setOf("noticeDetails", "editNoticeContent")) contentIo else shareIo
+                executor.execute {
                     try {
                         when (call.method) {
                             "listLocalInbox" -> result.success(outbox.listInbox())
@@ -50,9 +87,40 @@ class MainActivity : FlutterActivity() {
                                 outbox.assign(id, account)
                                 result.success(null)
                             }
+                            "takeNoticeNavigation" -> {
+                                val link = pendingNotice.getAndSet(null)?.takeIf {
+                                    it.destination != NoticeDestination.DISMISS && outbox.notices.ownsAcknowledgment(it.ref)
+                                }
+                                result.success(link?.let { it.ref.toMap() + ("destination" to it.destination.wire) })
+                            }
+                            "noticeDetails" -> result.success(outbox.notices.details(call.noticeRef()))
+                            "noticeStatus" -> result.success(outbox.notices.status(call.noticeRef()))
+                            "editNoticeContent" -> {
+                                val version = requireNotNull(call.argument<Number>("expected_version")).toLong()
+                                result.success(outbox.notices.edit(
+                                    call.noticeRef(), version, call.argument("title"), call.argument("user_note"),
+                                ))
+                            }
+                            "restoreNotice" -> {
+                                outbox.notices.restore(call.noticeRef())
+                                result.success(null)
+                            }
+                            "refreshNotices" -> {
+                                outbox.notices.refreshRegistered(append = true)
+                                result.success(null)
+                            }
+                            "enableNotices" -> {
+                                if (outbox.activeOwner() == null) throw UploadProblem.auth()
+                                runOnUiThread { enableNotices(outbox.notices) }
+                                result.success(null)
+                            }
                             else -> result.notImplemented()
                         }
                     } catch (error: Exception) {
+                        if (error is UploadProblem && error.state == UploadState.AUTH_REQUIRED) {
+                            outbox.notices.hideInactiveAccounts()
+                            onChange()
+                        }
                         report(result, error)
                     }
                 }
@@ -106,7 +174,58 @@ class MainActivity : FlutterActivity() {
         result.error((error as? UploadProblem)?.code ?: "local_inbox_unavailable", null, null)
     }
 
+    private fun MethodCall.noticeRef(): NoticeRef {
+        val owner = UploadOwner(parseUuid(requireNotNull(argument("owner_id"))), requireNotNull(argument("realm")))
+        return NoticeRef(owner, parseUuid(requireNotNull(argument("content_id"))))
+    }
+
+    private fun enableNotices(notices: AndroidNotifications) {
+        if (notices.permissionEnabled()) return
+        if (Build.VERSION.SDK_INT >= 33 && requestNoticePermission()) return
+        val settings = if (Build.VERSION.SDK_INT >= 26) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+        }
+        startActivity(settings)
+    }
+
+    @androidx.annotation.RequiresApi(33)
+    private fun requestNoticePermission(): Boolean {
+        val permission = Manifest.permission.POST_NOTIFICATIONS
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            val preferences = getPreferences(MODE_PRIVATE)
+            if (!preferences.getBoolean("notice_permission_requested", false) ||
+                ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+            ) {
+                preferences.edit { putBoolean("notice_permission_requested", true) }
+                ActivityCompat.requestPermissions(this, arrayOf(permission), NOTICE_PERMISSION_REQUEST)
+                return true
+            }
+        }
+        return false
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTICE_PERMISSION_REQUEST) refreshNotices()
+    }
+
+    private fun refreshNotices() {
+        val context = applicationContext
+        shareIo.execute {
+            try {
+                AndroidOutbox.get(context).notices.refreshRegistered()
+            } catch (_: Exception) {
+                // Saved receipts can be recovered on a later refresh.
+            }
+            onChange()
+        }
+    }
+
     private companion object {
+        const val NOTICE_PERMISSION_REQUEST = 301
         val authIo = Executors.newSingleThreadExecutor()
+        val contentIo = Executors.newFixedThreadPool(2)
     }
 }

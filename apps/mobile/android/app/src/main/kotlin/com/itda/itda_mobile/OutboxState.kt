@@ -102,6 +102,7 @@ internal data class StoredShare(
             "upload_state" to state.wire,
             "can_assign" to (progress.owner == null && activeOwner != null),
             "last_error" to if (visible) progress.lastError else null,
+            "server_content_id" to if (visible) progress.serverContentId?.toString() else null,
         )
     }
 }

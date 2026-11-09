@@ -8,10 +8,10 @@ examples live in `contracts/examples/`. Web imports the catalog; Flutter package
 copy checked by `dart run tool/sync_fixtures.dart --check`. Python contract checks
 validate schemas and fixtures. Update all consumers in a shared contract PR.
 
-The Phase A2 Android outbox uses bearer tokens from a Supabase user session.
-The catalog fixture mode and loopback upload mock use synthetic data. Live
-authentication, transactional persistence, and storage authorization require
-verification against the real adapters.
+The Android share and notification outboxes use bearer tokens from a Supabase
+user session. The catalog fixture mode and loopback contract mock use synthetic
+data. Live authentication, transactional persistence, and storage authorization
+require verification against the real adapters.
 
 ## Interface checklist
 
@@ -46,9 +46,11 @@ pagination limits and cursor rules. Do not construct cursors or storage paths in
 4. **Analysis milestone:** B implements bounded extraction and provider adapters,
    validates generated output, claims leased PostgreSQL jobs, and atomically saves
    results plus sync events. Simulate partial extraction and provider failure first.
-5. **Notification/sync milestone:** B and A agree device registration and dispatch;
-   A persists dismissals and handles generation/revision. C integrates cursor sync
-   and editing conflicts. Test delayed/duplicate FCM and offline operations.
+5. **Notification/sync milestone:** Phase A3 persists Android dismissals, uses
+   versioned restore, and refreshes authoritative content through the existing
+   GET endpoint. B and A agree on device registration and dispatch. C integrates
+   cursor sync and editing conflicts. Run delayed and duplicate FCM tests once
+   the delivery adapter is available.
 6. **Deployment milestone:** real authorization/storage/worker/OS evidence, separate
    staging secrets, operational retry/retention policies, and repository protections
    precede Railway/Vercel deployment. No production deployment is part of Phase 0.
@@ -65,7 +67,7 @@ add temporary privileged credentials to clients to bypass missing server work.
 | API -> DB + job | Migrations, relationships, constraints, repository semantics | Atomic DB adapter, idempotency receipts, concurrency tests |
 | Job -> extraction -> summary/recommendations | Worker stages and coverage fixtures | Job claims/leases, real extraction, hosted model |
 | AI result -> persistence | Distinct source/generated/edit fields and failure tests | Transactional guarded writes and retry recovery |
-| Result -> notification update | Separate state and generation/revision contracts/tests | Device registration, durable delivery, FCM and Android suppression |
+| Result -> notification update | Android presentation and local suppression, contract mock refresh and mutations | Owner-scoped live detail/edit and notification transactions, device registration, durable dispatch and FCM |
 | Persisted content -> PC web sync | Backend sync endpoint/model and SQL sequence helper | Client sync models/transport, authenticated incremental sync, reconnect/full resync |
 
 This review establishes architectural feasibility, not a running Android-to-web
@@ -106,3 +108,17 @@ web browser. Keep credentials out of recorded evidence.
 
 Record command/build/device versions, assertions, failures, and remaining limitations
 in STATUS. Full E2E completion requires actual OS and real adapter execution.
+
+## Phase A3 live dependencies
+
+- Developer B supplies Supabase JWT verification and owner-scoped durable
+  `GET/PATCH /v1/contents/{id}`, `POST /v1/notification-events`, and
+  `POST /v1/contents/{id}/notification/restore`. Mutations need the documented
+  conflict fields and idempotency semantics across process restarts. Live share
+  registration and private assets also depend on the A2 server adapters.
+- Developer C applies the existing migrations on disposable Supabase and
+  verifies notification visibility, owner isolation, RLS, and private object
+  access using two identities. Web sync must retain content after dismissal.
+- Developers A and B agree on device registration, revocation and FCM dispatch.
+  A delivery hint should trigger the current authenticated content read.
+  Phase A3 refreshes after registration, on app resume, or on user request.

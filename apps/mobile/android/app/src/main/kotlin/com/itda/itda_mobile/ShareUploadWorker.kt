@@ -32,6 +32,7 @@ internal class UploadProcessor(
     private val config: UploadConfig?,
     private val sessions: SupabaseSessions?,
     private val onChange: () -> Unit = {},
+    private val onRegistered: (NoticeRef) -> Unit = {},
 ) {
     // A cancelled worker can still be unwinding an HTTP call while WorkManager restarts it.
     private val running = ConcurrentHashMap.newKeySet<UUID>()
@@ -40,6 +41,9 @@ internal class UploadProcessor(
         if (!running.add(id)) return Result.retry()
         try {
             val share = store.read(id) ?: return Result.success()
+            val priorOwner = share.progress.owner
+            val priorContent = share.progress.serverContentId
+            if (priorOwner != null && priorContent != null) onRegistered(NoticeRef(priorOwner, priorContent))
             if (share.progress.state.terminal) return Result.success()
             val owner = share.progress.owner ?: throw UploadProblem.auth()
             val activeSessions = sessions ?: throw UploadProblem.auth()
@@ -53,6 +57,7 @@ internal class UploadProcessor(
             store.updateProgress(id) {
                 it.copy(state = UploadState.SYNCHRONIZED, serverContentId = contentId, lastError = null)
             }
+            onRegistered(NoticeRef(owner, contentId))
             onChange()
             return Result.success()
         } catch (problem: UploadProblem) {

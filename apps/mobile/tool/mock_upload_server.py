@@ -1,7 +1,8 @@
-"""Loopback-only contract test server for the Android outbox. Use synthetic data."""
+"""Loopback-only contract test server for Android uploads and notifications."""
 
 import argparse
 import base64
+from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,8 +31,10 @@ def segment(value):
     return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
 
 
-def error(status, code):
-    return status, {"error": {"code": code, "message": "Synthetic test response", "request_id": str(uuid4())}}
+def error(status, code, **fields):
+    return status, {"error": {
+        "code": code, "message": "Synthetic test response", "request_id": str(uuid4()), **fields,
+    }}
 
 
 def matches_type(data, media_type):
@@ -56,6 +59,7 @@ class MockUploadServer(ThreadingHTTPServer):
         self.tokens = {}
         self.refresh_tokens = {}
         self.assets = {}
+        self.contents = {}
         self.receipts = {}
         self.expire_next_capability = args.expire_first_capability
         self.hold_text = args.hold_source_text
@@ -65,7 +69,15 @@ class MockUploadServer(ThreadingHTTPServer):
                 {"$ref": f"#/components/schemas/{name}", "components": document["components"]},
                 format_checker=FormatChecker(),
             )
-            for name in ("ContentCreate", "Content", "AssetUploadCreate", "AssetUpload", "AssetComplete", "ErrorResponse")
+            for name in (
+                "ContentCreate", "Content", "ContentPatch", "AssetUploadCreate", "AssetUpload",
+                "AssetComplete", "NotificationEvent", "NotificationRestore", "NotificationResult", "ErrorResponse",
+            )
+        }
+        catalog = json.loads((OPENAPI.parent / "examples" / "catalog.json").read_text(encoding="utf-8"))
+        self.analysis_examples = {
+            item["analysis_status"]: item["analysis"]
+            for item in catalog["items"] if item["analysis"] is not None
         }
 
     def handle_error(self, _request, _client_address):
@@ -111,11 +123,14 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Invalid request size")
         return self.rfile.read(length)
 
+    def read_json(self):
+        payload = self.read_payload(1024 * 1024)
+        return json.loads(payload) if payload else None
+
     def do_POST(self):
         path = urlsplit(self.path)
         try:
-            payload = self.read_payload(1024 * 1024)
-            body = json.loads(payload) if payload else None
+            body = self.read_json()
         except ValueError:
             self.respond(*error(422, "validation_error"))
             return
@@ -123,12 +138,82 @@ class Handler(BaseHTTPRequestHandler):
             if path.path == "/auth/v1/token":
                 status, value = self.token(parse_qs(path.query).get("grant_type", [""])[0], body)
                 hold = False
+            elif path.path.startswith("/mock/analysis/"):
+                status, value = self.mock_analysis(path.path.removeprefix("/mock/analysis/"), body)
+                hold = False
             else:
                 status, value, hold = self.api(path.path, body)
         if hold:
             print("Mock content committed. First acknowledgment is delayed.", flush=True)
             time.sleep(75)
         self.respond(status, value)
+
+    def do_GET(self):
+        with self.server.lock:
+            status, value = self.content_request(urlsplit(self.path).path)
+        self.respond(status, value)
+
+    def do_PATCH(self):
+        try:
+            body = self.read_json()
+        except ValueError:
+            self.respond(*error(422, "validation_error"))
+            return
+        if not self.server.validators["ContentPatch"].is_valid(body):
+            self.respond(*error(422, "validation_error"))
+            return
+        with self.server.lock:
+            status, value = self.content_request(urlsplit(self.path).path, body)
+        self.respond(status, value)
+
+    def current_owner(self):
+        auth = self.headers.get("Authorization", "")
+        session = self.server.tokens.get(auth.removeprefix("Bearer ")) if auth.startswith("Bearer ") else None
+        return session[0] if session is not None and session[1] > time.time() else None
+
+    def owned(self, owner, identifier):
+        item = self.server.contents.get(identifier)
+        return item if item is not None and item["user_id"] == owner else None
+
+    def content_request(self, path, patch=None):
+        owner = self.current_owner()
+        if owner is None:
+            return error(401, "unauthorized")
+        value = self.owned(owner, path.removeprefix("/v1/contents/")) if path.startswith("/v1/contents/") else None
+        if value is None:
+            return error(404, "not_found")
+        if patch is not None:
+            if patch["expected_version"] != value["version"]:
+                return error(409, "version_conflict", current_version=value["version"])
+            for key in ("title", "user_note", "workflow_status"):
+                if key in patch:
+                    value[key] = patch[key]
+            value.update(version=value["version"] + 1, updated_at=utc(time.time()))
+        self.server.validators["Content"].validate(value)
+        return 200, deepcopy(value)
+
+    def mock_analysis(self, identifier, body):
+        owner = self.current_owner()
+        if owner is None:
+            return error(401, "unauthorized")
+        value = self.owned(owner, identifier)
+        if value is None:
+            return error(404, "not_found")
+        status = body.get("status") if isinstance(body, dict) else None
+        if status not in ("pending", "processing", "completed", "partial", "failed"):
+            return error(422, "validation_error")
+        if value["analysis_status"] != status:
+            timestamp = utc(time.time())
+            analysis = deepcopy(self.server.analysis_examples.get(status))
+            if analysis is not None:
+                analysis.update(id=str(uuid4()), content_id=identifier, created_at=timestamp)
+            value.update(analysis=analysis, analysis_status=status,
+                         version=value["version"] + 1, updated_at=timestamp)
+            state = value["notification"]
+            if state["visibility"] == "active":
+                state.update(revision=state["revision"] + 1, updated_at=timestamp)
+        self.server.validators["Content"].validate(value)
+        return 200, deepcopy(value)
 
     def token(self, grant, body):
         if self.headers.get("apikey") != PUBLISHABLE_KEY or not isinstance(body, dict):
@@ -145,11 +230,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def api(self, path, body):
         server = self.server
-        auth = self.headers.get("Authorization", "")
-        session = server.tokens.get(auth.removeprefix("Bearer ")) if auth.startswith("Bearer ") else None
-        if session is None or session[1] <= time.time():
+        owner = self.current_owner()
+        if owner is None:
             return (*error(401, "unauthorized"), False)
-        owner = session[0]
         key = self.headers.get("Idempotency-Key", "")
         if not 8 <= len(key) <= 128:
             return (*error(422, "validation_error"), False)
@@ -169,17 +252,47 @@ class Handler(BaseHTTPRequestHandler):
             status, value = self.complete(owner, path.split("/")[-2], body)
         elif path == "/v1/contents":
             status, value = self.create_content(owner, body)
+        elif path == "/v1/notification-events":
+            status, value = self.change_notice(owner, body)
+        elif path.startswith("/v1/contents/") and path.endswith("/notification/restore"):
+            restore_id = path.removeprefix("/v1/contents/").removesuffix("/notification/restore")
+            status, value = self.change_notice(owner, body, restore_id=restore_id)
         else:
             status, value = error(404, "not_found")
 
         hold = False
         if status in (200, 201):
-            server.receipts[scope] = (body, status, value)
+            server.receipts[scope] = (body, status, deepcopy(value))
             print(f"Mock commit {path.rsplit('/', 1)[-1]} {status}", flush=True)
             if path == "/v1/contents" and server.hold_text and body.get("source_text") == server.hold_text:
                 server.hold_text = None
                 hold = True
         return status, value, hold
+
+    def change_notice(self, owner, body, restore_id=None):
+        schema = "NotificationRestore" if restore_id is not None else "NotificationEvent"
+        if not self.server.validators[schema].is_valid(body):
+            return error(422, "validation_error")
+        item = self.owned(owner, body["content_id"] if restore_id is None else restore_id)
+        if item is None:
+            return error(404, "not_found")
+        state = item["notification"]
+        generation = body["generation"] if restore_id is None else body["expected_generation"]
+        target = "dismissed" if restore_id is None else "active"
+        if restore_id is None and generation < state["generation"]:
+            reason = "stale_generation"
+        elif generation != state["generation"] or body["expected_revision"] != state["revision"]:
+            return error(409, "notification_conflict", current_generation=state["generation"],
+                         current_revision=state["revision"])
+        elif state["visibility"] == target:
+            reason = f"already_{target}"
+        else:
+            reason = "applied"
+            state.update(visibility=target, generation=generation + int(restore_id is not None),
+                         revision=state["revision"] + 1, updated_at=utc(time.time()))
+        value = {"state": deepcopy(state), "applied": reason == "applied", "reason": reason}
+        self.server.validators["NotificationResult"].validate(value)
+        return 200, value
 
     def reserve(self, owner, body):
         server = self.server
@@ -273,6 +386,7 @@ class Handler(BaseHTTPRequestHandler):
         server.validators["Content"].validate(value)
         for asset in assets:
             asset["attached"] = True
+        server.contents[identifier] = deepcopy(value)
         return 201, value
 
 

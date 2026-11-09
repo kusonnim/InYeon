@@ -26,14 +26,20 @@ enum LocalUploadState {
 }
 
 final class UploadAccount {
-  const UploadAccount({required this.id, required this.email});
+  const UploadAccount({required this.id, required this.email, this.realm});
 
   final String id;
   final String email;
+  final String? realm;
 }
 
 final class LocalInbox {
-  const LocalInbox({required this.mode, this.account, required this.shares});
+  const LocalInbox({
+    required this.mode,
+    this.account,
+    required this.shares,
+    this.notificationsEnabled = false,
+  });
 
   factory LocalInbox.fromMessage(Map<Object?, Object?> message) {
     final account = message['account'] as Map<Object?, Object?>?;
@@ -44,17 +50,20 @@ final class LocalInbox {
           : UploadAccount(
               id: account['id'] as String,
               email: account['email'] as String,
+              realm: account['realm'] as String?,
             ),
       shares: [
         for (final share in message['shares'] as List<Object?>)
           LocalShare.fromMessage(share as Map<Object?, Object?>),
       ],
+      notificationsEnabled: message['notifications_enabled'] == true,
     );
   }
 
   final UploadMode mode;
   final UploadAccount? account;
   final List<LocalShare> shares;
+  final bool notificationsEnabled;
 }
 
 final class LocalShare {
@@ -66,6 +75,7 @@ final class LocalShare {
     required this.uploadState,
     this.canAssign = false,
     this.lastError,
+    this.serverContentId,
   });
 
   factory LocalShare.fromMessage(Map<Object?, Object?> message) {
@@ -83,6 +93,7 @@ final class LocalShare {
       ),
       canAssign: message['can_assign'] as bool,
       lastError: message['last_error'] as String?,
+      serverContentId: message['server_content_id'] as String?,
     );
   }
 
@@ -93,6 +104,7 @@ final class LocalShare {
   final LocalUploadState uploadState;
   final bool canAssign;
   final String? lastError;
+  final String? serverContentId;
 }
 
 final class AndroidShareBridge implements ShareBridge {
@@ -100,10 +112,11 @@ final class AndroidShareBridge implements ShareBridge {
 
   static const _channel = MethodChannel('com.itda.itda_mobile/local_shares');
   static const _updates = EventChannel('com.itda.itda_mobile/share_updates');
+  static final changeEvents =
+      _updates.receiveBroadcastStream().map<void>((_) {});
 
   @override
-  Stream<void> get changes =>
-      _updates.receiveBroadcastStream().map<void>((_) {});
+  Stream<void> get changes => changeEvents;
 
   @override
   Future<LocalInbox> listInbox() async {
@@ -127,15 +140,4 @@ final class AndroidShareBridge implements ShareBridge {
         'assignShare',
         {'local_id': localId, 'account_id': accountId},
       );
-}
-
-/// Notification persistence is independent of content workflow.
-/// A dismiss operation must include the displayed generation and expected revision.
-abstract interface class NotificationBridge {
-  Future<void> reconcileFromPersistedState();
-  Future<void> recordDismissal({
-    required String contentId,
-    required int generation,
-    required int expectedRevision,
-  });
 }
