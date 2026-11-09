@@ -1,0 +1,2086 @@
+openapi: 3.1.0
+info:
+  title: ITDA API
+  description: Phase 0 reviewed API contract. Bearer authentication required on all
+    /v1 routes. UTC ISO 8601 timestamps, UUID identifiers, snake_case JSON. Structured
+    errors never include source text or credentials. Production data adapters remain
+    unimplemented; local fixture mode is volatile and must not be deployed.
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      tags:
+      - operations
+      summary: Health
+      description: Process health only; not database, worker or deployment readiness.
+      operationId: health
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /v1/contents:
+    post:
+      tags:
+      - contents
+      summary: Durably receive content and schedule analysis
+      description: 'Production contract: atomically persist source references, owned
+        ready assets, one job, initial notification state and sync event before 201.
+        Never await AI. Same user + operation + Idempotency-Key and payload returns
+        the original 201; changed payload returns 409. Fixture mode simulates this
+        in volatile memory and is NOT a durable receipt.'
+      operationId: createContent
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-generated key per logical operation; retain across
+            retries.
+          title: Idempotency-Key
+        description: Stable client-generated key per logical operation; retain across
+          retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Content'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+      - contents
+      summary: List Contents
+      description: Owner-only keyset pagination, newest created_at then id descending.
+        New inserts before the cursor are obtained through sync or a fresh list. Dismissed
+        and archived items remain in the library.
+      operationId: listContents
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+          description: Opaque account-bound cursor; never construct or modify.
+          title: Cursor
+        description: Opaque account-bound cursor; never construct or modify.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: Maximum items; default 20.
+          default: 20
+          title: Limit
+        description: Maximum items; default 20.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentPage'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/contents/{id}:
+    get:
+      tags:
+      - contents
+      summary: Get Content
+      operationId: getContent
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Content'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+      - contents
+      summary: Update Content
+      description: Compare expected_version atomically; 409 includes current_version.
+        Omitted editable fields are preserved; explicit null clears title/user_note.
+        Sources and AI output are immutable through this endpoint. Workflow edits
+        never change notification visibility.
+      operationId: updateContent
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContentPatch'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Content'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/recommendations/{id}:
+    patch:
+      tags:
+      - recommendations
+      summary: Update Recommendation
+      description: Keep AI text and user_text separate. accepted changes are explicit
+        feedback, never inferred from generation or notification dismissal. Compare
+        expected_version; update the parent content version and sync event atomically.
+        Omitted fields preserved; null clears user_text.
+      operationId: updateRecommendation
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationPatch'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/feedback:
+    post:
+      tags:
+      - feedback
+      summary: Create Feedback
+      description: Append explicit feedback without changing workflow or notification
+        state. This event records feedback only; use recommendation PATCH to edit
+        its accepted flag. Owner and content/recommendation relationship are checked.
+      operationId: createFeedback
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-generated key per logical operation; retain across
+            retries.
+          title: Idempotency-Key
+        description: Stable client-generated key per logical operation; retain across
+          retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackEvent'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/preferences:
+    get:
+      tags:
+      - preferences
+      summary: Get Preferences
+      operationId: getPreferences
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - BearerAuth: []
+    patch:
+      tags:
+      - preferences
+      summary: Update Preferences
+      description: Explicit preferences/behavior outweigh optional MBTI. Omitted fields
+        preserved; null clears mbti; arrays cannot be null. Compare expected_version.
+      operationId: updatePreferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencesPatch'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - BearerAuth: []
+  /v1/notification-events:
+    post:
+      tags:
+      - notifications
+      summary: Notification Event
+      description: Only dismissal is supported. A smaller generation is acknowledged
+        as stale_generation without applying it. Matching generation with wrong revision
+        or future generation returns 409. Matching already-dismissed state is a no-op.
+        Never changes workflow. Retry offline events with the original Idempotency-Key.
+      operationId: recordNotificationEvent
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-generated key per logical operation; retain across
+            retries.
+          title: Idempotency-Key
+        description: Stable client-generated key per logical operation; retain across
+          retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationEvent'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResult'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/contents/{id}/notification/restore:
+    post:
+      tags:
+      - notifications
+      summary: Restore Notification
+      description: Explicit user restoration only. Compare generation AND revision.
+        Dismissed -> active increments both generation and revision; active with matching
+        versions is already_active no-op. Replay same idempotency key returns original
+        response. This is the only transition that restores dismissed visibility.
+      operationId: restoreNotification
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-generated key per logical operation; retain across
+            retries.
+          title: Idempotency-Key
+        description: Stable client-generated key per logical operation; retain across
+          retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRestore'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResult'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/sync:
+    get:
+      tags:
+      - sync
+      summary: Sync Changes
+      description: Owner-scoped commit-ordered changes. No cursor starts from retained
+        beginning. Consume pages until has_more=false, persist next_cursor only after
+        applying events; refresh GET /contents/{content_id} for content/recommendation/notification
+        events and GET /preferences for preference events. content_id is null only
+        for preferences. Delete events are tombstones; remove the matching local entity.
+        Repeated cursors replay events; deduplicate by sequence. Invalid/expired cursor
+        ->400 invalid_cursor and full bootstrap. Sequence is decimal string to avoid
+        JavaScript precision loss. Production cursor retention/expiry is unresolved;
+        fixture cursors expire on process restart.
+      operationId: syncChanges
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 2048
+          - type: 'null'
+          description: Opaque account-bound cursor; never construct or modify.
+          title: Cursor
+        description: Opaque account-bound cursor; never construct or modify.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: Maximum items; default 20.
+          default: 20
+          title: Limit
+        description: Maximum items; default 20.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPage'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/assets/uploads:
+    post:
+      tags:
+      - assets
+      summary: Create Asset Upload
+      description: Reserve private content-assets/{authenticated_user_id}/{asset_id}/source.
+        Server generates path and signed PUT/upload capability with upsert=false;
+        never accept client paths or user IDs. Signed upload capability currently
+        has Supabase's 2-hour lifetime; expiry is explicit. Allow JPEG/PNG/WebP/PDF/plain
+        text, <=20 MiB. Do not log capability URLs. Replays return same reservation
+        while live; expired reservation ->409 upload_expired, use a new key. Phase
+        0 returns 501; no fake upload URL.
+      operationId: createAssetUpload
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-generated key per logical operation; retain across
+            retries.
+          title: Idempotency-Key
+        description: Stable client-generated key per logical operation; retain across
+          retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetUploadCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetUpload'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/assets/{id}/complete:
+    post:
+      tags:
+      - assets
+      summary: Complete Asset Upload
+      description: Owner-only verification of the exact reserved object's existence,
+        actual bytes, signature/media type, size and SHA-256; reject mismatch. Mark
+        ready only after server verification. Idempotent completion before content
+        ingestion. Unclaimed uploads expire and are garbage-collected by a planned
+        service job. Attach each ready asset once to owned content in its ingestion
+        transaction.
+      operationId: completeAssetUpload
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Stable client-generated key per logical operation; retain across
+            retries.
+          title: Idempotency-Key
+        description: Stable client-generated key per logical operation; retain across
+          retries.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetComplete'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/assets/{id}/download-url:
+    get:
+      tags:
+      - assets
+      summary: Get Asset Download Url
+      description: 'Owner-only short-lived (at most 60 seconds) signed GET for a verified
+        ready asset. Objects and bucket remain private. Bearer capability URL must
+        never be stored in source_url, sync events, analytics, or logs. Set Cache-Control:
+        no-store. Phase 0 returns 501.'
+      operationId: getAssetDownloadUrl
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetDownload'
+        '400':
+          description: Invalid or expired cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found, including resources belonging to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Version, notification generation/revision, or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Asset exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Adapter not implemented in this scaffold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Temporary upstream failure; retry with the same idempotency
+            key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    Analysis:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        content_id:
+          type: string
+          format: uuid
+          title: Content Id
+        coverage:
+          type: string
+          enum:
+          - full_text
+          - partial_text
+          - metadata_only
+          - unsupported
+          title: Coverage
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        limitations:
+          items:
+            type: string
+          type: array
+          title: Limitations
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - content_id
+      - coverage
+      - summary
+      - limitations
+      - created_at
+      title: Analysis
+    AssetComplete:
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          title: Asset Id
+        status:
+          type: string
+          const: ready
+          title: Status
+        media_type:
+          type: string
+          title: Media Type
+        size_bytes:
+          type: integer
+          title: Size Bytes
+        sha256:
+          type: string
+          title: Sha256
+      additionalProperties: false
+      type: object
+      required:
+      - asset_id
+      - status
+      - media_type
+      - size_bytes
+      - sha256
+      title: AssetComplete
+    AssetDownload:
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          title: Asset Id
+        download_url:
+          type: string
+          maxLength: 2083
+          minLength: 1
+          format: uri
+          title: Download Url
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      additionalProperties: false
+      type: object
+      required:
+      - asset_id
+      - download_url
+      - expires_at
+      title: AssetDownload
+    AssetUpload:
+      properties:
+        asset_id:
+          type: string
+          format: uuid
+          title: Asset Id
+        upload_url:
+          type: string
+          maxLength: 2083
+          minLength: 1
+          format: uri
+          title: Upload Url
+        upload_headers:
+          additionalProperties:
+            type: string
+          type: object
+          title: Upload Headers
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      additionalProperties: false
+      type: object
+      required:
+      - asset_id
+      - upload_url
+      - upload_headers
+      - expires_at
+      title: AssetUpload
+    AssetUploadCreate:
+      properties:
+        filename:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Filename
+        media_type:
+          type: string
+          enum:
+          - image/jpeg
+          - image/png
+          - image/webp
+          - application/pdf
+          - text/plain
+          title: Media Type
+        size_bytes:
+          type: integer
+          maximum: 20971520.0
+          exclusiveMinimum: 0.0
+          title: Size Bytes
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Sha256
+      additionalProperties: false
+      type: object
+      required:
+      - filename
+      - media_type
+      - size_bytes
+      - sha256
+      title: AssetUploadCreate
+    Content:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        input_type:
+          type: string
+          enum:
+          - text
+          - url
+          - image
+          - document
+          title: Input Type
+        source_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Text
+        source_url:
+          anyOf:
+          - type: string
+            maxLength: 2083
+            minLength: 1
+            format: uri
+          - type: 'null'
+          title: Source Url
+        asset_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Asset Ids
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        user_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Note
+        analysis_status:
+          type: string
+          enum:
+          - pending
+          - processing
+          - completed
+          - partial
+          - failed
+          title: Analysis Status
+        workflow_status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - archived
+          title: Workflow Status
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        analysis:
+          anyOf:
+          - $ref: '#/components/schemas/Analysis'
+          - type: 'null'
+        recommendations:
+          items:
+            $ref: '#/components/schemas/Recommendation'
+          type: array
+          title: Recommendations
+        notification:
+          $ref: '#/components/schemas/NotificationState'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - user_id
+      - input_type
+      - source_text
+      - source_url
+      - asset_ids
+      - title
+      - user_note
+      - analysis_status
+      - workflow_status
+      - version
+      - created_at
+      - updated_at
+      - analysis
+      - recommendations
+      - notification
+      title: Content
+    ContentCreate:
+      properties:
+        input_type:
+          type: string
+          enum:
+          - text
+          - url
+          - image
+          - document
+          title: Input Type
+        source_text:
+          anyOf:
+          - type: string
+            maxLength: 100000
+          - type: 'null'
+          title: Source Text
+        source_url:
+          anyOf:
+          - type: string
+            maxLength: 2083
+            minLength: 1
+            format: uri
+          - type: 'null'
+          title: Source Url
+        asset_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 10
+          title: Asset Ids
+      additionalProperties: false
+      type: object
+      required:
+      - input_type
+      title: ContentCreate
+    ContentPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Content'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: ContentPage
+    ContentPatch:
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Version
+        title:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Title
+        user_note:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: User Note
+        workflow_status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - archived
+          title: Workflow Status
+      additionalProperties: false
+      type: object
+      required:
+      - expected_version
+      title: ContentPatch
+    ErrorDetail:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        current_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Current Version
+        current_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Current Generation
+        current_revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Current Revision
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      - request_id
+      title: ErrorDetail
+    ErrorResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+      additionalProperties: false
+      type: object
+      required:
+      - error
+      title: ErrorResponse
+    FeedbackCreate:
+      properties:
+        content_id:
+          type: string
+          format: uuid
+          title: Content Id
+        recommendation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Recommendation Id
+        event_type:
+          type: string
+          enum:
+          - accepted
+          - rejected
+          - corrected
+          title: Event Type
+        comment:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: Comment
+      additionalProperties: false
+      type: object
+      required:
+      - content_id
+      - event_type
+      title: FeedbackCreate
+    FeedbackEvent:
+      properties:
+        content_id:
+          type: string
+          format: uuid
+          title: Content Id
+        recommendation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Recommendation Id
+        event_type:
+          type: string
+          enum:
+          - accepted
+          - rejected
+          - corrected
+          title: Event Type
+        comment:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: Comment
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - content_id
+      - event_type
+      - id
+      - user_id
+      - created_at
+      title: FeedbackEvent
+    Health:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+        mode:
+          type: string
+          enum:
+          - production
+          - fixture
+          title: Mode
+        persistence:
+          type: string
+          enum:
+          - unconfigured
+          - volatile-memory
+          title: Persistence
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - mode
+      - persistence
+      title: Health
+    NotificationEvent:
+      properties:
+        content_id:
+          type: string
+          format: uuid
+          title: Content Id
+        event_type:
+          type: string
+          const: dismissed
+          title: Event Type
+        generation:
+          type: integer
+          minimum: 1.0
+          title: Generation
+        expected_revision:
+          type: integer
+          minimum: 1.0
+          title: Expected Revision
+      additionalProperties: false
+      type: object
+      required:
+      - content_id
+      - event_type
+      - generation
+      - expected_revision
+      title: NotificationEvent
+    NotificationRestore:
+      properties:
+        expected_generation:
+          type: integer
+          minimum: 1.0
+          title: Expected Generation
+        expected_revision:
+          type: integer
+          minimum: 1.0
+          title: Expected Revision
+      additionalProperties: false
+      type: object
+      required:
+      - expected_generation
+      - expected_revision
+      title: NotificationRestore
+    NotificationResult:
+      properties:
+        state:
+          $ref: '#/components/schemas/NotificationState'
+        applied:
+          type: boolean
+          title: Applied
+        reason:
+          type: string
+          enum:
+          - applied
+          - stale_generation
+          - already_active
+          - already_dismissed
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - state
+      - applied
+      - reason
+      title: NotificationResult
+    NotificationState:
+      properties:
+        content_id:
+          type: string
+          format: uuid
+          title: Content Id
+        visibility:
+          type: string
+          enum:
+          - active
+          - dismissed
+          title: Visibility
+        generation:
+          type: integer
+          minimum: 1.0
+          title: Generation
+        revision:
+          type: integer
+          minimum: 1.0
+          title: Revision
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - content_id
+      - visibility
+      - generation
+      - revision
+      - updated_at
+      title: NotificationState
+    Preferences:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        interests:
+          items:
+            type: string
+          type: array
+          title: Interests
+        explicit_preferences:
+          items:
+            type: string
+          type: array
+          title: Explicit Preferences
+        mbti:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mbti
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - user_id
+      - interests
+      - explicit_preferences
+      - mbti
+      - version
+      - created_at
+      - updated_at
+      title: Preferences
+    PreferencesPatch:
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Version
+        interests:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Interests
+        explicit_preferences:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Explicit Preferences
+        mbti:
+          anyOf:
+          - type: string
+            pattern: ^[IE][NS][TF][JP]$
+          - type: 'null'
+          title: Mbti
+      additionalProperties: false
+      type: object
+      required:
+      - expected_version
+      title: PreferencesPatch
+    Recommendation:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        content_id:
+          type: string
+          format: uuid
+          title: Content Id
+        kind:
+          type: string
+          enum:
+          - action
+          - information
+          - resource
+          title: Kind
+        text:
+          type: string
+          title: Text
+        source_url:
+          anyOf:
+          - type: string
+            maxLength: 2083
+            minLength: 1
+            format: uri
+          - type: 'null'
+          title: Source Url
+        user_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Text
+        accepted:
+          type: boolean
+          title: Accepted
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - content_id
+      - kind
+      - text
+      - source_url
+      - user_text
+      - accepted
+      - version
+      - created_at
+      - updated_at
+      title: Recommendation
+    RecommendationPatch:
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Version
+        user_text:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: User Text
+        accepted:
+          type: boolean
+          title: Accepted
+      additionalProperties: false
+      type: object
+      required:
+      - expected_version
+      title: RecommendationPatch
+    SyncEvent:
+      properties:
+        sequence:
+          type: string
+          title: Sequence
+        entity_type:
+          type: string
+          enum:
+          - content
+          - recommendation
+          - preferences
+          - notification
+          title: Entity Type
+        entity_id:
+          type: string
+          format: uuid
+          title: Entity Id
+        content_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Content Id
+        operation:
+          type: string
+          enum:
+          - upsert
+          - delete
+          title: Operation
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+      additionalProperties: false
+      type: object
+      required:
+      - sequence
+      - entity_type
+      - entity_id
+      - content_id
+      - operation
+      - occurred_at
+      title: SyncEvent
+    SyncPage:
+      properties:
+        events:
+          items:
+            $ref: '#/components/schemas/SyncEvent'
+          type: array
+          title: Events
+        next_cursor:
+          type: string
+          title: Next Cursor
+        has_more:
+          type: boolean
+          title: Has More
+      additionalProperties: false
+      type: object
+      required:
+      - events
+      - next_cursor
+      - has_more
+      title: SyncPage
+  securitySchemes:
+    BearerAuth:
+      type: http
+      description: 'Supabase access JWT in production. Explicit local fixture mode
+        only: fixture-user-a/b.'
+      scheme: bearer

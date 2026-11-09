@@ -1,0 +1,44 @@
+# Secrets and machine-local settings
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*service-account*.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+
+# JavaScript
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+
+# Flutter / Android generated and machine-local files
+.dart_tool/
+.flutter-plugins*
+.packages
+build/
+android/local.properties
+**/android/.gradle/
+
+# Supabase local state
+supabase/.temp/
+supabase/.branches/
+
+# Local logs, tooling downloads and editor state
+.tools/
+.cache/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,215 @@
+{
+  "items": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "user_id": "00000000-0000-4000-8000-000000000001",
+      "input_type": "url",
+      "source_text": "Example University student scholarship. Applications close on 2026-12-01 at 17:00 UTC. Eligible applicants are enrolled undergraduate students. Required documents: enrollment certificate and a personal statement. Apply at https://example.edu/scholarships.",
+      "source_url": "https://example.edu/scholarships",
+      "asset_ids": [],
+      "title": "University scholarship announcement",
+      "user_note": null,
+      "analysis_status": "completed",
+      "workflow_status": "pending",
+      "version": 2,
+      "created_at": "2026-11-09T00:00:00Z",
+      "updated_at": "2026-11-09T00:00:00Z",
+      "analysis": {
+        "id": "20000000-0000-4000-8000-000000000001",
+        "content_id": "10000000-0000-4000-8000-000000000001",
+        "coverage": "full_text",
+        "summary": "Example University invites enrolled undergraduate students to apply for a scholarship by 2026-12-01 at 17:00 UTC. An enrollment certificate and personal statement are required.",
+        "limitations": [],
+        "created_at": "2026-11-09T00:00:00Z"
+      },
+      "recommendations": [
+        {
+          "id": "30000000-0000-4000-8000-000000000011",
+          "content_id": "10000000-0000-4000-8000-000000000001",
+          "kind": "action",
+          "text": "Check your eligibility and prepare the two required documents.",
+          "source_url": null,
+          "user_text": null,
+          "accepted": false,
+          "version": 1,
+          "created_at": "2026-11-09T00:00:00Z",
+          "updated_at": "2026-11-09T00:00:00Z"
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000012",
+          "content_id": "10000000-0000-4000-8000-000000000001",
+          "kind": "resource",
+          "text": "Read the application page supplied in the announcement.",
+          "source_url": "https://example.edu/scholarships",
+          "user_text": null,
+          "accepted": false,
+          "version": 1,
+          "created_at": "2026-11-09T00:00:00Z",
+          "updated_at": "2026-11-09T00:00:00Z"
+        }
+      ],
+      "notification": {
+        "content_id": "10000000-0000-4000-8000-000000000001",
+        "visibility": "active",
+        "generation": 1,
+        "revision": 2,
+        "updated_at": "2026-11-09T00:00:00Z"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "user_id": "00000000-0000-4000-8000-000000000001",
+      "input_type": "text",
+      "source_text": "For one serving: 1 tomato, 2 eggs, 1 bowl cooked rice. Chop the tomato. Scramble the eggs, add the tomato and cook until softened. Serve over the rice.",
+      "source_url": null,
+      "asset_ids": [],
+      "title": "Tomato and egg rice",
+      "user_note": null,
+      "analysis_status": "completed",
+      "workflow_status": "pending",
+      "version": 2,
+      "created_at": "2026-11-09T00:00:00Z",
+      "updated_at": "2026-11-09T00:00:00Z",
+      "analysis": {
+        "id": "20000000-0000-4000-8000-000000000002",
+        "content_id": "10000000-0000-4000-8000-000000000002",
+        "coverage": "full_text",
+        "summary": "One serving uses a tomato, two eggs, and cooked rice. Scramble the eggs, cook with chopped tomato until softened, and serve over rice.",
+        "limitations": [],
+        "created_at": "2026-11-09T00:00:00Z"
+      },
+      "recommendations": [
+        {
+          "id": "30000000-0000-4000-8000-000000000021",
+          "content_id": "10000000-0000-4000-8000-000000000002",
+          "kind": "action",
+          "text": "Check whether you have a tomato, two eggs and cooked rice.",
+          "source_url": null,
+          "user_text": null,
+          "accepted": false,
+          "version": 1,
+          "created_at": "2026-11-09T00:00:00Z",
+          "updated_at": "2026-11-09T00:00:00Z"
+        }
+      ],
+      "notification": {
+        "content_id": "10000000-0000-4000-8000-000000000002",
+        "visibility": "active",
+        "generation": 1,
+        "revision": 2,
+        "updated_at": "2026-11-09T00:00:00Z"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "user_id": "00000000-0000-4000-8000-000000000001",
+      "input_type": "text",
+      "source_text": "I sat by the river this afternoon. The cool breeze and quiet helped me feel calmer.",
+      "source_url": null,
+      "asset_ids": [],
+      "title": "A quiet afternoon",
+      "user_note": null,
+      "analysis_status": "completed",
+      "workflow_status": "pending",
+      "version": 2,
+      "created_at": "2026-11-09T00:00:00Z",
+      "updated_at": "2026-11-09T00:00:00Z",
+      "analysis": {
+        "id": "20000000-0000-4000-8000-000000000003",
+        "content_id": "10000000-0000-4000-8000-000000000003",
+        "coverage": "full_text",
+        "summary": "The writer felt calmer after a quiet afternoon by the river in a cool breeze.",
+        "limitations": [],
+        "created_at": "2026-11-09T00:00:00Z"
+      },
+      "recommendations": [],
+      "notification": {
+        "content_id": "10000000-0000-4000-8000-000000000003",
+        "visibility": "active",
+        "generation": 1,
+        "revision": 2,
+        "updated_at": "2026-11-09T00:00:00Z"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "user_id": "00000000-0000-4000-8000-000000000001",
+      "input_type": "url",
+      "source_text": null,
+      "source_url": "https://example.com/private-video",
+      "asset_ids": [],
+      "title": "Inaccessible video link",
+      "user_note": null,
+      "analysis_status": "partial",
+      "workflow_status": "pending",
+      "version": 2,
+      "created_at": "2026-11-09T00:00:00Z",
+      "updated_at": "2026-11-09T00:00:00Z",
+      "analysis": {
+        "id": "20000000-0000-4000-8000-000000000004",
+        "content_id": "10000000-0000-4000-8000-000000000004",
+        "coverage": "metadata_only",
+        "summary": null,
+        "limitations": [
+          "Only the shared URL is available. The video and its transcript could not be accessed. No scenes, spoken claims, or deadlines were inferred."
+        ],
+        "created_at": "2026-11-09T00:00:00Z"
+      },
+      "recommendations": [],
+      "notification": {
+        "content_id": "10000000-0000-4000-8000-000000000004",
+        "visibility": "active",
+        "generation": 1,
+        "revision": 2,
+        "updated_at": "2026-11-09T00:00:00Z"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "user_id": "00000000-0000-4000-8000-000000000001",
+      "input_type": "url",
+      "source_text": "Community design workshop. Registration is required. The remainder of the announcement could not be loaded.",
+      "source_url": "https://example.org/workshop",
+      "asset_ids": [],
+      "title": "Workshop announcement excerpt",
+      "user_note": null,
+      "analysis_status": "partial",
+      "workflow_status": "pending",
+      "version": 2,
+      "created_at": "2026-11-09T00:00:00Z",
+      "updated_at": "2026-11-09T00:00:00Z",
+      "analysis": {
+        "id": "20000000-0000-4000-8000-000000000005",
+        "content_id": "10000000-0000-4000-8000-000000000005",
+        "coverage": "partial_text",
+        "summary": "The available excerpt announces a community design workshop that requires registration.",
+        "limitations": [
+          "Only an excerpt was accessible; the date, location, price and registration deadline are unknown."
+        ],
+        "created_at": "2026-11-09T00:00:00Z"
+      },
+      "recommendations": [
+        {
+          "id": "30000000-0000-4000-8000-000000000051",
+          "content_id": "10000000-0000-4000-8000-000000000005",
+          "kind": "resource",
+          "text": "Check the original announcement for missing details.",
+          "source_url": "https://example.org/workshop",
+          "user_text": null,
+          "accepted": false,
+          "version": 1,
+          "created_at": "2026-11-09T00:00:00Z",
+          "updated_at": "2026-11-09T00:00:00Z"
+        }
+      ],
+      "notification": {
+        "content_id": "10000000-0000-4000-8000-000000000005",
+        "visibility": "active",
+        "generation": 1,
+        "revision": 2,
+        "updated_at": "2026-11-09T00:00:00Z"
+      }
+    }
+  ],
+  "next_cursor": null
+}

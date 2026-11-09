@@ -1,0 +1,19 @@
+{
+  "request": {
+    "content_id": "10000000-0000-4000-8000-000000000001",
+    "event_type": "dismissed",
+    "generation": 1,
+    "expected_revision": 2
+  },
+  "response": {
+    "state": {
+      "content_id": "10000000-0000-4000-8000-000000000001",
+      "visibility": "dismissed",
+      "generation": 1,
+      "revision": 3,
+      "updated_at": "2026-11-09T00:00:00Z"
+    },
+    "applied": true,
+    "reason": "applied"
+  }
+}
