@@ -8,9 +8,9 @@ accessible source in the background, and keeps the result in a synchronized mobi
 and web library. Suggestions can be actions, information, resources, or nothing.
 
 Phase 0 established the contracts, private database foundation, fixture-based
-clients, and API/worker scaffold. Phase A1 adds offline Android share receipt
-and a local outbox. Server uploads, Supabase integration, AI inference, and FCM
-delivery are future integration work.
+clients, and API/worker scaffold. Phase A1 adds offline Android share receipt.
+Phase A2 adds account-bound background upload verified against a contract mock.
+Live server integration, AI inference, and FCM delivery remain future work.
 
 ## Start here
 

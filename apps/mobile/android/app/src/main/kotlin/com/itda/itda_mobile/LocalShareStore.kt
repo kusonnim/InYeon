@@ -2,15 +2,13 @@ package com.itda.itda_mobile
 
 import android.content.Context
 import android.system.Os
-import android.system.OsConstants
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
-// Both activities run in the same process. Serialize copies, reads and staging cleanup.
+// Preserve UI event ordering for receiver and account changes. Workers use the store lock.
 internal val shareIo = Executors.newSingleThreadExecutor()
 
 internal fun localShareStore(context: Context) =
@@ -18,15 +16,28 @@ internal fun localShareStore(context: Context) =
 
 internal class LocalShareStore(private val root: File) {
     // The source writer receives a fixed path inside staging, never a provider filename.
-    fun persist(localId: UUID, receivedAtMs: Long, writeSource: (File) -> JSONObject): String {
+    fun persist(
+        localId: UUID,
+        receivedAtMs: Long,
+        owner: UploadOwner? = null,
+        beforePublish: () -> Unit = {},
+        writeSource: (File) -> JSONObject,
+    ): String = synchronized(storeLock) {
         if (!root.isDirectory && !root.mkdir()) throw IOException("Could not create share inbox")
         val id = localId.toString()
         val committed = File(root, id)
         cleanStaging()
         if (committed.exists()) {
-            readReceipt(committed)
+            val existing = readReceipt(committed)
+            val attachment = existing.optJSONObject("attachment")
+            if (attachment != null) {
+                val file = File(committed, ATTACHMENT_NAME)
+                if (!file.isFile || file.length() != attachment.getLong("size_bytes")) {
+                    throw IOException("Missing or incomplete share attachment")
+                }
+            }
             syncInbox()
-            return id
+            return@synchronized id
         }
 
         val staging = File(root, "$STAGING_PREFIX$id")
@@ -38,40 +49,70 @@ internal class LocalShareStore(private val root: File) {
                 .put("received_at_ms", receivedAtMs)
                 .put("upload_state", "pending_upload")
                 .put("last_error", JSONObject.NULL)
-            FileOutputStream(File(staging, RECEIPT_NAME)).use { output ->
-                output.write(receipt.toString().toByteArray(Charsets.UTF_8))
-                output.fd.sync()
+            writeSynced(File(staging, RECEIPT_NAME), receipt.toString().toByteArray())
+            if (owner != null) {
+                val progress = UploadProgress(owner)
+                writeSynced(File(staging, OUTBOX_NAME), progress.toJson().toString().toByteArray())
             }
 
             // One same-filesystem rename publishes the synced bytes and outbox entry together.
             syncDirectory(staging)
+            beforePublish()
             Os.rename(staging.path, committed.path)
             syncInbox()
-            return id
+            id
         } finally {
             staging.deleteRecursively()
         }
     }
 
-    fun listPending(): List<Map<String, Any>> {
-        if (!root.exists()) return emptyList()
+    fun listShares(activeOwner: UploadOwner? = null): List<Map<String, Any?>> = entries()
+        .sortedWith(compareByDescending<StoredShare> { it.receipt.getLong("received_at_ms") }.thenBy { it.localId })
+        .map { it.summary(activeOwner) }
+
+    fun entries(): List<StoredShare> = synchronized(storeLock) {
+        if (!root.exists()) return@synchronized emptyList()
         val entries = cleanStaging()
         // A process may have died after rename but before syncing the parent directories.
         syncInbox()
-        return entries.map { directory ->
-            val receipt = readReceipt(directory)
-            val attachment = receipt.optJSONObject("attachment")
-            val label = attachment?.getString("filename")
-                ?: receipt.optString("source_url").ifEmpty { receipt.getString("source_text").trim() }
-            PendingShare(
-                receipt.getString("local_id"),
-                receipt.getString("input_type"),
-                label.take(200),
-                receipt.getLong("received_at_ms"),
-                receipt.getString("upload_state"),
-            )
-        }.sortedWith(compareByDescending<PendingShare> { it.receivedAtMs }.thenBy { it.localId })
-            .map { it.toChannelMap() }
+        entries.map { directory ->
+            syncDirectory(directory)
+            readShare(directory)
+        }
+    }
+
+    fun read(localId: UUID): StoredShare? = synchronized(storeLock) {
+        val directory = File(root, localId.toString())
+        if (!directory.isDirectory) return@synchronized null
+        // Recover a directory or sidecar published immediately before a process died.
+        syncInbox()
+        syncDirectory(directory)
+        readShare(directory)
+    }
+
+    fun updateProgress(localId: UUID, update: (UploadProgress) -> UploadProgress): UploadProgress =
+        synchronized(storeLock) {
+            val directory = File(root, localId.toString())
+            if (!directory.isDirectory) throw IOException("Missing local share")
+            val file = File(directory, OUTBOX_NAME)
+            val previous = readProgress(file)
+            val progress = update(previous)
+            if (progress != previous) {
+                replaceDurably(file, progress.toJson().toString().toByteArray())
+            }
+            progress
+        }
+
+    private fun readShare(directory: File) = StoredShare(
+        localId = parseUuid(directory.name),
+        receipt = readReceipt(directory),
+        sourceFile = File(directory, ATTACHMENT_NAME),
+        progress = readProgress(File(directory, OUTBOX_NAME)),
+    )
+
+    private fun readProgress(file: File): UploadProgress {
+        if (!file.exists()) return UploadProgress()
+        return UploadProgress.fromJson(JSONObject(file.readText()))
     }
 
     private fun cleanStaging(): List<File> {
@@ -91,13 +132,6 @@ internal class LocalShareStore(private val root: File) {
         if (receipt.getString("local_id") != directory.name) {
             throw IOException("Share receipt ID does not match its directory")
         }
-        val attachment = receipt.optJSONObject("attachment")
-        if (attachment != null) {
-            val file = File(directory, ATTACHMENT_NAME)
-            if (!file.isFile || file.length() != attachment.getLong("size_bytes")) {
-                throw IOException("Missing or incomplete share attachment")
-            }
-        }
         return receipt
     }
 
@@ -106,34 +140,11 @@ internal class LocalShareStore(private val root: File) {
         syncDirectory(checkNotNull(root.parentFile))
     }
 
-    private fun syncDirectory(directory: File) {
-        val fd = Os.open(directory.path, OsConstants.O_RDONLY, 0)
-        try {
-            Os.fsync(fd)
-        } finally {
-            Os.close(fd)
-        }
-    }
-
-    private data class PendingShare(
-        val localId: String,
-        val inputType: String,
-        val label: String,
-        val receivedAtMs: Long,
-        val uploadState: String,
-    ) {
-        fun toChannelMap() = mapOf(
-            "local_id" to localId,
-            "input_type" to inputType,
-            "label" to label,
-            "received_at_ms" to receivedAtMs,
-            "upload_state" to uploadState,
-        )
-    }
-
     companion object {
+        private val storeLock = Any()
         private const val STAGING_PREFIX = ".incoming-"
         private const val RECEIPT_NAME = "receipt.json"
+        private const val OUTBOX_NAME = "outbox.json"
         internal const val ATTACHMENT_NAME = "source"
     }
 }

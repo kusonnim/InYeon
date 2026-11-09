@@ -68,12 +68,12 @@ class AndroidShareTest {
         val reopened = LocalShareStore(inboxDir)
         // Replaying a committed delivery must work even after the original input disappears.
         reopened.persist(UUID.fromString(id), receivedAtMs) { error("Reopened the original share") }
-        assertEquals(id, reopened.listPending().single()["local_id"])
+        assertEquals(id, reopened.listShares().single()["local_id"])
         assertEquals(retryKey.toString(), receipt(id).getString("client_event_id"))
         val secondId = ingest(intent)
         assertNotEquals(id, secondId)
         assertNotEquals(retryKey.toString(), receipt(secondId).getString("client_event_id"))
-        assertEquals(2, reopened.listPending().size)
+        assertEquals(2, reopened.listShares().size)
     }
 
     @Test
@@ -111,7 +111,7 @@ class AndroidShareTest {
 
         assertPrivateCopy("fixture.png", "image/png", "image", image)
         assertPrivateCopy("fixture.pdf", "application/pdf", "document", pdf)
-        assertEquals(2, LocalShareStore(inboxDir).listPending().size)
+        assertEquals(2, LocalShareStore(inboxDir).listShares().size)
     }
 
     @Test
@@ -123,7 +123,7 @@ class AndroidShareTest {
             }
             assertEquals(R.string.share_unreadable, failure.messageRes)
         }
-        assertTrue(store.listPending().isEmpty())
+        assertTrue(store.listShares().isEmpty())
     }
 
     @Test
@@ -143,7 +143,7 @@ class AndroidShareTest {
 
         val abandoned = File(inboxDir, ".incoming-$id").apply { mkdir() }
         File(abandoned, LocalShareStore.ATTACHMENT_NAME).writeBytes(byteArrayOf(1, 2, 3))
-        assertTrue(LocalShareStore(inboxDir).listPending().isEmpty())
+        assertTrue(LocalShareStore(inboxDir).listShares().isEmpty())
         assertFalse(abandoned.exists())
     }
 
@@ -158,17 +158,17 @@ class AndroidShareTest {
             ActivityScenario.launchActivityForResult<ShareReceiverActivity>(intent).use { scenario ->
                 scenario.recreate()
                 scenario.onActivity { assertFalse(it.isFinishing) }
-                assertTrue(actualStore.listPending().none { it["label"] == marker })
+                assertTrue(actualStore.listShares().none { it["label"] == marker })
 
                 allowWrite.countDown()
                 assertEquals(Activity.RESULT_OK, scenario.result.resultCode)
-                assertEquals(1, actualStore.listPending().count { it["label"] == marker })
+                assertEquals(1, actualStore.listShares().count { it["label"] == marker })
             }
         } finally {
             allowWrite.countDown()
             shareIo.submit {
                 val inbox = File(context.noBackupFilesDir, "share-inbox-v1")
-                actualStore.listPending().filter { it["label"] == marker }.forEach {
+                actualStore.listShares().filter { it["label"] == marker }.forEach {
                     File(inbox, it.getValue("local_id") as String).deleteRecursively()
                 }
             }.get(30, SECONDS)

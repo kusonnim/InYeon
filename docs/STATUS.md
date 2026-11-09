@@ -1,10 +1,11 @@
 # Implementation status
 
-Last updated 2026-11-09 (Asia/Seoul). **Phase 0 foundation and Phase A1 local Android receipt.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A2 Android authenticated outbox.**
 
-Android now saves shares locally. The clients also render the synthetic catalog.
-Authenticated uploads, the real database adapter, AI processing, notification
-delivery, and mobile/web synchronization are planned.
+Android saves shares locally and can deliver assigned receipts through an
+authenticated outbox. Upload verification uses synthetic Supabase sessions and
+an OpenAPI mock. Live server authorization and storage, AI processing, notification
+delivery, and mobile/web synchronization remain integration work.
 
 ## Delivered foundation
 
@@ -16,10 +17,10 @@ delivery, and mobile/web synchronization are planned.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Android runner and Flutter lockfile, native offline ACTION_SEND receiver, private inbox/outbox, pending list, fixture library and details | Authenticated uploads, synchronization, native notifications |
+| Mobile | Offline Android receipt, account-bound WorkManager outbox, Supabase session client, private asset transport and acknowledged content IDs verified against a mock, Flutter upload states and fixture library | Live authenticated upload acceptance, catalog synchronization, native notifications |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
-Phase A1 builds on the Phase 0 foundation in main.
+Phase A2 starts from the merged Phase A1 implementation in main.
 
 ## Verification evidence
 
@@ -65,16 +66,34 @@ covers this emulator.
 | Restart and file durability | After deleting the synthetic source files and force-stopping ITDA, all four local IDs and client event keys survived. Both private copies still matched the original SHA-256 and the Flutter list showed all four pending entries beside the fixture catalog |
 | Failure paths | An ungranted document URI and a file blocking creation of the inbox directory each produced an error toast and left the receipt count unchanged |
 
+### Phase A2 Android checks
+
+Local verification used Flutter 3.47.8, Dart 3.13.7, JDK 21, and disposable
+Android 15 / API 35 x86_64 emulators. The API and Supabase session tests used
+synthetic identities and local HTTP mocks.
+
+| Check | Result |
+| --- | --- |
+| Flutter and build | Locked dependency resolution, analysis, six Flutter tests, the fixture copy check, and x86_64 debug APK builds passed. The default and mock APKs installed on emulators |
+| Android lint | Zero errors and five warnings after escaping the Windows drive separators in the generated local SDK properties |
+| Native instrumentation | All 17 cases passed, including the six A1 cases. The A2 suite covered request bodies and keys, image/PDF verification, interrupted PUT and completion, reservation expiry, token refresh and rejection, cross-account isolation, transient and permanent failures, and original retention |
+| In-place upgrade | All four A1 receipt JSON records, IDs, and retry keys matched after APK replacement. Both private attachment hashes matched. Legacy receipts required assignment after sign-in |
+| Offline and reconnection | Five receipts stayed queued through an offline force-stop and relaunch. After connectivity returned, text and URL acknowledged in the background. The PNG and PDF resumed from their persisted reservation checkpoints after a transport fix and test scheduler reset. Both were verified and attached before their content IDs were stored |
+| Lost acknowledgment | The mock committed one content record and delayed the response. Killing ITDA before the 201 arrived led to one idempotent replay and a stored content ID while the launcher was foregrounded |
+| Account switch and final reconnect | A share assigned to account A stayed local and redacted under B with zero content creates. Signing back in to A resumed it. A new offline share on the updated build moved from pending to synchronized after reconnecting with the launcher foregrounded |
+| Loopback adapter | The standalone mock passed a schema-validated reservation expiry, replacement, byte verification, content replay, and changed-payload rejection check |
+| Live integration | Pending B's Supabase JWT verifier, durable content and private asset adapters, and C's private bucket and RLS verification with two Supabase identities |
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
 
-1. Phase A2 integrates user sessions and private uploads with B's authenticated
-   API. Use the local `client_event_id` for ingestion retries and persist asset
-   reservation/completion progress before reconciling the server receipt.
-2. Implement independent notification state, durable local suppression and
-   explicit restoration. Test body-to-details navigation, the Edit action,
-   and stale-generation events.
+1. Verify live ingestion and private uploads with B and C using two Supabase
+   identities. Exercise owner isolation, interrupted uploads, expiry, and
+   duplicate requests against the real API and private bucket.
+2. Phase A3 uses acknowledged content IDs for independent notification state,
+   durable local suppression and explicit restoration. Test body-to-details
+   navigation, the Edit action, and stale-generation events.
 
 ### Developer B — Backend and AI
 
@@ -108,7 +127,7 @@ covers this emulator.
 | FCM dispatch, device registration/revocation, multi-device delivery | A + B | One automatic eligibility per item; explicit restore only; no device API yet |
 | Sync retention/bootstrap expiry | B + C | Per-owner commit order chosen; retained-history policy and full resync integration pending |
 | Idempotency retention | A + B + C | Keep receipts for the lifetime of their effect until a safe retention policy is agreed |
-| JWT verification/rotation and auth session UX | A + B + C | Supabase Auth chosen; production adapter/refresh handling pending |
+| JWT verification/rotation and auth session UX | A + B + C | Android password and refresh flow tested with a mock; live project and backend JWT validation pending |
 | Analysis history and user-edit preservation on rerun | B + C | One current analysis; preserve source/generated/user distinctions; history migration needs review |
 | GitHub rules and deployment environments | Team | PR workflow documented; repository protection/secrets not configured here |
 

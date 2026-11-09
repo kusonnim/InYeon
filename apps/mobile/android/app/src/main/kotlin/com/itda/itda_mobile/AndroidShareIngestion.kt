@@ -20,13 +20,15 @@ internal class ShareRejected(val messageRes: Int) : Exception()
 internal class AndroidShareIngestion(
     private val resolver: ContentResolver,
     private val store: LocalShareStore,
+    private val owner: UploadOwner? = null,
+    private val beforePublish: () -> Unit = {},
 ) : ShareIngestionContract {
     override fun persistIncomingShare(
         localId: UUID,
         receivedAtMs: Long,
         intent: Intent,
         sourcePackage: String?,
-    ): String = store.persist(localId, receivedAtMs) { attachmentPath ->
+    ): String = store.persist(localId, receivedAtMs, owner, beforePublish) { attachmentPath ->
         if (intent.action != Intent.ACTION_SEND) throw ShareRejected(R.string.share_unsupported)
         val mediaType = intent.type?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
         val clip = intent.clipData

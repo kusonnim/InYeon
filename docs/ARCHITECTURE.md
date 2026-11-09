@@ -48,6 +48,11 @@ Phase A1 publishes an app-private receipt directory containing the source and it
 pending outbox record in a single atomic rename. Flutter reads local summaries
 through the native bridge. See the [mobile storage details](../apps/mobile/README.md#inbox-and-outbox).
 
+Phase A2 keeps the original and adds an account-bound outbox sidecar. WorkManager
+delivers assigned shares under the matching Supabase session. Asset checkpoints
+and the acknowledged content ID are saved before advancing the local state.
+See the [outbox decision](decisions/0004-mobile-outbox-and-account-binding.md).
+
 For images/documents, use the upload contract in OpenAPI: authenticated initiation,
 server-selected owner-prefixed object path and expiring upload capability, upload,
 then authenticated completion with server-side object verification. Only completed,
