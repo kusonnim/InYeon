@@ -59,12 +59,17 @@ internal class UploadHttp(network: Network? = null) {
     private val replayableTransport = transport.newBuilder().retryOnConnectionFailure(true).build()
 
     fun post(url: HttpUrl, headers: Map<String, String>, json: JSONObject?): HttpReply =
+        json("POST", url, headers, json)
+
+    fun json(method: String, url: HttpUrl, headers: Map<String, String>, body: JSONObject?): HttpReply =
         execute(
             Request.Builder().url(url).apply {
                 headers.forEach { (name, value) -> header(name, value) }
-                post((json?.toString() ?: "").toRequestBody(if (json == null) null else JSON_TYPE))
+                val requestBody = if (method == "GET") null
+                else (body?.toString() ?: "").toRequestBody(if (body == null) null else JSON_TYPE)
+                method(method, requestBody)
             }.build(),
-            replayable = "Idempotency-Key" in headers,
+            replayable = method == "GET" || "Idempotency-Key" in headers,
         )
 
     fun put(url: HttpUrl, headers: Map<String, String>, source: File): HttpReply {

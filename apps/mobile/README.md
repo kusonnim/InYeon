@@ -1,7 +1,8 @@
 # ITDA mobile — Developer A
 
 The Flutter app displays the synthetic catalog and shares saved on this Android
-device. The native outbox can deliver assigned shares to a configured API.
+device. The native outbox delivers assigned shares to a configured API and the
+notification controller presents acknowledged items.
 Read the root [AGENTS.md](../../AGENTS.md), [product contract](../../docs/PRODUCT.md),
 and [OpenAPI](../../contracts/openapi.yaml) before changing behavior.
 
@@ -25,12 +26,13 @@ After the APK build initializes the Gradle wrapper, run the native tests on a
 disposable Android test device from `apps/mobile/android`.
 
 ~~~sh
-./gradlew :app:connectedDebugAndroidTest
+./gradlew :app:connectedDebugAndroidTest :app:lintDebug
 ~~~
 
 Use `gradlew.bat` on Windows. The suite exercises receipt persistence, stable keys,
-file copying and hashing, interrupted receipt writes, and the HTTP upload
-protocol with mock responses. Use a disposable installation for instrumentation.
+file copying and hashing, interrupted receipt writes, the HTTP upload protocol,
+and Android notification state, actions, and authenticated retries. Use a
+disposable installation for instrumentation.
 
 ## Android share receipt
 
@@ -128,6 +130,53 @@ unverified reservations use new asset keys. A verified asset and the content
 request stay stable across content retries. Capabilities remain in memory.
 The app retains local originals after synchronization.
 
+## Android notifications
+
+Sign in and select **Enable notifications** to grant Android 13+ permission.
+The same control opens notification settings when the system prompt is unavailable
+or the **Saved content** channel is blocked. Permission denial leaves the library
+and upload outbox accessible.
+[Android notification permission](https://developer.android.com/develop/ui/views/notifications/notification-permission)
+
+After upload acknowledgment is persisted, a worker reads the current content from
+the API and posts one card for its active notification generation. New local
+shares need a server content ID before they can post. Analysis updates change an
+existing card in place and without another alert. The controller reads state on
+registration, app launch or resume, and **Refresh analysis**. In-app details
+also offer a refresh. Notification text reports the current analysis status.
+Source text and private links stay out of the notification.
+
+The body opens the registered item's details. The sole quick action
+**수정하기** opens its title and notes editor. Edits require the current
+content version. On a conflict the user can refresh while retaining their draft.
+The sample library remains separate. Mock notifications and registered
+details are labeled as mock, and mock edits are stored in the test server's
+memory.
+
+Swiping the card commits a local dismissal and a stable event key before
+scheduling the server request. The item and its workflow stay in the library.
+The notification store uses atomically replaced records under
+`noBackupFilesDir/notification-inbox-v1/`, keyed by the API realm, user and
+acknowledged content ID. Records hold server visibility, generation and revision,
+a local suppression marker, an issuance marker, and a pending mutation when
+needed. WorkManager uses the A2 session, a connected network, unique per-content
+work and exponential backoff. The original account resumes its queued events
+after signing back in.
+
+Open the registered item in **Saved on this device** and select
+**Restore notification** after dismissal has synchronized. A queued restore
+leaves the card hidden until the server confirms the current state. A version
+conflict refreshes state. A dismissal may retry at the new revision of the same
+generation with a new key. A conflicting restoration requires a fresh tap.
+Older-generation dismissals cannot suppress the restored card.
+
+Signing out or switching accounts hides the previous account's Android cards
+without sending dismissal events. Android cards already issued for a generation
+stay absent after a programmatic cancel or a restart that clears the shade.
+An interrupted first post can also leave a generation issued with no card.
+This presentation policy prioritizes durable suppression. See the
+[presentation ADR](../../docs/decisions/0005-android-notification-presentation.md).
+
 ## Configure an upload destination
 
 `ContentApi` is the replaceable catalog interface. The default `ITDA_DATA_MODE` is
@@ -170,5 +219,24 @@ For the lost-acknowledgment check, send the synthetic text `A2_PROCESS_KILL` and
 terminate the app process when the mock reports that it committed the request.
 The retry should replay the receipt using the original key.
 
+For notifications, share synthetic text after signing in. Grant permission
+and confirm one card with the mock label. Use a synthetic user's access token
+from the loopback password endpoint and the registered mock content ID to
+advance the analysis status.
+
+```sh
+curl -fsS -X POST "http://127.0.0.1:8782/mock/analysis/${CONTENT_ID}" \
+  -H "Authorization: Bearer ${MOCK_ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" --data '{"status":"completed"}'
+```
+
+The mock-only route accepts the contract's five analysis statuses. Completed
+and partial results reuse the synthetic catalog. Open the app or select
+**Refresh analysis** and confirm the card's text changes while its ID stays the
+same. Turn on airplane mode and swipe the card. Restart the app, advance the
+mock analysis again, and reconnect. The card stays hidden. After the dismissal
+is synchronized, restore from details and verify a single new generation.
+
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
-on the real JWT verifier, idempotent ingestion, and private asset endpoints.
+on real authentication, content and notification persistence, private assets,
+and the future FCM delivery contract. See [verification results](../../docs/STATUS.md#phase-a3-android-checks).

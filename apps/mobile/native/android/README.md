@@ -1,12 +1,9 @@
-# Planned Android notification boundary
+# Android native code
 
-The share receiver and its Kotlin persistence interface live in the
-[Android runner](../../android/app/src/main/kotlin/com/itda/itda_mobile/).
-`NotificationContract` remains a design interface for the later notification milestone.
-
-Use a stable platform notification ID per content. Track active/dismissed,
-generation, revision and local dismissal tombstones durably. Only explicit
-restoration creates a new generation. Ignore delayed dismissals for older
-generations. Suppress automatic resurrection after process death, analysis,
-push, sync and permission changes. Body tap opens `/contents/{id}`. The sole
-quick action is Edit (수정하기).
+The [Android runner](../../android/app/src/main/kotlin/com/itda/itda_mobile/)
+owns share receipt, authenticated uploads, and notification presentation.
+`AndroidNotifications` joins the acknowledged outbox to `NoticeLifecycle`
+and schedules versioned mutations and content refreshes through WorkManager.
+`AndroidNoticeSurface` owns the channel, platform identity, and pending intents.
+See the [mobile guide](../../README.md#android-notifications) for behavior,
+mock setup, and verification.

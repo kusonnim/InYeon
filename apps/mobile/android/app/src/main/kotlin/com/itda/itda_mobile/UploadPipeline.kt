@@ -15,6 +15,8 @@ internal class UploadPipeline(
     private val http: UploadHttp,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
+    private val api = AuthenticatedApi(config, sessions, http)
+
     fun submit(share: StoredShare, checkpoint: (AssetProgress) -> Unit): UUID {
         val owner = share.progress.owner ?: throw UploadProblem.auth()
         sessions.requireOwner(owner)
@@ -123,21 +125,7 @@ internal class UploadPipeline(
         expectedStatus: Int,
         assetOperation: Boolean = false,
     ): JSONObject {
-        val url = config.api(path)
-        fun send(token: String) = http.post(
-            url, mapOf("Authorization" to "Bearer $token", "Idempotency-Key" to key.toString()), body,
-        )
-
-        var token = sessions.accessToken(owner, http)
-        var reply = send(token)
-        if (reply.status == 401) {
-            token = sessions.accessToken(owner, http, rejectedToken = token)
-            reply = send(token)
-            if (reply.status == 401) {
-                sessions.rejectToken(owner, token)
-                throw UploadProblem.auth()
-            }
-        }
+        val reply = api.request(owner, "POST", path, body, key)
         if (reply.status == expectedStatus) return reply.json()
         val code = reply.errorCode()
         if (assetOperation && reply.status == 409 && code == "upload_expired") throw ReservationExpired()

@@ -1,11 +1,12 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A2 Android authenticated outbox.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A3 Android notification lifecycle.**
 
-Android saves shares locally and can deliver assigned receipts through an
-authenticated outbox. Upload verification uses synthetic Supabase sessions and
-an OpenAPI mock. Live server authorization and storage, AI processing, notification
-delivery, and mobile/web synchronization remain integration work.
+Android saves shares locally, delivers assigned receipts through an authenticated
+outbox, and presents native notifications for acknowledged content. Upload and
+notification verification uses synthetic Supabase sessions and an OpenAPI mock.
+Live server authorization and storage, AI processing, FCM delivery, and mobile/web
+synchronization remain integration work.
 
 ## Delivered foundation
 
@@ -17,10 +18,10 @@ delivery, and mobile/web synchronization remain integration work.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Offline Android receipt, account-bound WorkManager outbox, Supabase session client, private asset transport and acknowledged content IDs verified against a mock, Flutter upload states and fixture library | Live authenticated upload acceptance, catalog synchronization, native notifications |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private asset transport, native notification lifecycle, Flutter fixture library and registered detail/edit screens | Two-account live API/RLS verification, FCM delivery and catalog synchronization |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
-Phase A2 starts from the merged Phase A1 implementation in main.
+Phase A3 starts from the merged Phase A2 implementation in main at `910461d` (PR #2).
 
 ## Verification evidence
 
@@ -84,16 +85,37 @@ synthetic identities and local HTTP mocks.
 | Loopback adapter | The standalone mock passed a schema-validated reservation expiry, replacement, byte verification, content replay, and changed-payload rejection check |
 | Live integration | Pending B's Supabase JWT verifier, durable content and private asset adapters, and C's private bucket and RLS verification with two Supabase identities |
 
+### Phase A3 Android checks
+
+Local verification used Flutter 3.47.8, Dart 3.13.7, JDK 21, and disposable
+Android 15 / API 35 x86_64 emulators. Network testing used a schema-validated
+loopback API and synthetic users.
+
+| Check | Result |
+| --- | --- |
+| Flutter and build | Locked dependency resolution, canonical fixture check, analysis, 10 Flutter tests, and debug x86_64 APK builds passed. Both upload-disabled and mock-configured builds installed |
+| Android lint | Zero errors and six warnings after escaping drive separators in the generated Windows SDK properties |
+| Native instrumentation | All 29 tests passed, including 17 A1/A2 regressions. A3 tests cover durable suppression, replay and conflict handling, account scope, stale generations, Android card identity and actions, and delete-intent delivery versus programmatic cancel |
+| Android navigation and permission | On API 35, a cold share posted its initial card with the launcher foregrounded. Permission denial kept a synchronized mock receipt without issuing a card. Granting permission posted one card. With the app process stopped, its body opened the correct source. The sole **수정하기** action opened the warm editor. A title change reached the mock and kept workflow pending |
+| Android shade and offline durability | A completed mock analysis updated the existing Android notification key. Repeating the result kept one card. A real offline swipe persisted suppression and its key across process termination and relaunch. Delayed partial analysis left the card absent |
+| Android reconnect and restore | WorkManager reconciled the offline swipe after a same-generation revision conflict. Restore queued offline and stayed hidden. After reconnect, the mock and Android showed one active card for generation 2. A delayed generation 1 dismissal left it active |
+| Android account changes | Signing out hid A's card without a dismissal. B received its own card, and A's delayed analysis and stale navigation intent exposed no A content. Signing back in to A loaded the latest details and kept the previously issued card absent |
+| Loopback contract | Two-user HTTP checks passed for owner denial, optimistic edit and notification conflicts, idempotency replay and payload mismatch, stale-generation dismissal, and source and workflow retention |
+| Live integration | Pending B's verified JWT and durable owner-scoped content, notification and private asset adapters, and C's disposable Supabase RLS and private object checks. FCM registration and dispatch require an agreed contract |
+
+See the [Android presentation ADR](decisions/0005-android-notification-presentation.md)
+for the Android issuance and swipe/update race limits.
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
 
-1. Verify live ingestion and private uploads with B and C using two Supabase
-   identities. Exercise owner isolation, interrupted uploads, expiry, and
-   duplicate requests against the real API and private bucket.
-2. Phase A3 uses acknowledged content IDs for independent notification state,
-   durable local suppression and explicit restoration. Test body-to-details
-   navigation, the Edit action, and stale-generation events.
+1. Verify live ingestion, private uploads, notification mutations and edits
+   with B and C using two Supabase identities. Exercise owner isolation,
+   interrupted uploads, expiry, version conflicts and duplicate requests.
+2. Agree on FCM device registration, revocation and dispatch with B, then feed
+   delivery hints into the authoritative refresh path. Repeat delayed,
+   duplicate and cross-account checks with live adapters.
 
 ### Developer B — Backend and AI
 

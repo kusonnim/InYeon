@@ -21,7 +21,8 @@ internal class AndroidOutbox private constructor(context: Context) {
     private val workManager by lazy { WorkManager.getInstance(context) }
 
     val store = localShareStore(context)
-    val processor = UploadProcessor(store, config, sessions, ::changed)
+    val notices by lazy { AndroidNotifications(context, config, sessions, store, ::changed) }
+    val processor = UploadProcessor(store, config, sessions, ::changed) { ref -> notices.registered(ref) }
 
     fun activeOwner(): UploadOwner? = sessions?.current()?.owner
 
@@ -32,11 +33,13 @@ internal class AndroidOutbox private constructor(context: Context) {
 
     fun installSession(snapshot: SessionSnapshot, session: SupabaseSession) {
         if (!vault.replaceIfCurrent(snapshot, session)) throw UploadProblem.auth("account_changed")
+        notices.hideInactiveAccounts()
         recover(appendAfterRunning = true)
     }
 
     fun signOut() {
         vault.clear()
+        notices.hideInactiveAccounts()
         recover()
     }
 
@@ -44,8 +47,11 @@ internal class AndroidOutbox private constructor(context: Context) {
         val account = sessions?.current()
         return mapOf(
             "mode" to (config?.mode ?: "disabled"),
-            "account" to account?.let { mapOf("id" to it.owner.userId.toString(), "email" to it.email) },
+            "account" to account?.let {
+                mapOf("id" to it.owner.userId.toString(), "email" to it.email, "realm" to it.owner.realm)
+            },
             "shares" to store.listShares(account?.owner),
+            "notifications_enabled" to (account != null && notices.permissionEnabled()),
         )
     }
 
@@ -91,6 +97,7 @@ internal class AndroidOutbox private constructor(context: Context) {
                 schedule(share.localId, appendAfterRunning = appendAfterRunning)
             }
         }
+        notices.refreshRegistered(append = appendAfterRunning)
         changed()
     }
 
@@ -102,7 +109,10 @@ internal class AndroidOutbox private constructor(context: Context) {
         listeners.remove(listener)
     }
 
-    private fun changed() = listeners.forEach { it() }
+    private fun changed() {
+        if (config != null) notices.hideInactiveAccounts()
+        listeners.forEach { it() }
+    }
 
     private fun schedule(localId: UUID, appendAfterRunning: Boolean = false, waitForEnqueue: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<ShareUploadWorker>()
