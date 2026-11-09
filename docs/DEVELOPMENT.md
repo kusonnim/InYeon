@@ -63,23 +63,19 @@ types first, so it works before the initial build on a clean checkout.
 
 ```sh
 cd apps/mobile
-# One-time Android project generation; do not pass --overwrite.
-flutter create --platforms=android --org com.itda --project-name itda_mobile .
-dart run tool/sync_fixtures.dart
 flutter pub get
+dart run tool/sync_fixtures.dart --check
 flutter analyze
 flutter test
+flutter build apk --debug
 flutter devices
 flutter run -d <android-device>
 ```
 
-Read `apps/mobile/README.md` before bootstrapping; app source is checked in, while
-the platform runner is generated with the installed SDK. Keep the generated runner
-in A's future PR after a successful native build. Kotlin contracts under
-`native/android/` are intentionally unregistered placeholders. The scaffold must
-not advertise Android share receipt until durable URI handling/outbox exists.
-The fixture sync command copies canonical JSON assets for Flutter packaging; rerun
-it after contract changes and run its consistency check in CI.
+The Android runner and dependency lockfile are checked in. See the
+[mobile README](../apps/mobile/README.md) for the Android instrumentation suite
+and share-sheet checks. Run the fixture sync command after catalog changes to
+copy the canonical JSON asset for Flutter packaging.
 
 Android emulator networking differs from loopback on the host. Configure the local
 API origin explicitly when implementing the live adapter; never weaken production

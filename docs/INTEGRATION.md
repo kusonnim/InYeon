@@ -37,9 +37,9 @@ pagination limits and cursor rules. Do not construct cursors or storage paths in
    and runs pgTAP. B implements real JWT verification, owner-scoped repositories,
    transactional ingestion/job enqueue and idempotency. Two identities must be
    tested against both API and RLS. A/C replace API adapters, keeping fixture tests.
-3. **Durable Android milestone:** A implements private local inbox/outbox, file URI
-   persistence, retry keys, offline receipt, process-death recovery and secure upload.
-   Do not register a share handler that acknowledges input before those guarantees.
+3. **Durable Android milestone:** Phase A1 saves the original and its pending
+   outbox record before acknowledging the share. Phase A2 connects this outbox
+   to the authenticated API and private asset flow.
 4. **Analysis milestone:** B implements bounded extraction and provider adapters,
    validates generated output, claims leased PostgreSQL jobs, and atomically saves
    results plus sync events. Simulate partial extraction and provider failure first.
@@ -55,9 +55,9 @@ add temporary privileged credentials to clients to bypass missing server work.
 
 ## Architecture review of the full flow
 
-| Transition | Phase 0 evidence | Real integration still required |
+| Transition | Available evidence | Real integration still required |
 | --- | --- | --- |
-| Android share -> local persistence | Kotlin/Dart integration boundaries and durable-receipt policy | URI copying, local DB, OS share handler, process-death tests |
+| Android share -> local persistence | Native receiver, atomic private copy and outbox receipt, Flutter pending list | Broader Android version and provider coverage |
 | Local persistence -> API | Backend create schema and retry contract; clients currently expose list/get/update HTTP abstractions | Client create/asset models and transport, authenticated durable outbox and upload |
 | API -> DB + job | Migrations, relationships, constraints, repository semantics | Atomic DB adapter, idempotency receipts, concurrency tests |
 | Job -> extraction -> summary/recommendations | Worker stages and coverage fixtures | Job claims/leases, real extraction, hosted model |
