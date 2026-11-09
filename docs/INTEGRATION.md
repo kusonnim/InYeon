@@ -8,9 +8,10 @@ examples live in `contracts/examples/`. Web imports the catalog; Flutter package
 copy checked by `dart run tool/sync_fixtures.dart --check`. Python contract checks
 validate schemas and fixtures. Update all consumers in a shared contract PR.
 
-Use bearer tokens from the user's Supabase session in the future real adapter.
-Fixture mode uses synthetic identities and volatile state. It does not prove
-production authentication, transactional persistence, or OS delivery.
+The Phase A2 Android outbox uses bearer tokens from a Supabase user session.
+The catalog fixture mode and loopback upload mock use synthetic data. Live
+authentication, transactional persistence, and storage authorization require
+verification against the real adapters.
 
 ## Interface checklist
 
@@ -38,8 +39,10 @@ pagination limits and cursor rules. Do not construct cursors or storage paths in
    transactional ingestion/job enqueue and idempotency. Two identities must be
    tested against both API and RLS. A/C replace API adapters, keeping fixture tests.
 3. **Durable Android milestone:** Phase A1 saves the original and its pending
-   outbox record before acknowledging the share. Phase A2 connects this outbox
-   to the authenticated API and private asset flow.
+   outbox record before acknowledging the share. Phase A2 adds account-bound
+   WorkManager delivery, private asset verification, and receipt reconciliation.
+   The loopback mock supports isolated client verification while B and C
+   deliver the live adapters.
 4. **Analysis milestone:** B implements bounded extraction and provider adapters,
    validates generated output, claims leased PostgreSQL jobs, and atomically saves
    results plus sync events. Simulate partial extraction and provider failure first.
@@ -58,7 +61,7 @@ add temporary privileged credentials to clients to bypass missing server work.
 | Transition | Available evidence | Real integration still required |
 | --- | --- | --- |
 | Android share -> local persistence | Native receiver, atomic private copy and outbox receipt, Flutter pending list | Broader Android version and provider coverage |
-| Local persistence -> API | Backend create schema and retry contract; clients currently expose list/get/update HTTP abstractions | Client create/asset models and transport, authenticated durable outbox and upload |
+| Local persistence -> API | Android account-bound outbox, Supabase session client, content and private asset requests verified with a contract mock | Live Supabase JWT verification, durable idempotent ingestion and verified private storage |
 | API -> DB + job | Migrations, relationships, constraints, repository semantics | Atomic DB adapter, idempotency receipts, concurrency tests |
 | Job -> extraction -> summary/recommendations | Worker stages and coverage fixtures | Job claims/leases, real extraction, hosted model |
 | AI result -> persistence | Distinct source/generated/edit fields and failure tests | Transactional guarded writes and retry recovery |
