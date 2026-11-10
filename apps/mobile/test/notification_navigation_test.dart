@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:itda_mobile/main.dart';
 import 'package:itda_mobile/models/content.dart';
 import 'package:itda_mobile/native/notification_bridge.dart';
 import 'package:itda_mobile/native/share_bridge.dart';
+import 'package:itda_mobile/widgets/original_image.dart';
 
 void main() {
   late FixtureContentApi api;
@@ -27,7 +29,10 @@ void main() {
       (tester) async {
     adapter.navigation =
         NoticeNavigation(adapter.target, NoticeDestination.details);
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
     await tester.pumpAndSettle();
     expect(adapter.opened, [adapter.target]);
     expect(find.text('Content details'), findsOneWidget);
@@ -38,7 +43,10 @@ void main() {
   testWidgets(
       'a warm edit action opens the editor and saves an explicit versioned patch',
       (tester) async {
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
     await tester.pumpAndSettle();
     adapter.navigation =
         NoticeNavigation(adapter.target, NoticeDestination.edit);
@@ -58,6 +66,67 @@ void main() {
     expect(find.text('Content details'), findsOneWidget);
   });
 
+  testWidgets('pre-fills stored edits and offers the original separately',
+      (tester) async {
+    final item = _catalogItem({
+      'title': 'A title I saved',
+      'user_note': 'Bring the registration form.',
+    });
+    adapter.content = item;
+    adapter.navigation =
+        NoticeNavigation(adapter.target, NoticeDestination.edit);
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
+    await tester.pumpAndSettle();
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
+    expect(fields.first.controller!.text, item.title);
+    expect(fields.last.controller!.text, item.userNote);
+    await _showControl(tester, 'Original source');
+    expect(find.text(item.sourceUrl!), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Content details'), findsOneWidget);
+    expect(adapter.patch, isNull);
+  });
+
+  testWidgets('a source-derived title hint does not become a field edit',
+      (tester) async {
+    final item = _catalogItem({'title': null, 'user_note': null});
+    adapter.content = item;
+    adapter.localSource = const LocalSource(subject: 'Original shared title');
+    adapter.navigation =
+        NoticeNavigation(adapter.target, NoticeDestination.edit);
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
+    await tester.pumpAndSettle();
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
+    expect(fields.first.decoration!.hintText, 'Original shared title');
+    expect(fields.first.controller!.text, isEmpty);
+    expect(fields.last.controller!.text, isEmpty);
+    await _showControl(tester, 'Save changes');
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Save changes'))
+            .onPressed,
+        isNull);
+    await tester.enterText(find.byType(TextField).last, 'My note only.');
+    await tester.pump();
+    await _showControl(tester, 'Save changes');
+    await tester.tap(find.text('Save changes').hitTestable());
+    await tester.pumpAndSettle();
+    expect(adapter.patch!.toJson(), {
+      'expected_version': item.version,
+      'user_note': 'My note only.',
+    });
+  });
+
   testWidgets(
       'a sync update and conflict keep the draft and preserve a server note',
       (tester) async {
@@ -65,7 +134,10 @@ void main() {
         NoticeNavigation(adapter.target, NoticeDestination.edit);
     adapter.editError = PlatformException(code: 'version_conflict');
     final originalVersion = adapter.content.version;
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'My title draft');
     await tester.pump();
@@ -114,7 +186,10 @@ void main() {
       (tester) async {
     adapter.navigation =
         NoticeNavigation(adapter.target, NoticeDestination.edit);
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.byType(TextField).first, 'Uncommitted note title');
@@ -134,7 +209,10 @@ void main() {
     adapter.navigation =
         NoticeNavigation(adapter.target, NoticeDestination.details);
     adapter.notice = const NoticeStatus(dismissed: true, canRestore: true);
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
     await tester.pumpAndSettle();
     final restore = find.text('Restore notification');
     await tester.scrollUntilVisible(
@@ -155,7 +233,10 @@ void main() {
       (tester) async {
     adapter.navigation =
         NoticeNavigation(adapter.target, NoticeDestination.details);
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
     await tester.pumpAndSettle();
     expect(find.text('Original source'), findsOneWidget);
     adapter.authorized = false;
@@ -164,6 +245,101 @@ void main() {
     expect(find.text('Original source'), findsNothing);
     expect(find.text('Sign in with the account that saved this content.'),
         findsOneWidget);
+  });
+
+  testWidgets('opens an offline acknowledged image and zooms it in place',
+      (tester) async {
+    final folder = Directory.systemTemp.createTempSync('itda-test-image-');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    final file = File.fromUri(folder.uri.resolve('saved-image.png'));
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawColor(const Color(0xff226644), BlendMode.src);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(80, 40);
+    await tester.runAsync(() async {
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      file.writeAsBytesSync(data!.buffer.asUint8List());
+    });
+    image.dispose();
+    picture.dispose();
+    adapter.offline = true;
+    adapter.localSource = LocalSource(
+      inputType: InputType.image,
+      filename: 'saved-image.png',
+      imagePath: file.path,
+    );
+    adapter.navigation =
+        NoticeNavigation(adapter.target, NoticeDestination.details);
+    final preview = find.descendant(
+      of: find.byType(OriginalImage),
+      matching: find.byType(InkWell),
+    );
+    await tester.runAsync(() async {
+      await tester.pumpWidget(ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          notificationBridge: adapter));
+      for (var attempt = 0;
+          attempt < 20 && preview.evaluate().isEmpty;
+          attempt++) {
+        await tester.pump(const Duration(milliseconds: 30));
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Connection unavailable'), findsOneWidget);
+    expect(preview, findsOneWidget);
+    await tester.tap(preview);
+    await tester.pump();
+    final viewer = find.byType(InteractiveViewer);
+    expect(viewer, findsOneWidget);
+    final center = tester.getCenter(viewer);
+    final left =
+        await tester.startGesture(center - const Offset(40, 0), pointer: 1);
+    final right =
+        await tester.startGesture(center + const Offset(40, 0), pointer: 2);
+    await left.moveBy(const Offset(-55, 0));
+    await right.moveBy(const Offset(55, 0));
+    await tester.pump();
+    final transforms = tester.widgetList<Transform>(
+        find.descendant(of: viewer, matching: find.byType(Transform)));
+    expect(transforms.any((item) => item.transform.getMaxScaleOnAxis() > 1.1),
+        isTrue);
+    await left.up();
+    await right.up();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(viewer, findsNothing);
+    expect(preview, findsOneWidget);
+  });
+
+  testWidgets('a server-only image explains why a private preview is absent',
+      (tester) async {
+    adapter.content = _catalogItem({
+      'input_type': 'image',
+      'source_url': null,
+      'source_text': null,
+    });
+    adapter.navigation =
+        NoticeNavigation(adapter.target, NoticeDestination.details);
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter));
+    await tester.pumpAndSettle();
+    await _showControl(tester,
+        'This image has no copy on this device. Private download is unavailable.');
+    expect(find.byType(OriginalImage), findsNothing);
+  });
+}
+
+ContentItem _catalogItem(Map<String, dynamic> changes) {
+  final catalog =
+      jsonDecode(File('assets/fixtures/catalog.json').readAsStringSync())
+          as Map<String, dynamic>;
+  return ContentItem.fromJson({
+    ...(catalog['items'] as List).first as Map<String, dynamic>,
+    ...changes,
   });
 }
 
@@ -186,7 +362,9 @@ class _NotificationAdapter implements NotificationBridge {
   NoticeStatus notice = const NoticeStatus();
   ContentPatch? patch;
   PlatformException? editError;
+  LocalSource? localSource;
   bool authorized = true;
+  bool offline = false;
   int restoreRequests = 0;
 
   @override
@@ -202,8 +380,12 @@ class _NotificationAdapter implements NotificationBridge {
   @override
   Future<RegisteredContent> details(NoticeTarget target) async {
     opened.add(target);
+    if (offline) throw PlatformException(code: 'network_unavailable');
     return RegisteredContent(content, UploadMode.mock, notice);
   }
+
+  @override
+  Future<LocalSource?> original(NoticeTarget target) async => localSource;
 
   @override
   Future<NoticeStatus> status(NoticeTarget target) async {

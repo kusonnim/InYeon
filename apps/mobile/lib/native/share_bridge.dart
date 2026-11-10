@@ -87,6 +87,9 @@ final class LocalShare {
     this.canAssign = false,
     this.lastError,
     this.serverContentId,
+    this.sourceUrl,
+    this.subject,
+    this.linkText,
   });
 
   factory LocalShare.fromMessage(Map<Object?, Object?> message) {
@@ -105,6 +108,9 @@ final class LocalShare {
       canAssign: message['can_assign'] as bool,
       lastError: message['last_error'] as String?,
       serverContentId: message['server_content_id'] as String?,
+      sourceUrl: message['source_url'] as String?,
+      subject: message['subject'] as String?,
+      linkText: message['link_text'] as String?,
     );
   }
 
@@ -116,14 +122,39 @@ final class LocalShare {
   final bool canAssign;
   final String? lastError;
   final String? serverContentId;
+  final String? sourceUrl;
+  final String? subject;
+  final String? linkText;
 }
 
 final class LocalSource {
-  const LocalSource({this.text, this.url, this.filename});
+  const LocalSource({
+    this.inputType,
+    this.text,
+    this.url,
+    this.subject,
+    this.filename,
+    this.imagePath,
+  });
 
+  factory LocalSource.fromMessage(Map<Object?, Object?> message) => LocalSource(
+        inputType: switch (message['input_type']) {
+          final String type => InputType.values.byName(type),
+          _ => null,
+        },
+        text: message['source_text'] as String?,
+        url: message['source_url'] as String?,
+        subject: message['subject'] as String?,
+        filename: message['filename'] as String?,
+        imagePath: message['image_path'] as String?,
+      );
+
+  final InputType? inputType;
   final String? text;
   final String? url;
+  final String? subject;
   final String? filename;
+  final String? imagePath;
 }
 
 final class AndroidShareBridge implements ShareBridge {
@@ -153,11 +184,7 @@ final class AndroidShareBridge implements ShareBridge {
       {'local_id': localId},
     );
     if (message == null) throw const FormatException('Missing saved original');
-    return LocalSource(
-      text: message['source_text'] as String?,
-      url: message['source_url'] as String?,
-      filename: message['filename'] as String?,
-    );
+    return LocalSource.fromMessage(message);
   }
 
   @override

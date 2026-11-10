@@ -20,11 +20,13 @@ class LibraryScreen extends StatelessWidget {
     super.key,
     required this.controller,
     required this.samples,
+    required this.changeLanguage,
     this.notifications,
   });
 
   final LibraryController controller;
   final ContentApi samples;
+  final Future<void> Function(Locale) changeLanguage;
   final NotificationBridge? notifications;
 
   Future<void> _refresh() async {
@@ -50,6 +52,7 @@ class LibraryScreen extends StatelessWidget {
       builder: (_) => AccountScreen(
         controller: controller,
         notifications: notifications,
+        changeLanguage: changeLanguage,
         openSamples: () => _openSampleLibrary(context),
       ),
     ));
@@ -115,6 +118,13 @@ class LibraryScreen extends StatelessWidget {
           final mode = inbox?.mode ?? UploadMode.disabled;
           final environment = uploadEnvironmentLabel(copy, mode);
           final entries = controller.entries;
+          final grouped = <Object, List<LibraryEntry>>{};
+          for (final entry in entries) {
+            final url = entry.linkUrl;
+            final key = url == null ? entry.key : (controller.scope, url);
+            grouped.putIfAbsent(key, () => []).add(entry);
+          }
+          final rows = grouped.values.toList(growable: false);
           final issue = controller.catalogIssue;
           final offerSignIn =
               mode != UploadMode.disabled && inbox?.account == null;
@@ -234,17 +244,41 @@ class LibraryScreen extends StatelessWidget {
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       sliver: SliverList.builder(
-                        itemCount: entries.length,
+                        itemCount: rows.length,
                         itemBuilder: (context, index) {
-                          final entry = entries[index];
+                          final row = rows[index];
+                          final entry = row.first;
+                          SavedContentCard card(LibraryEntry item) =>
+                              SavedContentCard(
+                                key: ValueKey(item.key),
+                                entry: item,
+                                mode: mode,
+                                showSavedAt: row.length > 1,
+                                onOpen: _openEntry(context, item, mode),
+                              );
                           return Padding(
-                            key: ValueKey(entry.key),
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: SavedContentCard(
-                              entry: entry,
-                              mode: mode,
-                              onOpen: _openEntry(context, entry, mode),
-                            ),
+                            key: ValueKey((controller.scope, entry.key)),
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: row.length == 1
+                                ? card(entry)
+                                : Card(
+                                    child: ExpansionTile(
+                                      key: PageStorageKey(
+                                          (controller.scope, entry.key)),
+                                      shape: const Border(),
+                                      leading: const Icon(Icons.link_rounded),
+                                      title: Text(entryTitle(copy, entry),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
+                                      subtitle: Text(
+                                          copy.repeatedLinkCount(row.length)),
+                                      childrenPadding:
+                                          const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                                      children: [
+                                        for (final item in row) card(item)
+                                      ],
+                                    ),
+                                  ),
                           );
                         },
                       ),

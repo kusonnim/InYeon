@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import java.time.Instant
 import java.util.UUID
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -170,11 +171,16 @@ class NoticeLifecycleTest {
         val android = AndroidNoticeSurface(context, mock = true)
         val manager = checkNotNull(context.getSystemService(NotificationManager::class.java))
         val lifecycle = NoticeLifecycle(store, android, { owner })
+        val previousLanguage = AppLanguage.get(context)
         try {
-            lifecycle.observe(ref, snapshot())
+            AppLanguage.set(context, "ko")
+            val metadata = NoticeMetadata("url", "Repair cafe", "events.example.test", null)
+            lifecycle.observe(ref, snapshot().copy(metadata = metadata))
             val before = awaitCard(manager, NoticeAnalysis.PENDING)
             assertEquals(AndroidNoticeSurface.CHANNEL, before.channelId)
-            assertEquals("ITDA · Mock", before.extras.getCharSequence(Notification.EXTRA_TITLE))
+            assertEquals("Repair cafe", before.extras.getCharSequence(Notification.EXTRA_TITLE))
+            assertEquals("events.example.test · 모의", before.extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
+            assertEquals("처리 중", before.extras.getCharSequence(Notification.EXTRA_TEXT))
             assertEquals(listOf("수정하기"), before.actions.map { it.title.toString() })
             assertNotEquals(before.contentIntent, before.actions.single().actionIntent)
             assertNotEquals(before.contentIntent, before.deleteIntent)
@@ -186,15 +192,55 @@ class NoticeLifecycleTest {
                 assertTrue(before.deleteIntent.isImmutable)
             }
 
-            lifecycle.observe(ref, snapshot(analysis = NoticeAnalysis.PARTIAL, revision = 2, version = 2))
+            AppLanguage.set(context, "en")
+            lifecycle.refreshPresentation(ref)
+            val english = awaitCard(manager, NoticeAnalysis.PENDING)
+            assertEquals("events.example.test · Mock", english.extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
+            assertEquals(listOf("Edit"), english.actions.map { it.title.toString() })
+            assertEquals(before.contentIntent, english.contentIntent)
+            assertEquals("Saved on this device", AppLanguage.resources(context.applicationContext).getString(R.string.share_saved))
+
+            lifecycle.observe(ref, snapshot(analysis = NoticeAnalysis.PARTIAL, revision = 2, version = 2)
+                .copy(metadata = metadata.copy(title = "Updated title")))
             val after = awaitCard(manager, NoticeAnalysis.PARTIAL)
+            assertEquals("Updated title", after.extras.getCharSequence(Notification.EXTRA_TITLE))
             assertEquals(before.contentIntent, after.contentIntent)
             assertEquals(before.deleteIntent, after.deleteIntent)
             android.cancel(ref)
+            awaitCondition { android.activeGeneration(ref) == null }
+            AppLanguage.set(context, "ko")
+            lifecycle.refreshPresentation(ref)
+            assertNull(android.activeGeneration(ref))
             assertNull(store.read(ref)?.event)
         } finally {
             android.cancel(ref)
+            AppLanguage.set(context, previousLanguage)
         }
+    }
+
+    @Test
+    fun legacyNoticeHydratesSafeMetadataWithoutLosingSuppression() {
+        val event = NoticeEvent(NoticeOperation.DISMISS, 1, 1)
+        val original = NoticeRecord(ref, snapshot(), dismissedGeneration = 1,
+            event = event, posted = PostedNotice(1, NoticeAnalysis.PENDING))
+        val legacy = NoticeRecord.fromJson(original.toJson())
+        val link = "https://events.example.test/calendar?access_token=synthetic"
+        val response = JSONObject().put("input_type", "url").put("title", link)
+            .put("source_url", link).put("source_text", "Private source text")
+        val receipt = JSONObject().put("subject", "Community calendar").put("source_package", "com.example.sender")
+        val metadata = NoticeMetadata.fromContent(response, receipt)
+        assertEquals("Community calendar", metadata.title)
+        assertEquals("events.example.test", metadata.host)
+        assertEquals("com.example.sender", metadata.sourcePackage)
+        assertFalse(metadata.toJson().toString().contains("access_token"))
+        assertFalse(metadata.toJson().toString().contains("Private source text"))
+        assertEquals("My saved title", NoticeMetadata.fromContent(response.put("title", "My saved title"), receipt).title)
+        assertNull(NoticeMetadata.fromContent(response.put("title", "Bearer synthetic"), null).title)
+        val merged = legacy.mergeContent(snapshot().copy(metadata = metadata))
+        assertEquals(metadata, NoticeRecord.fromJson(merged.toJson()).content.metadata)
+        assertEquals(original.posted, merged.posted)
+        assertEquals(event, merged.event)
+        assertTrue(merged.suppressed)
     }
 
     @Test
@@ -253,7 +299,9 @@ class NoticeLifecycleTest {
     ): Notification {
         repeat(60) {
             val card = manager.activeNotifications.filter { it.tag == target.tag }.singleOrNull()
-            if (card?.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT) == analysis.text) {
+            if (card?.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT) ==
+                AppLanguage.resources(context).getString(analysis.message)
+            ) {
                 assertEquals(AndroidNoticeSurface.ANDROID_ID, card.id)
                 return card.notification
             }

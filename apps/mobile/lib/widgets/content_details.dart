@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../l10n/generated/app_localizations.dart';
 import '../models/content.dart';
+import '../native/share_bridge.dart';
 import 'library_components.dart';
+import 'original_image.dart';
 
 class ContentHeading extends StatelessWidget {
   const ContentHeading({
@@ -72,6 +74,9 @@ class ContentDetails extends StatelessWidget {
     this.header = const [],
     this.footer = const [],
     this.openOriginal,
+    this.original,
+    this.loadingOriginal = false,
+    this.openImage,
   });
 
   final ContentItem content;
@@ -80,6 +85,9 @@ class ContentDetails extends StatelessWidget {
   final List<Widget> header;
   final List<Widget> footer;
   final VoidCallback? openOriginal;
+  final LocalSource? original;
+  final bool loadingOriginal;
+  final VoidCallback? openImage;
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +104,7 @@ class ContentDetails extends StatelessWidget {
     return PageList(
       children: [
         ContentHeading(
-          title: title ?? contentTitle(copy, content),
+          title: title ?? contentTitle(copy, content, original: original),
           inputType: content.inputType,
           savedAt: content.createdAt,
           badges: [
@@ -105,11 +113,12 @@ class ContentDetails extends StatelessWidget {
           ],
         ),
         ...header,
-        OriginalSource(
-          text: content.sourceText,
-          url: content.sourceUrl,
-          hasAttachment: content.assetIds.isNotEmpty,
+        OriginalSource.fromContent(
+          content,
+          original: original,
+          loadingOriginal: loadingOriginal,
           openOriginal: openOriginal,
+          openImage: openImage,
         ),
         _AnalysisSection(content: content),
         if (information.isNotEmpty)
@@ -132,16 +141,39 @@ class OriginalSource extends StatelessWidget {
     super.key,
     this.text,
     this.url,
-    this.filename,
+    this.inputType,
+    this.original,
+    this.loadingOriginal = false,
     this.hasAttachment = false,
     this.openOriginal,
+    this.openImage,
   });
+
+  OriginalSource.fromContent(
+    ContentItem content, {
+    LocalSource? original,
+    bool loadingOriginal = false,
+    VoidCallback? openOriginal,
+    VoidCallback? openImage,
+  }) : this(
+          text: content.sourceText,
+          url: content.sourceUrl,
+          inputType: content.inputType,
+          original: original,
+          loadingOriginal: loadingOriginal,
+          hasAttachment: content.assetIds.isNotEmpty,
+          openOriginal: openOriginal,
+          openImage: openImage,
+        );
 
   final String? text;
   final String? url;
-  final String? filename;
+  final InputType? inputType;
+  final LocalSource? original;
+  final bool loadingOriginal;
   final bool hasAttachment;
   final VoidCallback? openOriginal;
+  final VoidCallback? openImage;
 
   Future<void> _copy(BuildContext context, String value) async {
     final copy = AppLocalizations.of(context);
@@ -154,15 +186,21 @@ class OriginalSource extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
+    final url = original?.url ?? this.url;
+    final text = original?.text ?? this.text;
+    final filename = original?.filename;
     final trimmed = text?.trim();
     final sourceText =
         trimmed != null && trimmed.isNotEmpty && trimmed != url ? text : null;
     final copyable = url ?? sourceText;
+    final isImage = (inputType ?? original?.inputType) == InputType.image;
+    final imagePath = original?.imagePath;
+    final viewOriginal = isImage ? null : openOriginal;
     return SectionCard(
       title: copy.originalSource,
       children: [
         if (url != null)
-          SelectableText(url!,
+          SelectableText(url,
               style: TextStyle(color: Theme.of(context).colorScheme.primary)),
         if (sourceText != null) ...[
           if (url != null) const SizedBox(height: 8),
@@ -172,9 +210,20 @@ class OriginalSource extends StatelessWidget {
           if (url != null || sourceText != null) const SizedBox(height: 8),
           Text(filename ?? copy.originalAttachment),
         ],
-        if (copyable == null && !hasAttachment && filename == null)
+        if (isImage) ...[
+          const SizedBox(height: 8),
+          if (imagePath != null && openImage != null)
+            OriginalImage(path: imagePath, onExpand: openImage)
+          else if (loadingOriginal)
+            LinearProgressIndicator(semanticsLabel: copy.loadingImage)
+          else
+            Text(original != null || openOriginal != null
+                ? copy.imageUnavailable
+                : copy.remoteImageUnavailable),
+        ],
+        if (!isImage && copyable == null && !hasAttachment && filename == null)
           Text(copy.sourceUnavailable),
-        if (copyable != null || openOriginal != null)
+        if (copyable != null || viewOriginal != null)
           Wrap(
             spacing: 8,
             runSpacing: 4,
@@ -185,9 +234,9 @@ class OriginalSource extends StatelessWidget {
                   icon: const Icon(Icons.copy_outlined, size: 17),
                   label: Text(copy.copySource),
                 ),
-              if (openOriginal != null)
+              if (viewOriginal != null)
                 TextButton(
-                    onPressed: openOriginal, child: Text(copy.readOriginal)),
+                    onPressed: viewOriginal, child: Text(copy.readOriginal)),
             ],
           ),
       ],

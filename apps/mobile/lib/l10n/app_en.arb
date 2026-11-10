@@ -5,6 +5,8 @@
   "librarySubtitle": "Revisit the things you save.",
   "refreshLibrary": "Refresh library",
   "account": "Account",
+  "language": "App language",
+  "languageChangeProblem": "Could not save your language choice. Try again.",
   "sampleLibrary": "Sample library",
   "sampleLabel": "Samples",
   "sampleIntro": "Explore examples with synthetic content.",
@@ -113,6 +115,14 @@
   "pdfType": "PDF",
   "genericType": "Saved item",
   "noTitle": "Untitled item",
+  "linkFromHost": "Link from {host}",
+  "@linkFromHost": {
+    "placeholders": {"host": {"type": "String"}}
+  },
+  "repeatedLinkCount": "{count, plural, =1{1 save of this link} other{{count} saves of this link}}",
+  "@repeatedLinkCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
   "pendingUpload": "Waiting to sync",
   "uploading": "Syncing",
   "retryUpload": "Waiting to retry",
@@ -139,6 +149,11 @@
   "originalSource": "Original source",
   "originalAttachment": "Private attachment",
   "sourceUnavailable": "The source preview is unavailable.",
+  "loadingImage": "Loading the saved image",
+  "imageUnavailable": "The image saved on this device could not be opened.",
+  "remoteImageUnavailable": "This image has no copy on this device. Private download is unavailable.",
+  "openImage": "Open larger image",
+  "imageViewer": "Saved image",
   "readOriginal": "View saved original",
   "copySource": "Copy source",
   "copiedSource": "Source copied.",

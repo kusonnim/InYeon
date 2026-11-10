@@ -18,6 +18,12 @@ final class LibraryEntry {
 
   DateTime get savedAt => remote?.createdAt ?? local!.receivedAt;
   InputType? get type => remote?.inputType ?? local?.inputType;
+  String? get linkUrl {
+    if (type != InputType.url) return null;
+    final url = local?.sourceUrl ?? remote?.sourceUrl;
+    return url == null || url.isEmpty ? null : url;
+  }
+
   String? get serverId => remote?.id ?? local?.serverContentId;
 }
 

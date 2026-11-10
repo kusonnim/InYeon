@@ -9,6 +9,7 @@ abstract interface class NotificationBridge {
   Stream<void> get changes;
   Future<NoticeNavigation?> takeNavigation();
   Future<RegisteredContent> details(NoticeTarget target);
+  Future<LocalSource?> original(NoticeTarget target);
   Future<NoticeStatus> status(NoticeTarget target);
   Future<RegisteredContent> edit(NoticeTarget target, ContentPatch patch);
   Future<void> restore(NoticeTarget target);
@@ -111,6 +112,15 @@ final class AndroidNotificationBridge implements NotificationBridge {
   @override
   Future<RegisteredContent> details(NoticeTarget target) =>
       _content('noticeDetails', target.toMessage());
+
+  @override
+  Future<LocalSource?> original(NoticeTarget target) async {
+    final message = await _channel.invokeMapMethod<Object?, Object?>(
+      'readNoticeOriginal',
+      target.toMessage(),
+    );
+    return message == null ? null : LocalSource.fromMessage(message);
+  }
 
   @override
   Future<NoticeStatus> status(NoticeTarget target) async =>

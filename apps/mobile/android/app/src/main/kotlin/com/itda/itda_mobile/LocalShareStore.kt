@@ -1,6 +1,7 @@
 package com.itda.itda_mobile
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.system.Os
 import java.io.File
 import java.io.IOException
@@ -69,6 +70,31 @@ internal class LocalShareStore(private val root: File) {
     fun listShares(activeOwner: UploadOwner? = null): List<Map<String, Any?>> = entries()
         .sortedWith(compareByDescending<StoredShare> { it.receipt.getLong("received_at_ms") }.thenBy { it.localId })
         .map { it.summary(activeOwner) }
+
+    fun acknowledged(ref: NoticeRef): StoredShare? = entries().firstOrNull {
+        it.progress.owner == ref.owner && it.progress.serverContentId == ref.contentId
+    }
+
+    fun imagePath(share: StoredShare): String? {
+        if (share.receipt.stringOrNull("input_type") != "image") return null
+        val attachment = share.receipt.optJSONObject("attachment") ?: return null
+        return runCatching {
+            val mediaType = attachment.getString("media_type")
+            if (mediaType !in imageTypes || attachment.getString("file_ref") != ATTACHMENT_NAME) return null
+            val expected = File(File(root.canonicalFile, share.localId.toString()), ATTACHMENT_NAME)
+            val file = share.sourceFile.canonicalFile
+            if (file != expected || !file.isFile || file.length() !in 1..MAX_IMAGE_BYTES ||
+                file.length() != attachment.getLong("size_bytes")
+            ) return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.path, bounds)
+            if (bounds.outMimeType != mediaType || bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+                bounds.outWidth.toLong() * bounds.outHeight > MAX_IMAGE_PIXELS ||
+                sha256(file) != attachment.getString("sha256")
+            ) return null
+            file.path
+        }.getOrNull()
+    }
 
     fun entries(): List<StoredShare> = synchronized(storeLock) {
         if (!root.exists()) return@synchronized emptyList()
@@ -146,5 +172,8 @@ internal class LocalShareStore(private val root: File) {
         private const val RECEIPT_NAME = "receipt.json"
         private const val OUTBOX_NAME = "outbox.json"
         internal const val ATTACHMENT_NAME = "source"
+        private const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
+        private const val MAX_IMAGE_PIXELS = 64_000_000L
+        private val imageTypes = setOf("image/jpeg", "image/png", "image/webp")
     }
 }

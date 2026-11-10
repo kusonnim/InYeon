@@ -1,6 +1,7 @@
 package com.itda.itda_mobile
 
 internal interface NoticeSurface {
+    fun presentationLanguage(): String? = null
     fun canPost(): Boolean
     fun activeGeneration(ref: NoticeRef): Long?
     fun post(record: NoticeRecord, update: Boolean)
@@ -86,6 +87,14 @@ internal class NoticeLifecycle(
 
     fun hideInactiveAccounts() = synchronized(lock) { surface.hideOtherOwners(activeOwner()) }
 
+    fun refreshPresentation(ref: NoticeRef) = synchronized(lock) {
+        val record = store.read(ref) ?: return@synchronized
+        if (activeOwner() != ref.owner || record.posted?.generation != record.state.generation ||
+            surface.activeGeneration(ref) != record.state.generation
+        ) return@synchronized
+        saveAndRender(record, record)
+    }
+
     private fun failed(record: NoticeRecord, event: NoticeEvent, code: String) =
         record.copy(event = event.takeIf { it.operation == NoticeOperation.DISMISS }?.copy(blocked = true), error = code)
 
@@ -94,7 +103,12 @@ internal class NoticeLifecycle(
         if (activeOwner() != record.ref.owner || record.suppressed) {
             surface.cancel(record.ref)
         } else if (surface.canPost()) {
-            val shown = PostedNotice(record.state.generation, record.content.analysis)
+            val language = surface.presentationLanguage()
+            val metadata = record.content.metadata
+            val key = if (language != null || metadata != null) {
+                sha256((language.orEmpty() + "/" + metadata?.toJson()).toByteArray())
+            } else null
+            val shown = PostedNotice(record.state.generation, record.content.analysis, key)
             val issued = record.posted
             val fresh = issued == null || shown.generation > issued.generation
             val update = issued?.generation == shown.generation && issued != shown &&

@@ -2,6 +2,7 @@ package com.itda.itda_mobile
 
 import java.io.File
 import java.io.IOException
+import java.net.URI
 import java.time.Instant
 import java.util.UUID
 import org.json.JSONObject
@@ -41,16 +42,60 @@ internal data class NoticeState(val generation: Long, val revision: Long, val di
     }
 }
 
-internal enum class NoticeAnalysis(val wire: String, val text: String) {
-    PENDING("pending", "Saved. Analysis pending."),
-    PROCESSING("processing", "Analysis in progress."),
-    COMPLETED("completed", "Analysis is ready."),
-    PARTIAL("partial", "Partial analysis is ready."),
-    FAILED("failed", "Saved. Analysis could not finish.");
+internal enum class NoticeAnalysis(val wire: String, val message: Int) {
+    PENDING("pending", R.string.notice_processing),
+    PROCESSING("processing", R.string.notice_processing),
+    COMPLETED("completed", R.string.notice_completed),
+    PARTIAL("partial", R.string.notice_partial),
+    FAILED("failed", R.string.notice_failed);
 
     companion object {
         fun parse(value: String) = entries.firstOrNull { it.wire == value }
             ?: throw IllegalArgumentException("Invalid analysis status")
+    }
+}
+
+internal data class NoticeMetadata(
+    val type: String?,
+    val title: String?,
+    val host: String?,
+    val sourcePackage: String?,
+) {
+    fun toJson() = JSONObject().put("type", type).put("title", title)
+        .put("host", host).put("source_package", sourcePackage)
+
+    companion object {
+        fun fromJson(json: JSONObject) = NoticeMetadata(
+            json.stringOrNull("type"), json.stringOrNull("title"),
+            json.stringOrNull("host"), json.stringOrNull("source_package"),
+        )
+
+        fun fromContent(json: JSONObject, receipt: JSONObject?) = NoticeMetadata(
+            json.stringOrNull("input_type") ?: receipt?.stringOrNull("input_type"),
+            safeTitle(json.stringOrNull("title")) ?: safeTitle(receipt?.stringOrNull("subject")),
+            host(receipt?.stringOrNull("source_url") ?: json.stringOrNull("source_url")),
+            receipt?.stringOrNull("source_package"),
+        )
+
+        private fun host(value: String?): String? {
+            val url = value?.let { runCatching { URI(it) }.getOrNull() } ?: return null
+            if (!url.scheme.equals("https", true) && !url.scheme.equals("http", true)) return null
+            return url.host?.lowercase()?.takeIf { it.length <= 253 }
+        }
+
+        // Only explicit titles and share subjects are candidates. Source text, summaries,
+        // filenames and full URLs do not belong on the Android notification surface.
+        fun safeTitle(value: String?): String? {
+            val title = value?.replace(Regex("[\\p{Cc}\\p{Cf}\\s]+"), " ")?.trim()
+            if (title.isNullOrEmpty() || privateValue.containsMatchIn(title)) return null
+            val count = title.codePointCount(0, title.length)
+            return if (count <= 120) title else title.substring(0, title.offsetByCodePoints(0, 119)) + "…"
+        }
+
+        private val privateValue = Regex(
+            """://|\bwww\.|\b(?:[a-z0-9-]+\.)+[a-z]{2,}/|\bbearer\s+|\b(?:sb_(?:secret|publishable)_|eyJ[a-z0-9_-]+\.|access_token\s*=|x-amz-|signature\s*=)""",
+            RegexOption.IGNORE_CASE,
+        )
     }
 }
 
@@ -59,15 +104,17 @@ internal data class NoticeContent(
     val analysis: NoticeAnalysis,
     val version: Long,
     val updatedAt: Instant,
+    val metadata: NoticeMetadata? = null,
 ) {
     companion object {
-        fun fromWire(json: JSONObject, ref: NoticeRef): NoticeContent = decodeServer {
+        fun fromWire(json: JSONObject, ref: NoticeRef, receipt: JSONObject? = null): NoticeContent = decodeServer {
             require(json.uuid("id") == ref.contentId && json.uuid("user_id") == ref.owner.userId)
             NoticeContent(
                 NoticeState.fromWire(json.getJSONObject("notification"), ref),
                 NoticeAnalysis.parse(json.getString("analysis_status")),
                 json.getLong("version").also { require(it >= 1) },
                 Instant.parse(json.getString("updated_at")),
+                NoticeMetadata.fromContent(json, receipt),
             )
         }
     }
@@ -94,7 +141,7 @@ internal data class NoticeEvent(
     }
 }
 
-internal data class PostedNotice(val generation: Long, val analysis: NoticeAnalysis)
+internal data class PostedNotice(val generation: Long, val analysis: NoticeAnalysis, val presentationKey: String? = null)
 
 internal data class NoticeRecord(
     val ref: NoticeRef,
@@ -120,7 +167,12 @@ internal data class NoticeRecord(
         val merged = mergeState(incoming.state)
         val fresher = incoming.version > content.version ||
             (incoming.version == content.version && incoming.updatedAt > content.updatedAt)
-        return if (fresher) merged.copy(content = incoming.copy(state = merged.state)) else merged
+        if (fresher) return merged.copy(content = incoming.copy(state = merged.state))
+        // Pre-A6.1 records can acquire metadata on an exact replay of the current version.
+        if (content.metadata == null && incoming.version == content.version && incoming.updatedAt == content.updatedAt) {
+            return merged.copy(content = merged.content.copy(metadata = incoming.metadata))
+        }
+        return merged
     }
 
     fun summary(): Map<String, Any?> = mapOf(
@@ -133,9 +185,11 @@ internal data class NoticeRecord(
     fun toJson() = JSONObject(ref.toMap()).put("generation", state.generation)
         .put("revision", state.revision).put("remote_dismissed", state.dismissed)
         .put("analysis", content.analysis.wire).put("content_version", content.version)
+        .put("metadata", content.metadata?.toJson())
         .put("updated_at", content.updatedAt.toString()).put("dismissed_generation", dismissedGeneration)
         .put("event", event?.toJson()).put("posted_generation", posted?.generation)
-        .put("posted_analysis", posted?.analysis?.wire).put("error", error)
+        .put("posted_analysis", posted?.analysis?.wire).put("posted_presentation_key", posted?.presentationKey)
+        .put("error", error)
 
     companion object {
         fun fromJson(json: JSONObject): NoticeRecord {
@@ -146,11 +200,13 @@ internal data class NoticeRecord(
                     NoticeState(json.getLong("generation"), json.getLong("revision"), json.getBoolean("remote_dismissed")),
                     NoticeAnalysis.parse(json.getString("analysis")), json.getLong("content_version"),
                     Instant.parse(json.getString("updated_at")),
+                    json.optJSONObject("metadata")?.let(NoticeMetadata::fromJson),
                 ),
                 dismissedGeneration = json.optionalLong("dismissed_generation"),
                 event = json.optJSONObject("event")?.let(NoticeEvent::fromJson),
                 posted = json.optionalLong("posted_generation")?.let {
-                    PostedNotice(it, NoticeAnalysis.parse(json.getString("posted_analysis")))
+                    PostedNotice(it, NoticeAnalysis.parse(json.getString("posted_analysis")),
+                        json.stringOrNull("posted_presentation_key"))
                 },
                 error = json.stringOrNull("error"),
             )

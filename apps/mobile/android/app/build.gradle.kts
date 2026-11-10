@@ -92,6 +92,13 @@ android {
         buildConfig = true
     }
 
+    bundle {
+        language {
+            // ITDA switches its bundled Android resources independently of the device locale.
+            enableSplit = false
+        }
+    }
+
     buildTypes {
         debug {
             if (staging) {

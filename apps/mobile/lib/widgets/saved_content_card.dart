@@ -6,6 +6,13 @@ import '../models/content.dart';
 import '../native/share_bridge.dart';
 import 'library_components.dart';
 
+String entryTitle(AppLocalizations copy, LibraryEntry entry) {
+  final content = entry.remote;
+  return content == null
+      ? localTitle(copy, entry.local!)
+      : contentTitle(copy, content, local: entry.local);
+}
+
 class SavedContentCard extends StatelessWidget {
   const SavedContentCard({
     super.key,
@@ -13,12 +20,14 @@ class SavedContentCard extends StatelessWidget {
     required this.mode,
     required this.onOpen,
     this.sample = false,
+    this.showSavedAt = false,
   });
 
   final LibraryEntry entry;
   final UploadMode mode;
   final VoidCallback? onOpen;
   final bool sample;
+  final bool showSavedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -27,20 +36,16 @@ class SavedContentCard extends StatelessWidget {
     final colors = theme.colorScheme;
     final content = entry.remote;
     final local = entry.local;
-    final title = content == null
-        ? localTitle(copy, local!)
-        : contentTitle(copy, content, local);
-    final summary = content?.analysis?.summary?.trim();
-    final recommendations = content?.recommendations;
-    final suggestion = recommendations == null || recommendations.isEmpty
-        ? null
-        : recommendations.first;
+    final summary =
+        content?.analysis?.summary?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final savedAt = (local?.receivedAt ?? entry.savedAt).toLocal();
+    final dates = MaterialLocalizations.of(context);
 
     return Card(
       child: InkWell(
         onTap: onOpen,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -52,12 +57,12 @@ class SavedContentCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(5),
                       child: Icon(sourceIcon(entry.type),
-                          size: 19, color: colors.onSecondaryContainer),
+                          size: 16, color: colors.onSecondaryContainer),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       sourceName(copy, entry.type),
@@ -70,23 +75,39 @@ class SavedContentCard extends StatelessWidget {
                         color: colors.onSurfaceVariant),
                 ],
               ),
-              const SizedBox(height: 11),
-              Text(title,
+              const SizedBox(height: 6),
+              Text(entryTitle(copy, entry),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge),
+                  style: theme.textTheme.titleMedium),
+              if (showSavedAt) ...[
+                const SizedBox(height: 4),
+                Text(
+                  [
+                    dates.formatMediumDate(savedAt),
+                    dates.formatTimeOfDay(TimeOfDay.fromDateTime(savedAt),
+                        alwaysUse24HourFormat:
+                            MediaQuery.alwaysUse24HourFormatOf(context)),
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
               if (summary != null && summary.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(summary,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium),
+                const SizedBox(height: 4),
+                Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: copy.aiSummary + ' · ',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    TextSpan(text: compactText(summary, 160)),
+                  ]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
               ],
-              if (suggestion != null) ...[
-                const SizedBox(height: 10),
-                _SuggestionPreview(suggestion: suggestion),
-              ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 7),
               Wrap(
                 spacing: 7,
                 runSpacing: 6,
@@ -112,43 +133,6 @@ class SavedContentCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SuggestionPreview extends StatelessWidget {
-  const _SuggestionPreview({required this.suggestion});
-
-  final Recommendation suggestion;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final copy = AppLocalizations.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(Icons.tips_and_updates_outlined,
-            size: 17, color: theme.colorScheme.primary),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: '${recommendationName(copy, suggestion.kind)} · ',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                TextSpan(text: suggestion.text),
-              ],
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ),
-      ],
     );
   }
 }
