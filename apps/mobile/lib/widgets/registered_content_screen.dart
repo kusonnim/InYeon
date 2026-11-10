@@ -41,6 +41,8 @@ class RegisteredContentScreen extends StatefulWidget {
 class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   final _title = TextEditingController();
   final _note = TextEditingController();
+  final _titleFocus = FocusNode();
+  final _noteFocus = FocusNode();
   late final StreamSubscription<void> _changes;
   late final AppLifecycleListener _lifecycle;
   late bool _editing = widget.openEditor;
@@ -61,6 +63,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   bool get _titleChanged => _title.text != (_item?.content.title ?? '');
   bool get _noteChanged => _note.text != (_item?.content.userNote ?? '');
   bool get _dirty => _titleChanged || _noteChanged;
+  bool get _canEdit => !_locked && _verified && !_busy;
 
   @override
   void initState() {
@@ -86,6 +89,8 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     _lifecycle.dispose();
     _title.dispose();
     _note.dispose();
+    _titleFocus.dispose();
+    _noteFocus.dispose();
     super.dispose();
   }
 
@@ -187,7 +192,18 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
 
   void _closeImage() => setState(() => _viewingImage = false);
 
+  void _beginEdit([FocusNode? focus]) {
+    if (!_canEdit || _editing || _viewingImage) return;
+    setState(() => _editing = true);
+    if (focus != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _editing && _canEdit) focus.requestFocus();
+      });
+    }
+  }
+
   Future<void> _save(ContentItem content) => _run(_Request.save, () async {
+        if (!_dirty) return;
         final copy = AppLocalizations.of(context);
         FocusScope.of(context).unfocus();
         final title = _title.text;
@@ -325,7 +341,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             if (!_locked && !_editing && _verified && !viewingImage)
               IconButton(
                 tooltip: copy.edit,
-                onPressed: _busy ? null : () => setState(() => _editing = true),
+                onPressed: _canEdit ? _beginEdit : null,
                 icon: const Icon(Icons.edit_outlined),
               ),
           ],
@@ -375,6 +391,8 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       original: _original,
       loadingOriginal: _readingOriginal,
       openImage: _expandImage,
+      onEditTitle: _canEdit ? () => _beginEdit(_titleFocus) : null,
+      onEditNotes: _canEdit ? () => _beginEdit(_noteFocus) : null,
       header: [
         if (!_verified && banner == null)
           Padding(
@@ -482,31 +500,39 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
                 ],
               ],
             ),
-          TextField(
-            controller: _title,
-            enabled: !_busy,
-            maxLength: 500,
-            minLines: 1,
-            maxLines: 3,
-            textInputAction: TextInputAction.next,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: copy.titleField,
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-              hintText: suggestedTitle(copy, item.content, original: _original),
-              hintMaxLines: 2,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _note,
-            enabled: !_busy,
-            maxLength: 10000,
-            minLines: 4,
-            maxLines: 8,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-                labelText: copy.notes, alignLabelWithHint: true),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _title,
+                focusNode: _titleFocus,
+                enabled: !_busy,
+                maxLength: 500,
+                minLines: 1,
+                maxLines: 3,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: copy.titleField,
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText:
+                      suggestedTitle(copy, item.content, original: _original),
+                  hintMaxLines: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _note,
+                focusNode: _noteFocus,
+                enabled: !_busy,
+                maxLength: 10000,
+                minLines: 4,
+                maxLines: 8,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                    labelText: copy.notes, alignLabelWithHint: true),
+              ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 16),

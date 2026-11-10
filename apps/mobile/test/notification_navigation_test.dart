@@ -86,6 +86,7 @@ void main() {
     expect(fields.last.controller!.text, item.userNote);
     await _showControl(tester, 'Original source');
     expect(find.text(item.sourceUrl!), findsOneWidget);
+    await _showControl(tester, 'Open original');
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Content details'), findsOneWidget);
@@ -98,17 +99,21 @@ void main() {
     adapter.content = item;
     adapter.localSource = const LocalSource(subject: 'Original shared title');
     adapter.navigation =
-        NoticeNavigation(adapter.target, NoticeDestination.edit);
+        NoticeNavigation(adapter.target, NoticeDestination.details);
     await tester.pumpWidget(ItdaApp(
         initialLocale: const Locale('en'),
         api: api,
         notificationBridge: adapter));
+    await tester.pumpAndSettle();
+    await _showControl(tester, 'No notes yet.');
+    await tester.tap(find.text('No notes yet.').hitTestable());
     await tester.pumpAndSettle();
     final fields =
         tester.widgetList<TextField>(find.byType(TextField)).toList();
     expect(fields.first.decoration!.hintText, 'Original shared title');
     expect(fields.first.controller!.text, isEmpty);
     expect(fields.last.controller!.text, isEmpty);
+    expect(fields.last.focusNode!.hasFocus, isTrue);
     await _showControl(tester, 'Save changes');
     expect(
         tester
@@ -127,17 +132,59 @@ void main() {
     });
   });
 
+  testWidgets('notes tap focuses the saved note and supports discard and clear',
+      (tester) async {
+    final item = _catalogItem({'user_note': 'A saved note'});
+    adapter.content = item;
+    adapter.navigation =
+        NoticeNavigation(adapter.target, NoticeDestination.details);
+    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+    await tester.pumpAndSettle();
+    await _showControl(tester, 'A saved note');
+    expect(find.byTooltip('메모 수정'), findsOneWidget);
+    await tester.tap(find.text('A saved note').hitTestable());
+    await tester.pumpAndSettle();
+    final notes = find.byType(TextField).last;
+    expect(tester.widget<TextField>(notes).focusNode!.hasFocus, isTrue);
+    expect(tester.widget<TextField>(notes).controller!.text, item.userNote);
+    await tester.enterText(notes, 'Discard this draft');
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('작성 내용 지우기'));
+    await tester.pumpAndSettle();
+    expect(adapter.patch, isNull);
+
+    await _showControl(tester, 'A saved note');
+    await tester.tap(find.text('A saved note').hitTestable());
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(notes).controller!.text, item.userNote);
+    await tester.enterText(notes, '');
+    await tester.pumpAndSettle();
+    adapter.content =
+        _catalogItem({'user_note': null, 'version': item.version + 1});
+    await _showControl(tester, '변경 사항 저장');
+    await tester.tap(find.text('변경 사항 저장').hitTestable());
+    await tester.pumpAndSettle();
+    expect(adapter.patch!.toJson(),
+        {'expected_version': item.version, 'user_note': null});
+    await _showControl(tester, '아직 메모가 없어요.');
+    expect(find.text('아직 메모가 없어요.'), findsOneWidget);
+  });
+
   testWidgets(
       'a sync update and conflict keep the draft and preserve a server note',
       (tester) async {
     adapter.navigation =
-        NoticeNavigation(adapter.target, NoticeDestination.edit);
+        NoticeNavigation(adapter.target, NoticeDestination.details);
     adapter.editError = PlatformException(code: 'version_conflict');
     final originalVersion = adapter.content.version;
     await tester.pumpWidget(ItdaApp(
         initialLocale: const Locale('en'),
         api: api,
         notificationBridge: adapter));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(adapter.content.title!));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'My title draft');
     await tester.pump();

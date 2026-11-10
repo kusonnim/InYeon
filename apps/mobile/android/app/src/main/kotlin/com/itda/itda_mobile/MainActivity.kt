@@ -72,6 +72,10 @@ class MainActivity : FlutterActivity() {
             "com.itda.itda_mobile/local_shares",
         ).apply {
             setMethodCallHandler { call, result ->
+                if (call.method == "openExternalLink") {
+                    result.success(launchExternalLink(call.arguments as? String, ::startActivity))
+                    return@setMethodCallHandler
+                }
                 val executor = when (call.method) {
                     "noticeDetails", "editNoticeContent" -> contentIo
                     "readLibrary" -> cacheIo

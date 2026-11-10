@@ -58,7 +58,18 @@ Preserving their provenance across devices requires a contract review with
 Developer B.
 
 Details separate the original source, AI summary and coverage, recommendations,
-and personal notes. Locally saved JPEG, PNG and WebP files preview inline in
+and personal notes. Tap a web URL or **Open original** to leave ITDA through
+Android's app-link and browser resolution. Source links work for local and
+synchronized items while analysis is pending. Recommendation references offer
+**Open resource** and **Copy link**. The original-source and reference controls
+also work in the editor. Use Android Back to return to the same ITDA screen.
+
+External launch requires an absolute HTTP or HTTPS URL. The app rejects
+credentials and known private storage links and passes only the web URL to
+Android. Link opening and copying leave the saved URL unchanged. If Android
+cannot open the URL, ITDA reports the failure in the selected app language.
+
+Locally saved JPEG, PNG and WebP files preview inline in
 details and in the registered editor. Tap an image for a larger view, then
 pinch to zoom and drag to pan. Pending and synchronized originals are available
 offline when the matching device copy is present. Android checks the receipt ID,
@@ -80,8 +91,11 @@ the source and saved fields offline. Editing requires a current authenticated
 detail response. Sign-out clears the visible account projection. A different
 account or API destination has a separate snapshot.
 
-**Edit** pre-fills the saved title and personal notes and shows the original in
-a read-only section. An item without a saved title shows a source-derived hint.
+Tap the title or the personal notes card in editable details to focus that field
+in the existing editor. The notes card works when the note is empty. App-bar
+**Edit** and the notification action also open this editor. It pre-fills the
+saved title and personal notes and shows the original in a read-only section.
+An item without a saved title shows a source-derived hint.
 The hint stays separate from the draft and only changed fields are sent in PATCH.
 A version conflict keeps the draft and offers to load the latest version.
 Untouched fields adopt the latest server values. The editor displays competing

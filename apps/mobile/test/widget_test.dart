@@ -161,6 +161,14 @@ void main() {
   testWidgets(
       'reads new local shares on resume and opens the saved original offline',
       (tester) async {
+    const channel = MethodChannel('com.itda.itda_mobile/local_shares');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    final launched = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      launched.add(call);
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     shares.mode = UploadMode.live;
     await tester.pumpWidget(ItdaApp(
         initialLocale: const Locale('en'), api: api, shareBridge: shares));
@@ -181,6 +189,91 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Original source'), findsOneWidget);
     expect(find.text('https://example.org/shared'), findsOneWidget);
+    await tester.tap(find.text('Open original'));
+    await tester.pumpAndSettle();
+    expect(launched.single.method, 'openExternalLink');
+    expect(launched.single.arguments, 'https://example.org/shared');
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Content details'), findsOneWidget);
+    expect(find.text('https://example.org/shared'), findsOneWidget);
+  });
+
+  testWidgets('tapping a title focuses it and saves the change to the library',
+      (tester) async {
+    final raw = (fixture['items'] as List).first as Map<String, dynamic>;
+    final item = ContentItem.fromJson({
+      ...raw,
+      'title': 'Saved title',
+      'user_note': 'Saved personal note',
+    });
+    final updated = ContentItem.fromJson({
+      ...raw,
+      'title': 'Revised title',
+      'user_note': item.userNote,
+      'version': item.version + 1,
+    });
+    shares
+      ..mode = UploadMode.mock
+      ..account = _account(item.userId);
+    final catalog = _CatalogAdapter((_, __) async =>
+        CatalogSnapshot(items: [item], phase: CatalogPhase.current));
+    final details = _DetailsAdapter(item, editedItem: updated);
+    await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
+      api: api,
+      shareBridge: shares,
+      catalogBridge: catalog,
+      notificationBridge: details,
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Saved title'));
+    await tester.pumpAndSettle();
+    final editTitle = find.byTooltip('Edit title');
+    final titleSemantics = tester.getSemantics(editTitle);
+    expect(titleSemantics.label, 'Edit title\nSaved title');
+    expect(titleSemantics.rect.height, tester.getSize(editTitle).height);
+    await tester.tap(find.text('Saved title'));
+    await tester.pumpAndSettle();
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
+    expect(fields.first.focusNode!.hasFocus, isTrue);
+    expect(fields.first.controller!.text, item.title);
+    expect(fields.last.controller!.text, item.userNote);
+    await tester.enterText(find.byType(TextField).first, 'Revised title');
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, 'Save changes');
+    await tester.tap(find.text('Save changes').hitTestable());
+    await tester.pumpAndSettle();
+    expect(details.patch!.toJson(),
+        {'expected_version': item.version, 'title': 'Revised title'});
+    expect(find.text('Content details'), findsOneWidget);
+    expect(find.text('Revised title'), findsOneWidget);
+
+    await _scrollTo(tester, 'Saved personal note');
+    await tester.tap(find.text('Saved personal note').hitTestable());
+    await tester.pumpAndSettle();
+    final notes = tester.widget<TextField>(find.byType(TextField).last);
+    expect(notes.focusNode!.hasFocus, isTrue);
+    expect(notes.controller!.text, item.userNote);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Content details'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Revised title'), findsOneWidget);
+    expect(find.text('Saved title'), findsNothing);
   });
 
   testWidgets(
@@ -551,10 +644,12 @@ class _CatalogAdapter implements CatalogBridge {
 }
 
 class _DetailsAdapter implements NotificationBridge {
-  _DetailsAdapter(this.item, {this.offline = false});
+  _DetailsAdapter(this.item, {this.offline = false, this.editedItem});
 
   final ContentItem item;
   final bool offline;
+  final ContentItem? editedItem;
+  ContentPatch? patch;
 
   @override
   Stream<void> get changes => const Stream.empty();
@@ -579,8 +674,12 @@ class _DetailsAdapter implements NotificationBridge {
   Future<NoticeNavigation?> takeNavigation() async => null;
 
   @override
-  Future<RegisteredContent> edit(NoticeTarget target, ContentPatch patch) =>
-      throw UnimplementedError();
+  Future<RegisteredContent> edit(
+      NoticeTarget target, ContentPatch patch) async {
+    this.patch = patch;
+    return RegisteredContent(
+        editedItem!, UploadMode.mock, await status(target));
+  }
 
   @override
   Future<void> restore(NoticeTarget target) => throw UnimplementedError();

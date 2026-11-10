@@ -13,6 +13,10 @@ expandable repeated-link groups. Details and editing show locally available
 original images. Android notifications show a localized source, title, and
 processing state with the existing dismissal and restoration rules.
 
+Android details and editing open saved source and recommendation web links
+through Android's external app resolution. Titles and personal notes in
+editable details can focus the corresponding field in the versioned editor.
+
 ## Delivered foundation
 
 | Area | Implemented now | Explicitly incomplete |
@@ -214,6 +218,27 @@ Server-only images show an unavailable preview until Developer B provides the
 owner-scoped adapter and Developer C verifies private bucket access. Share
 subjects stay in local receipts. A separate A/B/C contract review is needed
 to preserve that metadata across devices.
+
+### Phase A6.2 Android checks
+
+A6.2 starts from the merged A6.1 implementation in main at `00e345e` (PR #7).
+The original link works on local and synchronized items before analysis.
+Opening a resource or an original requires a user action and an absolute HTTP
+or HTTPS URL. The client filters recognized credential parameters and private
+storage routes. Copying or opening a link leaves its stored value intact.
+Direct edits use the existing authenticated detail and version checks.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, localization generation, fixture parity, static analysis, and all 34 tests passed. Coverage includes link opening and copying, launch failures, direct field focus, field-level edits, cancel, and conflict drafts |
+| Android instrumentation | All 46 tests passed on a disposable Android 15 / API 35 x86_64 emulator, including data-only web intents, protected and invalid URL rejection, missing handlers, and the existing account, offline original, and notification regressions |
+| Builds and lint | Default and loopback-mock x86_64 debug APK builds passed. Android lint reported zero errors and eight warnings |
+| Emulator links | Opened an original from a pending local share in Chrome and returned to the same ITDA details with Android Back. With networking disabled, a recommendation opened its URL in Chrome and Back preserved the details scroll position |
+| Emulator editing with the mock API | Title and empty-note taps focused the corresponding fields. Opening the original from the editor and returning kept the title draft. The mock confirmed separate versioned saves with the original URL intact, and the library showed the updated title |
+
+Instagram and YouTube URLs were exercised through the Android intent tests.
+Emulator testing used Chrome for the actual external handoff. Physical device
+verification remains outstanding.
 
 ## Next concrete tasks
 
