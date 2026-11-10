@@ -1,12 +1,13 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A4 Android mobile library.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A5 Android library synchronization.**
 
-Android combines saved device originals and the signed-in catalog in one
-library. The A1 receipt, authenticated A2 outbox, and A3 notification lifecycle
-support the refreshed screens. Verification uses synthetic Supabase sessions
-and an OpenAPI mock. Live authorization, storage, analysis, FCM delivery, and
-incremental mobile/web synchronization remain integration work.
+Android stores an account-scoped server snapshot and incremental checkpoint
+alongside the existing A1/A2 local originals and A3 notification records.
+The unified library supports offline restarts and safe full rebuilds after
+cursor expiry. Android verification uses synthetic Supabase sessions and an
+OpenAPI mock. Live authorization, persistence, private storage, web sync, and
+FCM delivery remain integration work.
 
 ## Delivered foundation
 
@@ -18,10 +19,10 @@ incremental mobile/web synchronization remain integration work.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private asset transport, native notifications, unified library, versioned editor, account and permission screens | Two-account live API/RLS verification, private attachment preview, incremental sync, FCM delivery |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync | Two-account live API/RLS verification, private attachment preview, FCM delivery |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
-Phase A4 starts from the merged Phase A3 implementation in main at `348327f` (PR #3).
+Phase A5 starts from the merged Phase A4 implementation in main at `86ee764` (PR #4).
 
 ## Verification evidence
 
@@ -121,17 +122,37 @@ Android 15 / API 35 x86_64 emulators.
 | Contract mock | Verified owner-bound keyset pagination, invalid cursor recovery, late inserts, cross-owner denial, optimistic version conflicts, and inclusion of archived and dismissed items. App tests and emulator flows used synthetic data |
 | Live integration | Pending B's verified JWT and durable catalog, edit, upload and notification adapters. C's disposable Supabase checks still need two real test identities and private object verification. Incremental sync and FCM remain separate milestones |
 
+### Phase A5 Android checks
+
+Local verification used Flutter 3.47.8, Dart 3.13.7, JDK 21, and Android 15 /
+API 35 x86_64 emulators.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependencies, localization, fixture parity, analysis, and 19 tests passed. The suite includes an offline server-only preview, tombstone filtering, account switches with in-flight reads, draft preservation and version conflicts, and large-text light/dark rendering |
+| Android | Default and mock x86_64 debug APKs built and installed. All 37 instrumentation tests passed, including 31 A1–A4 regressions. A5 tests cover catch-up during a paginated bootstrap, replay and related changes, interrupted SQLite transaction rollback, cursor expiry, invalid ordering, and account/realm isolation. Lint reported zero errors and six warnings |
+| Android emulator with loopback mock | A concurrent insert above the held first catalog page arrived in a 13-item snapshot. Airplane-mode restart showed a server-only source preview and a pending local original. Reconnect without manual refresh applied a server edit and merged the acknowledged local original into one card |
+| Process interruption | Killed the emulator app process during a held detail GET for an incremental page. The on-device SQLite row and cursor were unchanged after termination. Relaunch replayed and committed the edit with an advanced cursor |
+| Cursor expiry and account switch | The old snapshot remained readable during a held rebuild after expiry. Publication hid the deleted server card and kept its local receipt and acknowledgment. Account B saw its own server item while account A's cached content and assigned original remained private |
+| Android notifications | A swipe in the Android shade dismissed a synthetic item. Delayed analysis reached SQLite with visibility still dismissed and workflow still pending. Relaunch kept the item in the library and the card absent from the shade |
+| Contract mock | A schema-validated HTTP smoke test verified multiple pages and replays, two synthetic accounts and owner-bound cursors, expired cursors, preference events, optimistic edit conflicts, delayed analysis after dismissal, and deletion tombstones |
+| Live integration | The merged backend still uses an in-memory fixture repository. Live Supabase JWT verification, durable owner-scoped HTTP and sync adapters, private object verification, and two-identity staging API/RLS checks remain pending |
+
+The staged bootstrap restarts after interruption. The incremental worker
+resumes at the last durable page. An offline server-only view requires a
+previously synchronized snapshot for the installed account and API realm.
+Android checks used emulators. Physical-device and staging checks are pending.
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
 
-1. Verify the unified library, ingestion, private uploads, notification
-   mutations and edits in staging with B and C using two Supabase identities.
-   Exercise owner isolation, interrupted uploads, expiry and version conflicts.
-2. Coordinate incremental sync with B and C and FCM device registration,
-   revocation and dispatch with B. Feed delivery hints into the authoritative
-   refresh path and repeat delayed, duplicate and cross-account checks with
-   live adapters.
+1. With B and C, verify ingestion, private uploads, notification mutations,
+   edits, and durable sync in staging with two Supabase identities. Exercise
+   concurrent bootstrap writes, page interruption, cursor expiry and conflicts.
+2. Agree with B on FCM device registration, revocation and dispatch. Connect
+   delivery hints to the authoritative refresh path and exercise delayed,
+   duplicate and cross-account delivery.
 
 ### Developer B — Backend and AI
 
@@ -163,7 +184,7 @@ Android 15 / API 35 x86_64 emulators.
 | Source formats, file quotas, scanning and cleanup | B + C | Contract currently proposes JPEG/PNG/WebP/PDF/text, 20 MiB; bytes verified server-side; no public objects |
 | Job retries/leases and processing SLO | B | PostgreSQL queue chosen; budgets/monitoring undecided |
 | FCM dispatch, device registration/revocation, multi-device delivery | A + B | One automatic eligibility per item; explicit restore only; no device API yet |
-| Sync retention/bootstrap expiry | B + C | Per-owner commit order chosen; retained-history policy and full resync integration pending |
+| Sync retention/bootstrap expiry | B + C | Per-owner commit order chosen. Android recovery verified against the mock. Retention policy and live cursor validation remain open |
 | Idempotency retention | A + B + C | Keep receipts for the lifetime of their effect until a safe retention policy is agreed |
 | JWT verification/rotation and auth session UX | A + B + C | Android password and refresh flow tested with a mock; live project and backend JWT validation pending |
 | Analysis history and user-edit preservation on rerun | B + C | One current analysis; preserve source/generated/user distinctions; history migration needs review |

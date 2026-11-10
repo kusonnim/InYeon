@@ -13,6 +13,7 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit.SECONDS
 import org.json.JSONObject
@@ -51,6 +52,11 @@ internal class AndroidNotifications(
             share.progress.serverContentId?.takeIf { share.progress.owner == owner }
         }.distinct()
         for (id in ids) schedule(NoticeRef(owner, id), append)
+    }
+
+    fun refreshSynced(owner: UploadOwner, ids: Set<UUID>) {
+        if (activeOwner() != owner) return
+        for (id in ids) schedule(NoticeRef(owner, id), append = true)
     }
 
     fun hideInactiveAccounts() = lifecycle.hideInactiveAccounts()
@@ -112,6 +118,7 @@ internal class AndroidNotifications(
             return Result.success()
         } catch (problem: UploadProblem) {
             if (problem.state == UploadState.AUTH_REQUIRED) onChange()
+            if (problem.code == "http_404" && activeOwner() == ref.owner) surface.cancel(ref)
             return if (problem.state == UploadState.RETRY_WAITING) Result.retry() else Result.success()
         } catch (_: Exception) {
             return Result.retry()

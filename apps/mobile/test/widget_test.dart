@@ -121,8 +121,8 @@ void main() {
         _local('registered', 'Local preview',
             state: LocalUploadState.synchronized, serverId: item.id)
       ];
-    final catalog = _CatalogAdapter(
-        (_, __) async => ContentPage(items: [item], nextCursor: null));
+    final catalog = _CatalogAdapter((_, __) async =>
+        CatalogSnapshot(items: [item], phase: CatalogPhase.current));
     await tester.pumpWidget(ItdaApp(
       api: api,
       shareBridge: shares,
@@ -153,8 +153,11 @@ void main() {
       ..items = [_local('waiting', 'A saved note')];
     var connected = false;
     final catalog = _CatalogAdapter((_, __) async {
-      if (!connected) throw PlatformException(code: 'network_unavailable');
-      return ContentPage(items: [item], nextCursor: null);
+      if (!connected) {
+        return const CatalogSnapshot(
+            items: [], phase: CatalogPhase.offline, initialized: false);
+      }
+      return CatalogSnapshot(items: [item], phase: CatalogPhase.current);
     });
     await tester.pumpWidget(
         ItdaApp(api: api, shareBridge: shares, catalogBridge: catalog));
@@ -164,6 +167,7 @@ void main() {
     connected = true;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
+    expect(catalog.syncRequests, 1);
     expect(find.text('Connection unavailable'), findsNothing);
     expect(find.text('2 saved items'), findsOneWidget);
   });
@@ -177,8 +181,9 @@ void main() {
       ..mode = UploadMode.mock
       ..account = _account('a')
       ..nextAccount = _account('b');
-    final catalog = _CatalogAdapter((scope, _) async => ContentPage(
-        items: [scope.ownerId == 'a' ? itemA : itemB], nextCursor: null));
+    final catalog = _CatalogAdapter((scope, _) async => CatalogSnapshot(
+        items: [scope.ownerId == 'a' ? itemA : itemB],
+        phase: CatalogPhase.current));
     await tester.pumpWidget(
         ItdaApp(api: api, shareBridge: shares, catalogBridge: catalog));
     await tester.pumpAndSettle();
@@ -202,20 +207,23 @@ void main() {
   });
 
   test(
-      'a slow account A page cannot replace B, and cursor expiry preserves B items',
+      'a slow account A snapshot cannot replace B, and recovery preserves B items',
       () async {
     final itemA = example(title: 'Account A item', owner: 'a');
     final itemB = example(title: 'Account B item', owner: 'b');
     shares.account = _account('a');
-    final a = Completer<ContentPage>();
+    final a = Completer<CatalogSnapshot>();
     final requestedA = Completer<void>();
-    final catalog = _CatalogAdapter((scope, cursor) {
+    final catalog = _CatalogAdapter((scope, limit) {
       if (scope.ownerId == 'a') {
         requestedA.complete();
         return a.future;
       }
-      if (cursor != null) throw PlatformException(code: 'invalid_cursor');
-      return Future.value(ContentPage(items: [itemB], nextCursor: 'opaque'));
+      return Future.value(CatalogSnapshot(
+        items: [itemB],
+        phase: limit > 10 ? CatalogPhase.retrying : CatalogPhase.current,
+        hasMore: limit == 10,
+      ));
     });
     final controller = LibraryController(shares, catalog);
     addTearDown(controller.dispose);
@@ -223,13 +231,63 @@ void main() {
     await requestedA.future;
     shares.account = _account('b');
     await controller.reload();
-    a.complete(ContentPage(items: [itemA], nextCursor: null));
+    a.complete(CatalogSnapshot(items: [itemA], phase: CatalogPhase.current));
     await previous;
     expect(controller.entries.single.remote, itemB);
     await controller.loadMore();
-    expect(controller.catalogIssue, CatalogIssue.expiredCursor);
+    expect(controller.catalogIssue, CatalogIssue.retrying);
+    expect(controller.showingSavedCopies, isTrue);
     expect(controller.entries.single.remote, itemB);
     expect(controller.hasMore, isFalse);
+  });
+
+  testWidgets(
+      'shows a cached server-only item after offline launch without enabling edits',
+      (tester) async {
+    final item = example(title: 'Server-only saved item');
+    shares
+      ..mode = UploadMode.live
+      ..account = _account(item.userId);
+    final catalog = _CatalogAdapter((_, __) async =>
+        CatalogSnapshot(items: [item], phase: CatalogPhase.offline));
+    await tester.pumpWidget(ItdaApp(
+      api: api,
+      shareBridge: shares,
+      catalogBridge: catalog,
+      notificationBridge: _DetailsAdapter(item, offline: true),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved copies'), findsOneWidget);
+    await _scrollTo(tester, item.title!);
+    await tester.tap(find.text(item.title!).hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.text('Showing the last loaded version.'), findsOneWidget);
+    expect(find.byTooltip('Edit'), findsNothing);
+    await _scrollTo(tester, 'Original source');
+    expect(find.text(item.sourceUrl!), findsOneWidget);
+  });
+
+  test('tombstones hide acknowledged cards without changing pending originals',
+      () async {
+    final item = example();
+    shares
+      ..account = _account(item.userId)
+      ..items = [
+        _local('acknowledged', 'Original copy',
+            state: LocalUploadState.synchronized, serverId: item.id),
+        _local('pending', 'Pending original'),
+      ];
+    final catalog = _CatalogAdapter((_, __) async => CatalogSnapshot(
+          items: [],
+          phase: CatalogPhase.current,
+          removed: {item.id},
+        ));
+    final controller = LibraryController(shares, catalog);
+    addTearDown(controller.dispose);
+    await controller.reload();
+    expect(catalog.lastAcknowledged, {item.id});
+    expect(controller.entries.single.local?.label, 'Pending original');
+    expect(shares.items, hasLength(2));
   });
 
   testWidgets(
@@ -338,17 +396,31 @@ class _ShareAdapter implements ShareBridge {
 class _CatalogAdapter implements CatalogBridge {
   _CatalogAdapter(this.load);
 
-  final Future<ContentPage> Function(AccountScope, String?) load;
+  final Future<CatalogSnapshot> Function(AccountScope, int) load;
+  Set<String>? lastAcknowledged;
+  int syncRequests = 0;
 
   @override
-  Future<ContentPage> listContents(AccountScope scope, {String? cursor}) =>
-      load(scope, cursor);
+  Future<CatalogSnapshot> snapshot(
+    AccountScope scope, {
+    required int limit,
+    required Set<String> acknowledged,
+  }) {
+    lastAcknowledged = acknowledged;
+    return load(scope, limit);
+  }
+
+  @override
+  Future<void> synchronize(AccountScope scope) async {
+    syncRequests++;
+  }
 }
 
 class _DetailsAdapter implements NotificationBridge {
-  _DetailsAdapter(this.item);
+  _DetailsAdapter(this.item, {this.offline = false});
 
   final ContentItem item;
+  final bool offline;
 
   @override
   Stream<void> get changes => const Stream.empty();
@@ -357,6 +429,7 @@ class _DetailsAdapter implements NotificationBridge {
   Future<RegisteredContent> details(NoticeTarget target) async {
     expect(target.contentId, item.id);
     expect(target.ownerId, item.userId);
+    if (offline) throw PlatformException(code: 'network_unavailable');
     return RegisteredContent(item, UploadMode.mock, await status(target));
   }
 

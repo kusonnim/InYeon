@@ -15,13 +15,16 @@
   "loadLibraryError": "Could not load this library",
   "localLoadError": "Could not read saved items on this device.",
   "offlineTitle": "Connection unavailable",
-  "offlineLibrary": "You can still open items saved on this device.",
+  "offlineLibrary": "You can still open the copies saved on this device.",
   "serverLibraryError": "Your online library could not be refreshed.",
   "loadingLibrary": "Loading library",
   "loadingContent": "Loading content",
   "retry": "Try again",
   "loadMore": "Load more",
-  "expiredPage": "Refresh to see the latest items.",
+  "savedCopies": "Saved copies",
+  "syncingLibrary": "Refreshing library",
+  "syncDelayed": "Library refresh delayed",
+  "syncRetry": "Your saved copies are available. The library will try again when it can.",
   "savedCount": "{count, plural, =0{Saved items} =1{1 saved item} other{{count} saved items}}",
   "@savedCount": {
     "placeholders": {

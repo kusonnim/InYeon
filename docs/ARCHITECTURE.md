@@ -135,20 +135,25 @@ silently overwriting another edit. Notification state uses its own generation/re
 List and sync endpoints use opaque bounded cursors, specified in OpenAPI. Never
 derive order from client clocks. The DB design allocates per-owner sync sequences
 under an owner-row lock in the same mutation transaction: bare global bigserial
-values can commit out of order and skip events. Persist cursor advancement only
-after applying the complete received page locally. The real adapter must implement
-bootstrap/full resync, cursor retention expiry, and reconnection behavior before
-production. Invalid or expired cursors return a structured `invalid_cursor` error;
-clients discard the cursor and perform a full resync.
-FCM is a hint to fetch authoritative state, not the sync cursor source.
+values can commit out of order and skip events. Persist cursor advancement with
+the complete received page. The real adapter must expose retained events from a
+cursorless start and return HTTP 400 `invalid_cursor` for invalid or expired
+cursors. FCM can signal that authoritative state should be fetched.
 
-Phase A4 uses the existing owner-scoped content list for the Android library.
-Kotlin sends paginated requests with the A2 session and checks ownership
-before returning content. Flutter keeps the fetched pages in memory for the
-active account and merges them with local receipts by acknowledged server ID.
-Device receipts remain available during offline launches. The sample catalog
-has a separate route. Catalog reads and edits leave native notification
-eligibility tied to acknowledged receipts on this device.
+Phase A5 stores content, preferences, tombstones and the sync checkpoint in
+SQLite per API realm and authenticated user. The worker applies each feed page
+in one transaction. Initial sync or cursor expiry stages a full catalog between
+a feed boundary and a catch-up pass, then atomically publishes it. Flutter
+reads the snapshot offline and merges it with A1/A2 originals by acknowledged
+server ID. A server tombstone can hide the card without deleting the original.
+The sample catalog has a separate route.
+
+WorkManager coalesces connected sync jobs after authentication, launch/resume,
+explicit refresh, reconnection and upload acknowledgment. A cached snapshot is
+a read-only fallback until an authoritative detail fetch. Affected acknowledged
+items may trigger the existing A3 refresh path, which uses a fresh authorized
+read and checks durable suppression. See the
+[Android sync ADR](decisions/0006-android-library-sync-checkpoints.md).
 
 ## Notification lifecycle
 

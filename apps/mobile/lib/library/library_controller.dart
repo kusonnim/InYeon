@@ -7,7 +7,7 @@ import '../models/content.dart';
 import '../native/catalog_bridge.dart';
 import '../native/share_bridge.dart';
 
-enum CatalogIssue { connection, unavailable, expiredCursor }
+enum CatalogIssue { connection, unavailable, retrying }
 
 final class LibraryEntry {
   const LibraryEntry(this.key, {this.local, this.remote});
@@ -38,25 +38,43 @@ class LibraryController extends ChangeNotifier {
   StreamSubscription<void>? _subscription;
   LocalInbox? _inbox;
   final _contents = <String, ContentItem>{};
-  String? _cursor;
+  CatalogSnapshot? _snapshot;
+  int _limit = 10;
   int _inboxRequest = 0;
   int _catalogRequest = 0;
   bool _refreshRequested = false;
   bool _disposed = false;
   bool _localError = false;
-  bool _loadingCatalog = false;
-  CatalogIssue? _catalogIssue;
+  CatalogIssue? _cacheIssue;
 
   LocalInbox? get inbox => _inbox;
   AccountScope? get scope => _inbox?.account?.scope;
   bool get localError => _localError;
-  bool get loadingCatalog => _loadingCatalog;
-  bool get hasMore => _cursor != null;
-  CatalogIssue? get catalogIssue => _catalogIssue;
+  bool get loadingCatalog =>
+      _snapshot?.phase == CatalogPhase.syncing ||
+      (_snapshot?.phase == CatalogPhase.cached &&
+          _snapshot?.initialized == false) ||
+      (_snapshot == null &&
+          _cacheIssue == null &&
+          scope != null &&
+          catalog != null);
+  bool get hasMore => _snapshot?.hasMore == true;
+  bool get showingSavedCopies =>
+      _snapshot?.initialized == true &&
+      _snapshot?.phase != CatalogPhase.current;
+  CatalogIssue? get catalogIssue =>
+      _cacheIssue ??
+      switch (_snapshot?.phase) {
+        CatalogPhase.offline => CatalogIssue.connection,
+        CatalogPhase.retrying => CatalogIssue.retrying,
+        CatalogPhase.failed => CatalogIssue.unavailable,
+        _ => null,
+      };
 
   List<LibraryEntry> get entries {
     final merged = <String, LibraryEntry>{};
     for (final share in _inbox?.shares ?? const <LocalShare>[]) {
+      if (_snapshot?.removed.contains(share.serverContentId) == true) continue;
       final key = _entryKey(share);
       merged.putIfAbsent(key, () => LibraryEntry(key, local: share));
     }
@@ -85,19 +103,14 @@ class LibraryController extends ChangeNotifier {
       final next = await shares!.listInbox();
       if (_disposed || request != _inboxRequest) return;
       final changedScope = next.account?.scope != scope;
-      final previousIds = _acknowledgments(_inbox);
-      final hasNewAck =
-          _acknowledgments(next).difference(previousIds).isNotEmpty;
       if (changedScope) _clearCatalog();
       _inbox = next;
       _localError = false;
-      final shouldRefresh = _refreshRequested || changedScope || hasNewAck;
+      final shouldRefresh = _refreshRequested;
       _refreshRequested = false;
-      if (shouldRefresh && scope != null && catalog != null) {
-        await _loadCatalog();
-      } else {
-        notifyListeners();
-      }
+      notifyListeners();
+      if (scope != null && catalog != null)
+        await _loadCatalog(synchronize: shouldRefresh);
     } catch (_) {
       if (_disposed || request != _inboxRequest) return;
       _inbox = null;
@@ -108,58 +121,58 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<void> loadMore() async {
-    final cursor = _cursor;
-    if (cursor != null && !_loadingCatalog) await _loadCatalog(cursor: cursor);
+    if (!hasMore) return;
+    _limit += 10;
+    await _loadCatalog();
   }
 
-  Future<void> _loadCatalog({String? cursor}) async {
+  Future<void> _loadCatalog({bool synchronize = false}) async {
     final owner = scope;
     if (owner == null || catalog == null) return;
     final request = ++_catalogRequest;
-    _loadingCatalog = true;
-    _catalogIssue = null;
-    notifyListeners();
     try {
-      final page = await catalog!.listContents(owner, cursor: cursor);
+      if (synchronize) await catalog!.synchronize(owner);
       if (!_current(request, owner)) return;
-      if (page.items.any((item) => item.userId != owner.ownerId)) {
+      final snapshot = await catalog!.snapshot(
+        owner,
+        limit: _limit,
+        acknowledged: _acknowledgments(_inbox),
+      );
+      if (!_current(request, owner)) return;
+      if (snapshot.items.any((item) => item.userId != owner.ownerId)) {
         throw const FormatException('Unexpected catalog owner');
       }
       final next = <String, ContentItem>{
-        for (final item in page.items)
+        for (final item in snapshot.items)
           item.id: _newer(_contents[item.id], item),
       };
-      if (cursor == null) _contents.clear();
+      _contents.clear();
       _contents.addAll(next);
-      _cursor = page.nextCursor;
+      _snapshot = snapshot;
+      _cacheIssue = null;
     } on PlatformException catch (error) {
       if (!_current(request, owner)) return;
       switch (error.code) {
         case 'authentication_required':
         case 'account_changed':
-          _clearCatalog();
-          notifyListeners();
-          unawaited(reload());
+          hideAccountData();
         case 'network_unavailable':
-          _catalogIssue = CatalogIssue.connection;
-        case 'invalid_cursor':
-          _cursor = null;
-          _catalogIssue = CatalogIssue.expiredCursor;
+          _cacheIssue = CatalogIssue.connection;
         default:
-          _catalogIssue = CatalogIssue.unavailable;
+          _cacheIssue = CatalogIssue.unavailable;
       }
     } catch (_) {
-      if (_current(request, owner)) _catalogIssue = CatalogIssue.unavailable;
+      if (_current(request, owner)) _cacheIssue = CatalogIssue.unavailable;
     } finally {
-      if (_current(request, owner)) {
-        _loadingCatalog = false;
-        notifyListeners();
-      }
+      if (_current(request, owner)) notifyListeners();
     }
   }
 
   void updateItem(AccountScope owner, ContentItem item) {
-    if (_disposed || owner != scope || item.userId != owner.ownerId) return;
+    if (_disposed ||
+        owner != scope ||
+        item.userId != owner.ownerId ||
+        _snapshot?.removed.contains(item.id) == true) return;
     _contents[item.id] = _newer(_contents[item.id], item);
     notifyListeners();
   }
@@ -174,9 +187,9 @@ class LibraryController extends ChangeNotifier {
   void _clearCatalog() {
     ++_catalogRequest;
     _contents.clear();
-    _cursor = null;
-    _catalogIssue = null;
-    _loadingCatalog = false;
+    _snapshot = null;
+    _limit = 10;
+    _cacheIssue = null;
   }
 
   bool _current(int request, AccountScope owner) =>

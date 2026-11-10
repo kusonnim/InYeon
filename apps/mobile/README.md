@@ -1,9 +1,9 @@
 # ITDA mobile — Developer A
 
 ITDA opens to a private library of saved items. On Android, the library combines
-originals on this device with the signed-in account's server catalog. The native
-outbox delivers assigned shares, and Android notifications present acknowledged
-items. A separate sample library uses synthetic fixtures.
+originals on this device with a durable copy of the signed-in account's server
+catalog. The native outbox delivers assigned shares, and Android notifications
+present acknowledged items. A separate sample library uses synthetic fixtures.
 Read the root [AGENTS.md](../../AGENTS.md), [product contract](../../docs/PRODUCT.md),
 and [OpenAPI](../../contracts/openapi.yaml) before changing behavior.
 
@@ -33,16 +33,16 @@ disposable Android test device from `apps/mobile/android`.
 
 Use `gradlew.bat` on Windows. The suite exercises receipt persistence, stable keys,
 file copying and hashing, interrupted receipt writes, the HTTP upload protocol,
-and Android notification state, actions, and authenticated retries. Use a
-disposable installation for instrumentation.
+Android notification state and actions, authenticated retries, and SQLite
+synchronization recovery. Use a disposable installation for instrumentation.
 
 ## Library and details
 
-The library reads an authenticated page on launch, resume, and refresh. A new
-upload acknowledgment also refreshes the list. **Load more** uses the server
-cursor. A receipt and server item with the same acknowledged ID share one card.
-Dismissed and archived items remain accessible. **Sample library** is available
-from **Account** and from an empty device-only library.
+The library reads the active account's local snapshot first. **Load more** reads
+more items from SQLite. A receipt and server item with the same acknowledged ID
+share one card. A server deletion removes the synchronized card while retaining
+the device original. Dismissed and archived items remain accessible. **Sample
+library** is available from **Account** and from an empty device-only library.
 
 Cards show the saved title or a source-derived label, the source type, and any
 available summary and recommendation preview. A device-only item shows its
@@ -51,11 +51,13 @@ information, action and resource recommendations, and personal notes. A pending
 item can open its local original while offline. File details show the stored
 name or a private attachment label. File preview and download are future work.
 
-Loaded catalog pages stay in memory during a connection error.
-Account changes clear it, and offline launches can show durable device receipts.
-Server-only items need a successful load in the current app session. The mobile
-client uses the existing owner-scoped list and detail APIs. Incremental sync
-remains integration work.
+After an initial sync, server-only items are available across offline restarts
+with the same installed session. **Saved copies** identifies a catalog awaiting
+confirmation or recovering from an error. **Syncing library** tracks active
+work. **Refresh library** requests background sync. A cached detail can show
+the source and saved fields offline. Editing requires a current authenticated
+detail response. Sign-out clears the visible account projection. A different
+account or API destination has a separate snapshot.
 
 **Edit** updates only the fields the user changed. A version conflict keeps the
 draft and offers to load the latest version. Untouched fields adopt the latest
@@ -67,6 +69,49 @@ The app follows Android's light and dark setting. Flutter interface strings
 are in `lib/l10n/app_en.arb`; generated Dart files stay local. The Android
 notification action keeps its existing label **수정하기**.
 [Flutter localization guide](https://docs.flutter.dev/ui/internationalization)
+
+## Android library synchronization
+
+The Android worker consumes every page from `GET /v1/sync` in server sequence
+order. It reuses each opaque cursor as issued and compares decimal sequences
+without floating-point conversion. It resolves content and related recommendation
+or notification events with an authenticated content read, and preferences with
+`GET /v1/preferences`. Each page's upserts, tombstones and checkpoint commit
+together. If a request or the process stops midway, the next worker starts
+from the last committed page.
+
+On first sign-in or HTTP 400 `invalid_cursor`, the worker establishes a feed
+boundary, stages the full paginated catalog and preferences, then applies
+changes after that boundary. This catches inserts above an already traversed
+list page and changes to previously staged records. Publication replaces the
+active snapshot and cursor in one transaction. The old snapshot stays readable
+during a rebuild. An interrupted or expired rebuild restarts from a fresh
+boundary. Incremental work resumes from its durable checkpoint.
+
+SQLite files live under `noBackupFilesDir/library-cache-v1/` and are partitioned
+by API realm and Supabase user ID. The Android app sandbox protects the cache.
+Schema version 1 is created on first use, with no backfill from the A4 in-memory
+catalog. The A1/A2 original and upload stores and A3 suppression records remain
+separate. Android's SQLite corruption recovery can discard an affected derived
+snapshot, which the next sync rebuilds. A future schema upgrade needs an
+explicit cache migration or versioned rebuild.
+
+Successful sign-in, launch/resume, manual refresh, network reconnection while
+the app process is alive, and a durable upload acknowledgment request a sync.
+WorkManager persists account-scoped jobs and waits for a connected network,
+including when Flutter is closed. Triggers coalesce behind active work and
+temporary failures back off exponentially from 30 seconds to WorkManager's
+five-hour maximum. Android can defer work. When no worker is pending and the
+process is stopped, a later launch requests the next sync.
+The worker checks the active account before applying pages and publishing a
+rebuild. Flutter can read only the current account's snapshot. Successful token
+refresh retains the same partition and rejected sessions require sign-in.
+
+Changed items acknowledged on this device can trigger the existing A3
+authoritative notification refresh. Cached rows never determine notification
+presentation, and synchronization preserves local suppression and open edit
+drafts. FCM hints require the shared device registration and dispatch design.
+[Android sync ADR](../../docs/decisions/0006-android-library-sync-checkpoints.md)
 
 ## Android share receipt
 
@@ -145,7 +190,7 @@ account sees a redacted card.
 | Syncing | A worker is submitting or resuming the item |
 | Waiting to retry | A temporary network, server, or local storage error delayed the attempt |
 | Sign-in required / Choose an account | The item needs a session for its original account or explicit assignment |
-| Synced | The matching server content ID was durably saved after a valid 201 acknowledgment, or the item was read from the authenticated catalog |
+| Synced | The matching server content ID was durably saved after a valid 201 acknowledgment, or the item came from an authenticated server snapshot. **Saved copies** indicates the library is awaiting confirmation |
 | Upload failed | A permanent error ended automatic retries and kept the original |
 
 WorkManager persists unique per-receipt work with a connected-network constraint.
@@ -233,7 +278,7 @@ Run the mock from the repository root with Python and the `PyYAML` and
 responses against OpenAPI. It uses synthetic users and in-memory state.
 
 ```sh
-python apps/mobile/tool/mock_upload_server.py --seed-catalog
+python apps/mobile/tool/mock_upload_server.py --seed-catalog --sync-page-size 2 --replay-sync-prefix
 ```
 
 In a second shell, export the Android build variables below and run the app
@@ -276,6 +321,22 @@ same. Turn on airplane mode and swipe the card. Restart the app, advance the
 mock analysis again, and reconnect. The card stays hidden. After the dismissal
 is synchronized, restore from details and verify a single new generation.
 
+For synchronization, sign in as A and wait for the seeded items. With airplane
+mode enabled, stop and reopen the app and confirm that **Saved copies** includes
+server-only items. Use authenticated mock requests to edit or add an item and
+reconnect. The library should catch up without a manual refresh. Sign in as B
+to verify account isolation.
+
+The authenticated loopback-only `POST /mock/sync` accepts a JSON `action`.
+`expire_cursor` invalidates issued sync cursors for the caller.
+`hold_next_catalog` delays the next captured list response, giving a test time
+to insert a newer item during bootstrap. `hold_next_content` takes a
+`content_id` and delays its next captured detail response, allowing process
+termination before page commit. `delete_content` takes a `content_id` and
+emits a content tombstone. Keep the mock running during these scenarios so
+its synthetic feed remains available.
+
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
-on real authentication, content and notification persistence, private assets,
-and the future FCM delivery contract. See [verification results](../../docs/STATUS.md#phase-a4-android-checks).
+on real authentication, durable content and sync persistence, private assets,
+and the future FCM delivery contract. See the
+[verification results](../../docs/STATUS.md#phase-a5-android-checks).

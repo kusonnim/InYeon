@@ -22,7 +22,15 @@ internal class AndroidOutbox private constructor(context: Context) {
 
     val store = localShareStore(context)
     val notices by lazy { AndroidNotifications(context, config, sessions, store, ::changed) }
-    val processor = UploadProcessor(store, config, sessions, ::changed) { ref -> notices.registered(ref) }
+    val library by lazy {
+        config?.let { AndroidLibrarySync(context, it, checkNotNull(sessions), store, ::changed) { owner, ids ->
+            notices.refreshSynced(owner, ids)
+        } }
+    }
+    val processor = UploadProcessor(store, config, sessions, ::changed) { ref ->
+        notices.registered(ref)
+        library?.request(ref.owner, wait = true)
+    }
 
     fun activeOwner(): UploadOwner? = sessions?.current()?.owner
 
@@ -34,34 +42,37 @@ internal class AndroidOutbox private constructor(context: Context) {
     fun installSession(snapshot: SessionSnapshot, session: SupabaseSession) {
         if (!vault.replaceIfCurrent(snapshot, session)) throw UploadProblem.auth("account_changed")
         notices.hideInactiveAccounts()
+        library?.accountChanged()
         recover(appendAfterRunning = true)
     }
 
     fun signOut() {
         vault.clear()
         notices.hideInactiveAccounts()
+        library?.accountChanged()
         recover()
     }
 
     fun listInbox(): Map<String, Any?> {
         val account = sessions?.current()
+        val inbox = store.listShares(account?.owner)
+        if (activeOwner() != account?.owner) throw UploadProblem.auth("account_changed")
         return mapOf(
             "mode" to (config?.mode ?: "disabled"),
             "account" to account?.let {
                 mapOf("id" to it.owner.userId.toString(), "email" to it.email, "realm" to it.owner.realm)
             },
-            "shares" to store.listShares(account?.owner),
+            "shares" to inbox,
             "notifications_enabled" to (account != null && notices.permissionEnabled()),
         )
     }
 
-    fun listCatalog(owner: UploadOwner, cursor: String?): String {
-        val config = config ?: throw UploadProblem.auth()
-        val session = sessions ?: throw UploadProblem.auth()
-        val http = UploadHttp(maxResponseBytes = 8L * 1024 * 1024)
-        val page = CatalogApi(AuthenticatedApi(config, session, http)).list(owner, cursor)
-        session.requireOwner(owner)
-        return page
+    fun readLibrary(owner: UploadOwner, limit: Int, acknowledged: Set<UUID>): String =
+        (library ?: throw UploadProblem.auth()).snapshot(owner, limit, acknowledged)
+
+    fun requestLibrarySync(owner: UploadOwner) {
+        if (activeOwner() != owner) throw UploadProblem.auth()
+        library?.request(owner, urgent = true)
     }
 
     fun readLocalSource(localId: UUID): Map<String, Any?> {
@@ -118,6 +129,7 @@ internal class AndroidOutbox private constructor(context: Context) {
             }
         }
         notices.refreshRegistered(append = appendAfterRunning)
+        library?.requestCurrent()
         changed()
     }
 

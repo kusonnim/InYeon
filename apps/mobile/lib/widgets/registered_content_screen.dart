@@ -89,7 +89,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       content.userId == widget.target.ownerId;
 
   Future<void> _checkStatus() async {
-    if (_locked) return;
+    if (_locked || _error == 'http_404') return;
     final request = ++_statusRequest;
     try {
       final status = await widget.bridge.status(widget.target);
@@ -231,6 +231,12 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
           _reviewDraft = false;
         } else {
           _error = error.code;
+          if (request == _Request.load &&
+              error.code == 'http_404' &&
+              !_editing) {
+            _item = null;
+            _notice = null;
+          }
         }
       });
       await _checkStatus();
@@ -306,6 +312,14 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       badge: item.mode == UploadMode.mock ? copy.mockContent : null,
       openOriginal: widget.openOriginal,
       header: [
+        if (!_verified && banner == null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: StatusPill(copy.savedCopies),
+            ),
+          ),
         if (banner != null)
           Padding(padding: const EdgeInsets.only(bottom: 12), child: banner)
       ],
@@ -344,6 +358,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   }
 
   List<Widget> _notificationControls(AppLocalizations copy) {
+    if (_error == 'http_404') return [];
     final notice = _notice;
     if (notice == null ||
         (!notice.dismissed && notice.pending == null && notice.error == null))

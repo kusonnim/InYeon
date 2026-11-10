@@ -138,9 +138,19 @@ class LibraryScreen extends StatelessWidget {
                           const SizedBox(height: 5),
                           Text(copy.librarySubtitle,
                               style: theme.textTheme.bodyLarge),
-                          if (mode == UploadMode.mock) ...[
+                          if (mode == UploadMode.mock ||
+                              controller.showingSavedCopies) ...[
                             const SizedBox(height: 12),
-                            StatusPill(copy.mockBadge),
+                            Wrap(
+                              spacing: 7,
+                              runSpacing: 6,
+                              children: [
+                                if (mode == UploadMode.mock)
+                                  StatusPill(copy.mockBadge),
+                                if (controller.showingSavedCopies)
+                                  StatusPill(copy.savedCopies),
+                              ],
+                            ),
                           ],
                         ],
                       ),
@@ -156,7 +166,9 @@ class LibraryScreen extends StatelessWidget {
                               : Icons.info_outline_rounded,
                           title: issue == CatalogIssue.connection
                               ? copy.offlineTitle
-                              : copy.loadLibraryError,
+                              : (issue == CatalogIssue.retrying
+                                  ? copy.syncDelayed
+                                  : copy.loadLibraryError),
                           message: controller.localError
                               ? copy.localLoadError
                               : switch (issue!) {
@@ -164,8 +176,7 @@ class LibraryScreen extends StatelessWidget {
                                     copy.offlineLibrary,
                                   CatalogIssue.unavailable =>
                                     copy.serverLibraryError,
-                                  CatalogIssue.expiredCursor =>
-                                    copy.expiredPage,
+                                  CatalogIssue.retrying => copy.syncRetry,
                                 },
                           action: _refresh,
                           actionLabel: copy.retry,
@@ -179,6 +190,14 @@ class LibraryScreen extends StatelessWidget {
                         child: Center(
                             child: CircularProgressIndicator(
                                 semanticsLabel: copy.loadingLibrary)),
+                      ),
+                    ),
+                  if (entries.isNotEmpty && waiting)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      sliver: SliverToBoxAdapter(
+                        child: LinearProgressIndicator(
+                            semanticsLabel: copy.syncingLibrary),
                       ),
                     ),
                   if (entries.isEmpty &&
@@ -230,17 +249,15 @@ class LibraryScreen extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (controller.hasMore || (waiting && entries.isNotEmpty))
+                  if (controller.hasMore)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Center(
-                          child: waiting
-                              ? LinearProgressIndicator(
-                                  semanticsLabel: copy.loadingLibrary)
-                              : OutlinedButton(
-                                  onPressed: controller.loadMore,
-                                  child: Text(copy.loadMore)),
+                          child: OutlinedButton(
+                            onPressed: controller.loadMore,
+                            child: Text(copy.loadMore),
+                          ),
                         ),
                       ),
                     ),
