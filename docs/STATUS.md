@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A6.2 external links and direct editing.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A6.1 Android UX and C web integration.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
@@ -25,8 +25,8 @@ editable details can focus the corresponding field in the versioned editor.
 | API contract | Versioned OpenAPI, UUID/UTC/bearer conventions, errors, version conflicts, idempotency, cursor sync, private asset lifecycle | Real HTTP authentication, storage and persistence adapters |
 | Backend | FastAPI health/router/model/config structure, fail-closed production mode, explicit in-memory fixture adapter | Persistent ingestion, Supabase JWT, uploads, real worker operations |
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
-| Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
-| Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
+| Data | 12 owned tables, RLS, private bucket, notification/sync functions, both migrations and 33 pgTAP checks executed on isolated PostgreSQL 17.5 | Full Supabase CLI stack, hosted Auth/Storage integration, and B adapter wiring |
+| Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
 | Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview | Two-account live API/RLS verification, server-only private image download, FCM delivery |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
@@ -38,13 +38,16 @@ Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR
 | --- | --- |
 | SQL parsing | Passed with temporary pglast 8.7: both migrations (27 and 14 statements), test script (60 statements), all four PL/pgSQL functions |
 | API/SQL consistency | Passed: 9 HTTP model mappings and enums against 12 explicitly owned tables |
-| pgTAP | 33 assertions authored; **not executed** locally because Docker Linux engine is not running and Supabase CLI/psql are absent |
+| pgTAP | All 33 passed in isolated PostgreSQL 17.5 using PGlite and compatibility Auth/Storage tables. Full Supabase stack, CLI lint, and Auth/Storage transport remain pending. See [data setup](../supabase/README.md#local-verification). |
 | Backend tests | Passed: 13 tests, including mock idempotency/concurrency, owner isolation, version conflict, independent states, source/edit preservation, and worker stage validation |
 | OpenAPI and examples | Passed: specification validation, runtime schema parity, 11 example payload checks |
-| Web tests/typecheck/build | Passed: 2 HTTP adapter tests, `next typegen && tsc --noEmit`, and production `next build --webpack` under Node 24 |
-| Web production HTTP smoke | Passed: library 200 with catalog/fixture marker, detail 200 with source/analysis, missing content 404; test server stopped |
+| Web tests/typecheck/build | Passed: 7 tests for HTTP, edit/rebase and sync semantics, `next typegen && tsc --noEmit`, and production `next build --webpack` under Node 24.21 |
+| Web fixture browser smoke | Passed in Chrome: list/detail, search and clear, small viewport, missing detail and stale list cursor recovery |
+| Authenticated web HTTP smoke | Passed with synthetic Auth and FastAPI: two account sessions, owner-specific responses, forged token rejection, refresh/logout, cookie flags, cursor pagination and cross-owner detail denial |
+| Authenticated web browser smoke | Passed with synthetic Auth and FastAPI: HTTP 409 preserves draft, deliberate rebase retains untouched fields, versioned completion and recommendation correction, simulated mobile event refreshes detail |
+| Web review regression | Passed in Chrome: concurrent content and recommendation drafts survive sync GET failure and error retry; save, cancel and logout clear the drafts |
 | Full real E2E | Pending authenticated server adapters, analysis, and notification delivery |
-| GitHub Actions | See the PR checks for hosted results |
+| GitHub Actions | The workflow runs on pull requests. See the C implementation PR checks for remote results. |
 | Agent onboarding | Independent repository-only audit completed; retention and client-integration evidence gaps corrected; see [audit record](ONBOARDING_AUDIT.md) |
 
 Python 3.12.14 and uv 0.13.7 were made available for backend verification; Node
@@ -170,8 +173,10 @@ Android 15 / API 35 x86_64 emulator. The reviewed contract is ITDA API 0.1.0
 
 ### Phase A6 real staging evidence
 
-Live staging and physical-device checks remain pending. The latest merged code
-and fetched branches contain no newer B/C adapter changes. An approved staging
+Live staging and physical-device checks remain pending. At the A6 audit, the
+merged code and fetched branches contained no newer B/C adapter changes.
+The C web increment adds session handling
+and API-based editing, with live integration still pending. An approved staging
 API/Auth/web tuple and two disposable Supabase accounts were unavailable. The
 deployed API revision and applied database schema versions remain unverified.
 
@@ -184,8 +189,8 @@ deployed API revision and applied database schema versions remain unverified.
 | Durable idempotency records | Missing API adapter, schema implemented but unverified | The migration defines the table. Backend fixture replays are in memory. No durable transaction or cross-process replay was observed |
 | Notification dismissal and restoration | Implemented and executable in fixture, missing live adapter | Fixture tests execute the transitions. SQL transition functions are authored and unverified on a deployed database |
 | Commit-ordered incremental sync | Sequence allocation implemented but unverified, live feed missing | SQL serializes owner allocation. The executable fixture feed loses its cursor and events after process restart |
-| PostgreSQL RLS and private object access | Implemented but unverified | Policies and 33 pgTAP assertions are authored. Local Docker engine was unavailable and Supabase CLI and psql were absent. Two real Supabase identities and private object checks are pending |
-| Web and Android library convergence | Blocked by the live adapters and web session integration | The checked-in web client uses fixtures by default. No real two-account consistency run was possible |
+| PostgreSQL RLS and private object access | SQL policies verified in isolated PostgreSQL | All 33 pgTAP checks pass with compatibility Auth/Storage schemas. Full Supabase CLI and two real identities with private objects remain pending |
+| Web and Android library convergence | Blocked by live adapters and staging configuration | Web sessions, versioned edits and sync are tested with synthetic Auth/API. Real two-account consistency remains pending |
 
 The [staging runbook](../apps/mobile/STAGING.md) gives the executable build and
 preflight procedure and the two-account test matrix. The
@@ -261,14 +266,12 @@ verification remains outstanding.
 
 ### Developer C — Web and Data
 
-1. Start disposable Supabase, run reset/33 pgTAP assertions/lint, fix any runtime
-   schema issues, and record the first actual database authorization evidence.
-2. Add Supabase web session integration and replace fixture adapter; implement
-   paginated library and explicit version-conflict handling for edits.
-3. Implement incremental sync/bootstrap/recovery with B and verify simultaneous
-   mobile/web changes. Keep dismissed items accessible.
-4. Support real two-user API/RLS/private object integration tests and configure
-   Vercel monorepo deployment only after live adapters are ready.
+1. Repeat reset, pgTAP and lint on the disposable Supabase stack with Docker.
+2. Connect the web client to B's persistent Supabase/FastAPI adapter and test
+   two real identities, private objects, and simultaneous Android/web edits.
+3. Validate cursor expiry and full resync with B's retention policy. Review
+   cross-library search with A and B before adding a shared API operation.
+4. Configure Vercel after the real adapters and integration checks are ready.
 
 ## Decisions still required
 

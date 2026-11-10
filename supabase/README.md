@@ -39,11 +39,13 @@ supabase db lint --level error
 to the test/reset commands. Schema SQL requires Supabase's `auth` and `storage`
 schemas; it is not intended for an empty vanilla PostgreSQL database.
 
-During initial authoring, Docker CLI was present but its Linux engine was not
-running; Supabase CLI and `psql` were absent. Therefore the pgTAP suite and live
-RLS/storage behavior were not executed locally. See `docs/STATUS.md` for any
-subsequent verification and CI results. A successful static SQL parse is not a
-database execution or an authorization test.
+Both migrations applied and all 33 pgTAP assertions passed in disposable
+PostgreSQL 17.5 (PGlite 0.3.14 with the pgTAP 1.3.5 SQL extension). The run used
+a minimal Supabase-compatible harness for the `auth` and `storage` schemas and
+roles. It exercised PostgreSQL RLS, constraints, and transition functions with
+synthetic identities. Supabase CLI reset and lint, Auth sessions, and Storage
+object transfer remain to be verified on the full disposable Supabase stack.
+See `docs/STATUS.md` for verification and integration status.
 
 Static verification did pass during authoring: pglast 8.7 parsed all SQL statements
 in both migrations and the test file, plus all four PL/pgSQL function bodies. The

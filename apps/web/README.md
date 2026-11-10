@@ -1,6 +1,6 @@
 # ITDA web — Developer C
 
-This is a Next.js App Router foundation with TypeScript, Tailwind CSS and a local shadcn/ui-style Button primitive plus CLI configuration. Read the root `AGENTS.md`, `docs/PRODUCT.md`, `docs/OWNERSHIP.md` and `contracts/openapi.yaml` first.
+The web library uses Next.js, TypeScript and Tailwind CSS. The shared behavior and wire format are in `docs/PRODUCT.md` and `contracts/openapi.yaml`.
 
 ## Run
 
@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000`. The default `ITDA_DATA_MODE=fixture` reads the shared synthetic `contracts/examples/catalog.json`; no backend or AI service is needed. Copy `.env.example` to `.env.local` only if overriding defaults. The library and detail routes render original source, AI interpretation, user edits, coverage and independent workflow/notification state. Editing is visibly disabled; no browser system notifications are requested.
+Open `http://localhost:3000`. The default `ITDA_DATA_MODE=fixture` renders the shared synthetic catalog in read-only preview. It runs without credentials or an API.
 
 ```sh
 npm run typecheck
@@ -19,14 +19,23 @@ npm test
 npm run build
 ```
 
-## Replace fixtures safely
+## Connect Auth and FastAPI
 
-`src/lib/api.ts` defines the replaceable `ContentApi` and HTTP adapter. Supply a short-lived Supabase user-session token to `HttpContentApi`; never use a service-role key or commit tokens. `server-api.ts` intentionally rejects any mode other than `fixture` until authenticated session handling is implemented. The fixture adapter is isolated, in-memory and resets per instance; its edits are developer simulations and are not synchronized or durable.
+1. Copy `.env.example` to `.env.local` and set `ITDA_DATA_MODE=api`.
+2. Set `ITDA_API_BASE_URL` to B's FastAPI instance and provide `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the Supabase project shared with Android and FastAPI. The local stack also supports its legacy anon key. Keep service keys and user tokens out of this file.
+3. Sign in with an existing email/password account in that Supabase project. The web server verifies the user session and sends the user JWT to FastAPI. B's authenticated data adapter must be available to use saved content.
 
-`src/lib/types.ts` mirrors the authoritative OpenAPI contract, not a separately owned schema. A shared change must update the contract, database, both clients, fixtures and tests. Preserve `expected_version` and handle HTTP 409 by reloading and letting the user reconcile edits. Keep source text, generated analysis and user notes separate. Generated recommendations are not accepted feedback.
+Hosted sign-in requires HTTPS for the session cookies. Session refresh follows the [Supabase SSR guide for Next.js](https://supabase.com/docs/guides/auth/server-side/nextjs).
 
-Next work: Supabase session integration, paginated library, version-aware editing, sync cursor persistence and two-user ownership integration checks. Deployment to Vercel and production auth are planned. Run Vercel builds with this monorepo's parent source files available because fixtures currently live outside the app directory.
+## Library behavior
 
-Official setup references: [Next.js installation](https://nextjs.org/docs/app/getting-started/installation) and [shadcn/ui manual installation](https://ui.shadcn.com/docs/installation/manual).
+- The library uses opaque API cursors. Search filters the current page's titles and AI summaries in the browser. The API contract would need a shared search operation to support server-side search across all pages.
+- Edit the title, personal note, workflow state or a recommendation's user wording. A version conflict shows the latest server values and preserves the draft. Explicitly combine the changes and save again. The original source and generated text remain visible separately.
+- Unsaved edits stay in account-scoped memory across page errors and retries. Saving, cancelling or changing accounts clears them. Reloading or closing the browser clears this temporary memory.
+- FastAPI requests time out after 30 seconds so a stalled synchronization request can release the pending action queue.
+- The active page checks `/v1/sync` every 15 seconds and when the tab becomes visible or reconnects. Relevant events refresh the server-rendered page. The cursor lives in the open tab and advances after that page renders. An expired cursor reloads the page and starts a new sync. Opening a page loads a fresh API snapshot.
+- The detail view shows saved links, text and the attachment count. Opening private attachment files is outside this increment.
 
-Scripts explicitly use webpack. Next.js 16.4.5 Turbopack failed to start its CSS worker on the Windows authoring host; the webpack production path is verified separately. Reconsider Turbopack only after reproducing the same checks. This does not change the application contract.
+When B's real adapter is available, use two disposable test accounts to verify that each account sees only its own library and that Android and web updates propagate in both directions. See [integration checks](../../docs/INTEGRATION.md#end-to-end-acceptance-procedure-for-the-real-adapters).
+
+The scripts use Webpack. Keep the monorepo parent source available for builds because the synthetic catalog lives in `contracts/examples/`.

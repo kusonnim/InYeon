@@ -1,6 +1,6 @@
 import catalog from "../../../../contracts/examples/catalog.json";
 import { ApiError, type ContentApi } from "./api.ts";
-import type { ApiErrorBody, Content, ContentPage, ContentPatch } from "./types.ts";
+import type { ApiErrorBody, Content, ContentPage, ContentPatch, Recommendation, RecommendationPatch, SyncPage } from "./types.ts";
 
 function fixtureError(status: number, code: string, message: string, current_version?: number): ApiError {
   const error: ApiErrorBody["error"] = { code, message, request_id: crypto.randomUUID() };
@@ -30,5 +30,21 @@ export class FixtureContentApi implements ContentApi {
     const { expected_version: _expectedVersion, ...fields } = patch;
     Object.assign(content, fields, { version: content.version + 1, updated_at: new Date().toISOString() });
     return structuredClone(content);
+  }
+  async updateRecommendation(id: string, patch: RecommendationPatch): Promise<Recommendation> {
+    const parent = this.items.find((content) => content.recommendations.some((item) => item.id === id));
+    const recommendation = parent?.recommendations.find((item) => item.id === id);
+    if (!parent || !recommendation) throw fixtureError(404, "not_found", "Recommendation not found.");
+    if (recommendation.version !== patch.expected_version) {
+      throw fixtureError(409, "version_conflict", "Reload before applying your edit.", recommendation.version);
+    }
+    const { expected_version: _expectedVersion, ...fields } = patch;
+    const now = new Date().toISOString();
+    Object.assign(recommendation, fields, { version: recommendation.version + 1, updated_at: now });
+    Object.assign(parent, { version: parent.version + 1, updated_at: now });
+    return structuredClone(recommendation);
+  }
+  async syncChanges(): Promise<SyncPage> {
+    throw fixtureError(400, "unsupported", "Fixture preview does not synchronize.");
   }
 }

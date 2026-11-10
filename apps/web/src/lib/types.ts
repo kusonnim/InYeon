@@ -56,6 +56,24 @@ export interface ContentPatch {
   user_note?: string | null;
   workflow_status?: WorkflowStatus;
 }
+export interface RecommendationPatch {
+  expected_version: number;
+  user_text?: string | null;
+  accepted?: boolean;
+}
+export interface SyncEvent {
+  sequence: string;
+  entity_type: "content" | "recommendation" | "preferences" | "notification";
+  entity_id: string;
+  content_id: string | null;
+  operation: "upsert" | "delete";
+  occurred_at: string;
+}
+export interface SyncPage {
+  events: SyncEvent[];
+  next_cursor: string;
+  has_more: boolean;
+}
 export interface ApiErrorBody {
   error: { code: string; message: string; request_id: string; current_version?: number | null; current_generation?: number | null; current_revision?: number | null };
 }
