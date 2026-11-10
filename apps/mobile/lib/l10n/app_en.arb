@@ -187,7 +187,6 @@
   "contentUnavailable": "Could not load this content.",
   "accountLocked": "Sign in with the account that saved this content.",
   "cachedContent": "Showing the last loaded version.",
-  "editFieldsHelp": "Update the display title and your personal notes.",
   "reviewSuggestions": "Existing recommendations",
   "discardTitle": "Discard your draft?",
   "discardDraft": "Discard draft",
@@ -207,5 +206,17 @@
   "restoreUnavailable": "Restoration is unavailable for the current notification state.",
   "completedItem": "Completed",
   "archivedItem": "Archived",
-  "pendingDetail": "This original is available on this device while its upload is pending."
+  "pendingDetail": "This original is available on this device while its upload is pending.",
+  "allSaved": "All saved",
+  "archiveTitle": "Archive",
+  "archiveEmpty": "Nothing archived yet",
+  "markComplete": "Mark complete",
+  "moveToArchive": "Move to archive",
+  "returnToTray": "Return to tray",
+  "workflowNeedsSync": "Sync this item before changing its status.",
+  "workflowUnavailable": "Connect and refresh this item before changing its status.",
+  "workflowConflict": "This item changed. Review its latest version before trying again.",
+  "completeBeforeArchiving": "Mark this item complete before archiving it.",
+  "archiveConfirmed": "Moved to archive.",
+  "openSourceLicenses": "Open-source licenses"
 }

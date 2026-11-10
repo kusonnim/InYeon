@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:forge2d/forge2d.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,17 @@ import 'widgets/registered_content_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeForge2D();
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(
+      const ['SUIT'],
+      await rootBundle.loadString('assets/fonts/LICENSE-SUIT.txt'),
+    );
+    yield LicenseEntryWithLineBreaks(
+      const ['Box2D'],
+      await rootBundle.loadString('assets/licenses/BOX2D.txt'),
+    );
+  });
   final android = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   final language = android ? const AndroidLanguagePreference() : null;
   runApp(ItdaApp(

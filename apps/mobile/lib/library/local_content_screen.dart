@@ -125,7 +125,18 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
             StatusPill(label),
         ],
       ),
-      if (snapshot.data case final source?)
+      if (share.serverContentId == null)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: () => ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(copy.workflowNeedsSync))),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: Text(copy.markComplete),
+            ),
+          ),
+        if (snapshot.data case final source?)
         OriginalSource(
           inputType: share.inputType,
           original: source,
@@ -142,7 +153,7 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
         ),
       if (mode != UploadMode.disabled &&
           share.uploadState != LocalUploadState.synchronized)
-        SectionCard(
+        ContentSection(
           title: copy.uploadActivity,
           children: [
             Text(failed ? copy.uploadFailureInfo : copy.pendingDetail),

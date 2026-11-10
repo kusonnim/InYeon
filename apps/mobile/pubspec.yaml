@@ -3,12 +3,13 @@ description: ITDA Android library for saved content.
 publish_to: none
 version: 0.0.1+1
 environment:
-  sdk: '>=3.4.0 <4.0.0'
+  sdk: '>=3.12.0 <4.0.0'
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  forge2d: ^0.15.3
   intl: ^0.20.3
 dev_dependencies:
   flutter_test:
@@ -18,3 +19,12 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fixtures/catalog.json
+    - assets/fonts/LICENSE-SUIT.txt
+    - assets/licenses/BOX2D.txt
+  fonts:
+    - family: SUIT
+      fonts:
+        - asset: assets/fonts/SUIT-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SUIT-SemiBold.ttf
+          weight: 600

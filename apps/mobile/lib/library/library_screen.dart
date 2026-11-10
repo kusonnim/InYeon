@@ -5,17 +5,20 @@ import 'package:flutter/services.dart';
 
 import '../api/content_api.dart';
 import '../l10n/generated/app_localizations.dart';
+import '../models/content.dart';
 import '../native/notification_bridge.dart';
 import '../native/share_bridge.dart';
+import '../tray/pebble_tray.dart';
 import '../widgets/library_components.dart';
 import '../widgets/registered_content_screen.dart';
-import '../widgets/saved_content_card.dart';
 import 'account_screen.dart';
+import 'library_collection.dart';
 import 'library_controller.dart';
 import 'local_content_screen.dart';
 import 'sample_library_screen.dart';
+import 'workflow_edit.dart';
 
-class LibraryScreen extends StatelessWidget {
+class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
     required this.controller,
@@ -29,6 +32,17 @@ class LibraryScreen extends StatelessWidget {
   final Future<void> Function(Locale) changeLanguage;
   final NotificationBridge? notifications;
 
+  @override
+  State<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends State<LibraryScreen> {
+  final _archiveDock = GlobalKey();
+  final _archiveRequests = <(AccountScope, String)>{};
+  bool _archiveHover = false;
+
+  LibraryController get controller => widget.controller;
+
   Future<void> _refresh() async {
     unawaited(_refreshNotifications());
     await controller.reload(refreshCatalog: true);
@@ -36,55 +50,156 @@ class LibraryScreen extends StatelessWidget {
 
   Future<void> _refreshNotifications() async {
     try {
-      await notifications?.refresh();
+      await widget.notifications?.refresh();
     } on PlatformException {
-      // The catalog refresh is useful when Android notifications are unavailable.
+      // The catalog refresh still works when notifications are unavailable.
     }
   }
 
-  void _openSampleLibrary(BuildContext context) {
+  void _openSamples() {
     Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => SampleLibraryScreen(api: samples)));
+      MaterialPageRoute(
+        builder: (_) => SampleLibraryScreen(api: widget.samples),
+      ),
+    );
   }
 
-  void _openAccount(BuildContext context) {
-    Navigator.of(context).push<void>(MaterialPageRoute(
-      builder: (_) => AccountScreen(
-        controller: controller,
-        notifications: notifications,
-        changeLanguage: changeLanguage,
-        openSamples: () => _openSampleLibrary(context),
+  void _openAccount() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AccountScreen(
+          controller: controller,
+          notifications: widget.notifications,
+          changeLanguage: widget.changeLanguage,
+          openSamples: _openSamples,
+        ),
       ),
-    ));
+    );
+  }
+
+  void _openCollection({required bool archived}) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => LibraryCollection(
+          controller: controller,
+          archived: archived,
+          refresh: _refresh,
+          openEntry: _openEntry,
+        ),
+      ),
+    );
   }
 
   VoidCallback? _openEntry(
-      BuildContext context, LibraryEntry entry, UploadMode mode) {
+    BuildContext context,
+    LibraryEntry entry,
+    UploadMode mode,
+  ) {
     final local = entry.local;
     final owner = controller.scope;
     final id = entry.serverId;
-    final bridge = notifications;
+    final bridge = widget.notifications;
     final navigator = Navigator.of(context);
     void openOriginal() {
-      navigator.push<void>(MaterialPageRoute(
-        builder: (_) =>
-            LocalContentScreen(controller: controller, localId: local!.localId),
-      ));
+      navigator.push<void>(
+        MaterialPageRoute(
+          builder: (_) => LocalContentScreen(
+            controller: controller,
+            localId: local!.localId,
+          ),
+        ),
+      );
     }
 
     if (id != null && owner != null && bridge != null) {
-      return () => navigator.push<void>(MaterialPageRoute(
-            builder: (_) => RegisteredContentScreen(
-              bridge: bridge,
-              target: NoticeTarget(owner.ownerId, owner.realm, id),
-              initialContent: entry.remote,
-              initialMode: mode,
-              openOriginal: local == null ? null : openOriginal,
-              onChanged: (item) => controller.updateItem(owner, item),
+      return () => navigator.push<void>(
+            MaterialPageRoute(
+              builder: (_) => RegisteredContentScreen(
+                bridge: bridge,
+                target: NoticeTarget(owner.ownerId, owner.realm, id),
+                initialContent: entry.remote,
+                initialMode: mode,
+                openOriginal: local == null ? null : openOriginal,
+                onChanged: (item) => controller.updateItem(owner, item),
+              ),
             ),
-          ));
+          );
     }
     return local?.inputType == null ? null : openOriginal;
+  }
+
+  LibraryEntry? _activeEntry(String id) => controller.entries
+      .where((entry) => entry.pebbleId == id && !entry.archived)
+      .firstOrNull;
+
+  void _openPebble(String id) {
+    final entry = _activeEntry(id);
+    if (entry != null) {
+      _openEntry(
+        context,
+        entry,
+        controller.inbox?.mode ?? UploadMode.disabled,
+      )?.call();
+    }
+  }
+
+  bool _overArchiveDock(Offset point) {
+    final box = _archiveDock.currentContext?.findRenderObject();
+    return box is RenderBox &&
+        (Offset.zero & box.size).contains(box.globalToLocal(point));
+  }
+
+  void _showStatus(String message) => ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+
+  Future<void> _archive(String id) async {
+    final entry = _activeEntry(id);
+    if (entry == null) return;
+    final item = entry.remote;
+    final owner = controller.scope;
+    final bridge = widget.notifications;
+    final copy = AppLocalizations.of(context);
+    if (item == null || owner == null || bridge == null) {
+      _showStatus(copy.workflowNeedsSync);
+      return;
+    }
+    if (item.workflowStatus != WorkflowStatus.completed) {
+      _showStatus(copy.completeBeforeArchiving);
+      return;
+    }
+    final request = (owner, item.id);
+    if (!_archiveRequests.add(request)) return;
+    try {
+      final updated = await changeWorkflow(
+        bridge,
+        NoticeTarget(owner.ownerId, owner.realm, item.id),
+        item,
+        WorkflowStatus.archived,
+      );
+      if (!mounted || controller.scope != owner) return;
+      controller.updateItem(owner, updated.content);
+      _showStatus(AppLocalizations.of(context).archiveConfirmed);
+    } on PlatformException catch (error) {
+      if (!mounted || controller.scope != owner) return;
+      final copy = AppLocalizations.of(context);
+      _showStatus(switch (error.code) {
+        'version_conflict' => copy.workflowConflict,
+        'network_unavailable' ||
+        'authentication_required' ||
+        'account_changed' =>
+          copy.workflowUnavailable,
+        _ => copy.operationUnconfirmed,
+      });
+      if (error.code == 'version_conflict')
+        unawaited(controller.reload(refreshCatalog: true));
+    } on FormatException {
+      if (mounted && controller.scope == owner) {
+        _showStatus(AppLocalizations.of(context).operationUnconfirmed);
+      }
+    } finally {
+      _archiveRequests.remove(request);
+    }
   }
 
   @override
@@ -93,210 +208,121 @@ class LibraryScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(copy.appName,
-            style: theme.textTheme.titleLarge?.copyWith(letterSpacing: 1.1)),
-        actions: [
-          IconButton(
-            tooltip: copy.refreshLibrary,
-            onPressed: _refresh,
-            icon: const Icon(Icons.refresh_rounded),
+        title: Text(
+          copy.appName,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontSize: 20,
+            letterSpacing: .6,
           ),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(end: 12),
-            child: IconButton.filledTonal(
-              tooltip: copy.account,
-              onPressed: () => _openAccount(context),
-              icon: const Icon(Icons.person_outline_rounded),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => _openCollection(archived: false),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(
+                copy.allSaved,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
+          IconButton(
+            tooltip: copy.account,
+            onPressed: _openAccount,
+            icon: const Icon(Icons.person_outline_rounded),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
-          final inbox = controller.inbox;
-          final mode = inbox?.mode ?? UploadMode.disabled;
-          final environment = uploadEnvironmentLabel(copy, mode);
-          final entries = controller.entries;
-          final grouped = <Object, List<LibraryEntry>>{};
-          for (final entry in entries) {
-            final url = entry.linkUrl;
-            final key = url == null ? entry.key : (controller.scope, url);
-            grouped.putIfAbsent(key, () => []).add(entry);
-          }
-          final rows = grouped.values.toList(growable: false);
-          final issue = controller.catalogIssue;
-          final offerSignIn =
-              mode != UploadMode.disabled && inbox?.account == null;
-          final waiting = inbox == null && !controller.localError ||
-              controller.loadingCatalog;
+          final mode = controller.inbox?.mode ?? UploadMode.disabled;
+          final entries =
+              controller.entries.where((entry) => !entry.archived).toList();
+          final pebbles = entries.where((entry) => entry.type != null).toList()
+            ..sort((a, b) {
+              final order = b.pebbleSavedAt.compareTo(a.pebbleSavedAt);
+              return order == 0 ? b.pebbleId.compareTo(a.pebbleId) : order;
+            });
           return PageWidth(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Semantics(
-                              header: true,
-                              child: Text(copy.libraryTitle,
-                                  style: theme.textTheme.headlineLarge)),
-                          const SizedBox(height: 5),
-                          Text(copy.librarySubtitle,
-                              style: theme.textTheme.bodyLarge),
-                          if (environment != null ||
-                              controller.showingSavedCopies) ...[
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 7,
-                              runSpacing: 6,
-                              children: [
-                                if (environment != null)
-                                  StatusPill(environment),
-                                if (controller.showingSavedCopies)
-                                  StatusPill(copy.savedCopies),
-                              ],
-                            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        PebbleTray(
+                          scope: (controller.scope, mode),
+                          items: [
+                            for (final entry in pebbles.take(10))
+                              (
+                                id: entry.pebbleId,
+                                title: entryTitle(copy, entry),
+                                canArchive: entry.remote?.workflowStatus ==
+                                    WorkflowStatus.completed,
+                              ),
                           ],
-                        ],
-                      ),
+                          onOpen: _openPebble,
+                          isOverArchive: _overArchiveDock,
+                          onArchiveHover: (value) =>
+                              setState(() => _archiveHover = value),
+                          onArchive: _archive,
+                        ),
+                        if (entries.isEmpty &&
+                            !controller.loadingCatalog &&
+                            controller.inbox != null &&
+                            controller.catalogIssue == null)
+                          Center(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  Text(
+                                    copy.emptyLibrary,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (mode == UploadMode.disabled)
+                                    TextButton(
+                                      onPressed: _openSamples,
+                                      child: Text(copy.sampleLibraryAction),
+                                    )
+                                  else if (controller.scope == null)
+                                    TextButton(
+                                      onPressed: _openAccount,
+                                      child: Text(copy.signIn),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: LibraryStatus(
+                              controller: controller, refresh: _refresh),
+                        ),
+                      ],
                     ),
                   ),
-                  if (controller.localError || issue != null)
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                      sliver: SliverToBoxAdapter(
-                        child: StatePanel(
-                          icon: issue == CatalogIssue.connection
-                              ? Icons.cloud_off_outlined
-                              : Icons.info_outline_rounded,
-                          title: issue == CatalogIssue.connection
-                              ? copy.offlineTitle
-                              : (issue == CatalogIssue.retrying
-                                  ? copy.syncDelayed
-                                  : copy.loadLibraryError),
-                          message: controller.localError
-                              ? copy.localLoadError
-                              : switch (issue!) {
-                                  CatalogIssue.connection =>
-                                    copy.offlineLibrary,
-                                  CatalogIssue.unavailable =>
-                                    copy.serverLibraryError,
-                                  CatalogIssue.retrying => copy.syncRetry,
-                                },
-                          action: _refresh,
-                          actionLabel: copy.retry,
-                        ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 8),
+                    child: TextButton.icon(
+                      key: _archiveDock,
+                      style: TextButton.styleFrom(
+                        backgroundColor: _archiveHover
+                            ? theme.colorScheme.surfaceContainerHighest
+                            : null,
+                        minimumSize: const Size(110, 48),
                       ),
+                      onPressed: () => _openCollection(archived: true),
+                      icon: const Icon(Icons.archive_outlined, size: 19),
+                      label: Text(copy.archiveTitle),
                     ),
-                  if (entries.isEmpty && waiting)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Center(
-                            child: CircularProgressIndicator(
-                                semanticsLabel: copy.loadingLibrary)),
-                      ),
-                    ),
-                  if (entries.isNotEmpty && waiting)
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      sliver: SliverToBoxAdapter(
-                        child: LinearProgressIndicator(
-                            semanticsLabel: copy.syncingLibrary),
-                      ),
-                    ),
-                  if (entries.isEmpty &&
-                      !waiting &&
-                      !controller.localError &&
-                      issue == null)
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: SliverToBoxAdapter(
-                        child: StatePanel(
-                          icon: Icons.bookmark_border_rounded,
-                          title: copy.emptyLibrary,
-                          message: copy.emptyLibraryBody,
-                          actionLabel: offerSignIn
-                              ? copy.signIn
-                              : copy.sampleLibraryAction,
-                          action: offerSignIn
-                              ? () => _openAccount(context)
-                              : () => _openSampleLibrary(context),
-                        ),
-                      ),
-                    ),
-                  if (entries.isNotEmpty) ...[
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-                      sliver: SliverToBoxAdapter(
-                        child: Semantics(
-                            header: true,
-                            child: Text(copy.savedCount(entries.length),
-                                style: theme.textTheme.labelLarge)),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: SliverList.builder(
-                        itemCount: rows.length,
-                        itemBuilder: (context, index) {
-                          final row = rows[index];
-                          final entry = row.first;
-                          SavedContentCard card(LibraryEntry item) =>
-                              SavedContentCard(
-                                key: ValueKey(item.key),
-                                entry: item,
-                                mode: mode,
-                                showSavedAt: row.length > 1,
-                                onOpen: _openEntry(context, item, mode),
-                              );
-                          return Padding(
-                            key: ValueKey((controller.scope, entry.key)),
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: row.length == 1
-                                ? card(entry)
-                                : Card(
-                                    child: ExpansionTile(
-                                      key: PageStorageKey(
-                                          (controller.scope, entry.key)),
-                                      shape: const Border(),
-                                      leading: const Icon(Icons.link_rounded),
-                                      title: Text(entryTitle(copy, entry),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis),
-                                      subtitle: Text(
-                                          copy.repeatedLinkCount(row.length)),
-                                      childrenPadding:
-                                          const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                                      children: [
-                                        for (final item in row) card(item)
-                                      ],
-                                    ),
-                                  ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                  if (controller.hasMore)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Center(
-                          child: OutlinedButton(
-                            onPressed: controller.loadMore,
-                            child: Text(copy.loadMore),
-                          ),
-                        ),
-                      ),
-                    ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                  ),
                 ],
               ),
             ),

@@ -139,7 +139,6 @@
   "contentUnavailable": "이 콘텐츠를 불러오지 못했어요.",
   "accountLocked": "이 콘텐츠를 저장한 계정으로 로그인하세요.",
   "cachedContent": "마지막으로 불러온 버전을 표시하고 있어요.",
-  "editFieldsHelp": "표시 제목과 내 메모를 수정할 수 있어요.",
   "reviewSuggestions": "기존 추천",
   "discardTitle": "작성 중인 내용을 지울까요?",
   "discardDraft": "작성 내용 지우기",
@@ -159,5 +158,17 @@
   "restoreUnavailable": "현재 상태에서는 알림을 복원할 수 없어요.",
   "completedItem": "완료",
   "archivedItem": "보관됨",
-  "pendingDetail": "업로드를 기다리는 동안에도 이 기기에서 원본을 볼 수 있어요."
+  "pendingDetail": "업로드를 기다리는 동안에도 이 기기에서 원본을 볼 수 있어요.",
+  "allSaved": "저장한 항목",
+  "archiveTitle": "보관함",
+  "archiveEmpty": "아직 보관한 항목이 없어요",
+  "markComplete": "완료로 표시",
+  "moveToArchive": "보관함으로 이동",
+  "returnToTray": "트레이로 되돌리기",
+  "workflowNeedsSync": "항목을 동기화한 뒤 상태를 바꿀 수 있어요.",
+  "workflowUnavailable": "연결한 뒤 이 항목을 새로고침해 주세요.",
+  "workflowConflict": "항목이 변경됐어요. 최신 내용을 확인한 뒤 다시 시도해 주세요.",
+  "completeBeforeArchiving": "완료로 표시한 뒤 보관함으로 옮길 수 있어요.",
+  "archiveConfirmed": "보관함으로 옮겼어요.",
+  "openSourceLicenses": "오픈소스 라이선스"
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/generated/app_localizations.dart';
+import '../library/workflow_edit.dart';
 import '../models/content.dart';
 import '../native/notification_bridge.dart';
 import '../native/share_bridge.dart';
@@ -11,7 +12,7 @@ import 'content_details.dart';
 import 'library_components.dart';
 import 'original_image.dart';
 
-enum _Request { load, save, restore }
+enum _Request { load, save, restore, workflow }
 
 class RegisteredContentScreen extends StatefulWidget {
   const RegisteredContentScreen({
@@ -268,6 +269,26 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         await _checkStatus();
       });
 
+  Future<void> _move(ContentItem content, WorkflowStatus destination) async {
+    if (!_canEdit) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).workflowUnavailable),
+        ),
+      );
+      return;
+    }
+    await _run(_Request.workflow, () async {
+      final updated = await changeWorkflow(
+        widget.bridge,
+        widget.target,
+        content,
+        destination,
+      );
+      if (mounted && !_locked) _accept(updated);
+    });
+  }
+
   Future<void> _run(_Request request, Future<void> Function() operation) async {
     if (_busy || _locked) return;
     setState(() {
@@ -393,6 +414,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       openImage: _expandImage,
       onEditTitle: _canEdit ? () => _beginEdit(_titleFocus) : null,
       onEditNotes: _canEdit ? () => _beginEdit(_noteFocus) : null,
+      workflowAction: _workflowAction(copy, item.content),
       header: [
         if (!_verified && banner == null)
           Padding(
@@ -414,6 +436,23 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
           ? copy.mockContent
           : uploadEnvironmentLabel(copy, mode);
 
+  Widget _workflowAction(AppLocalizations copy, ContentItem content) {
+    final destination = nextWorkflow(content.workflowStatus);
+    final (label, icon) = switch (destination) {
+      WorkflowStatus.completed => (copy.markComplete, Icons.check_rounded),
+      WorkflowStatus.archived => (copy.moveToArchive, Icons.archive_outlined),
+      WorkflowStatus.pending => (copy.returnToTray, Icons.unarchive_outlined),
+    };
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: TextButton.icon(
+        onPressed: _busy ? null : () => _move(content, destination),
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+      ),
+    );
+  }
+
   Widget? _problem(AppLocalizations copy) {
     if (_conflict) {
       return StatePanel(
@@ -432,13 +471,14 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             : Icons.info_outline_rounded,
         title: switch (error) {
           'network_unavailable' => copy.offlineTitle,
+          'version_conflict' => copy.workflowConflict,
           'notification_unavailable' => copy.restoreUnavailable,
           _ =>
             _item == null ? copy.contentUnavailable : copy.operationUnconfirmed,
         },
         message: _item != null && !_verified ? copy.cachedContent : null,
         action: _busy ? null : _load,
-        actionLabel: copy.retry,
+        actionLabel: error == 'version_conflict' ? copy.loadLatest : copy.retry,
       );
     }
     return null;
@@ -451,7 +491,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         (!notice.dismissed && notice.pending == null && notice.error == null))
       return [];
     return [
-      SectionCard(
+      ContentSection(
         title: copy.notificationPermission,
         children: [
           if (notice.dismissed) Text(copy.dismissed),
@@ -474,15 +514,11 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: StatusPill(label)),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(copy.editFieldsHelp,
-                style: Theme.of(context).textTheme.bodyLarge),
-          ),
+          const SizedBox(height: 12),
           if (banner != null)
             Padding(padding: const EdgeInsets.only(bottom: 12), child: banner),
           if (_reviewDraft && _dirty)
-            SectionCard(
+            ContentSection(
               title: copy.latestSavedValues,
               children: [
                 Text(copy.reviewDraft),
