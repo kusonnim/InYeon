@@ -37,32 +37,64 @@ class PageList extends StatelessWidget {
 }
 
 class SectionCard extends StatelessWidget {
-  const SectionCard({super.key, required this.title, required this.children});
+  const SectionCard({
+    super.key,
+    required this.title,
+    required this.children,
+    this.action,
+  });
 
   final String title;
   final List<Widget> children;
+  final ({VoidCallback onTap, String label})? action;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tap = action;
+    final heading = Semantics(
+      container: true,
+      header: true,
+      child: Text(title, style: theme.textTheme.titleMedium),
+    );
+    final content = Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (tap == null)
+            heading
+          else
+            Row(
               children: [
-                Semantics(
-                    container: true,
-                    header: true,
-                    child: Text(title,
-                        style: Theme.of(context).textTheme.titleMedium)),
-                const SizedBox(height: 10),
-                ...children,
+                Expanded(child: heading),
+                Icon(Icons.edit_outlined,
+                    size: 18, color: theme.colorScheme.onSurfaceVariant),
               ],
             ),
-          ),
-        ),
-      );
+          const SizedBox(height: 10),
+          ...children,
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        clipBehavior: tap == null ? null : Clip.antiAlias,
+        child: tap == null
+            ? content
+            : Semantics(
+                button: true,
+                label: tap.label,
+                child: Tooltip(
+                  message: tap.label,
+                  excludeFromSemantics: true,
+                  child: InkWell(onTap: tap.onTap, child: content),
+                ),
+              ),
+      ),
+    );
+  }
 }
 
 class StatePanel extends StatelessWidget {
