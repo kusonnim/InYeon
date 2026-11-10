@@ -59,6 +59,7 @@ internal class AndroidOutbox private constructor(context: Context) {
         if (activeOwner() != account?.owner) throw UploadProblem.auth("account_changed")
         return mapOf(
             "mode" to (config?.mode ?: "disabled"),
+            "staging_api_host" to config?.takeIf { it.mode == "staging" }?.apiBase?.host,
             "account" to account?.let {
                 mapOf("id" to it.owner.userId.toString(), "email" to it.email, "realm" to it.owner.realm)
             },

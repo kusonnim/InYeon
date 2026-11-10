@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -11,9 +13,47 @@ fun javaString(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"")
         .replace("\r", "\\r").replace("\n", "\\n") + "\""
 
-val supabasePublishableKey = buildValue("ITDA_SUPABASE_PUBLISHABLE_KEY")
-require(supabasePublishableKey.isEmpty() || supabasePublishableKey.matches(Regex("sb_publishable_[A-Za-z0-9_-]+"))) {
-    "ITDA_SUPABASE_PUBLISHABLE_KEY must be a Supabase publishable key."
+val uploadMode = buildValue("ITDA_UPLOAD_MODE", "disabled")
+require(uploadMode in setOf("disabled", "mock", "staging", "live")) {
+    "ITDA_UPLOAD_MODE must be disabled, mock, staging, or live."
+}
+
+val staging = uploadMode == "staging"
+val mock = uploadMode == "mock"
+val uploadEnabled = uploadMode != "disabled"
+val prefix = if (staging) "ITDA_STAGING_" else "ITDA_"
+val endpointSettings = listOf("API_BASE_URL", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY")
+if (uploadEnabled) {
+    val otherPrefix = if (staging) "ITDA_" else "ITDA_STAGING_"
+    require(endpointSettings.none { buildValue(otherPrefix + it).isNotEmpty() }) {
+        "Staging endpoint settings and the other upload endpoint settings must use separate build environments."
+    }
+}
+
+fun endpoint(setting: String): String {
+    if (!uploadEnabled) return ""
+    val name = prefix + setting
+    val value = buildValue(name)
+    val uri = runCatching { URI(value) }.getOrNull()
+    val scheme = uri?.scheme?.lowercase()
+    val validTransport = if (mock) {
+        scheme in setOf("http", "https") && uri?.host?.lowercase() in setOf("localhost", "127.0.0.1", "10.0.2.2")
+    } else {
+        scheme == "https"
+    }
+    require(uri != null && validTransport && !uri.host.isNullOrEmpty() && uri.port in -1..65535 &&
+        uri.port != 0 && uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null) {
+        "$name must be an absolute ${if (mock) "loopback HTTP(S)" else "HTTPS"} base URL without credentials, a query, or a fragment."
+    }
+    return value
+}
+
+val apiBaseUrl = endpoint("API_BASE_URL")
+val supabaseUrl = endpoint("SUPABASE_URL")
+val keySetting = prefix + "SUPABASE_PUBLISHABLE_KEY"
+val supabasePublishableKey = if (uploadEnabled) buildValue(keySetting) else ""
+require(!uploadEnabled || supabasePublishableKey.matches(Regex("sb_publishable_[A-Za-z0-9_-]+"))) {
+    "$keySetting must be a Supabase publishable key."
 }
 
 android {
@@ -40,9 +80,11 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "UPLOAD_MODE", javaString(buildValue("ITDA_UPLOAD_MODE", "disabled")))
-        buildConfigField("String", "API_BASE_URL", javaString(buildValue("ITDA_API_BASE_URL")))
-        buildConfigField("String", "SUPABASE_URL", javaString(buildValue("ITDA_SUPABASE_URL")))
+        manifestPlaceholders["itdaAppName"] = "@string/app_name"
+        manifestPlaceholders["itdaNetworkPolicy"] = "@xml/https_network_security"
+        buildConfigField("String", "UPLOAD_MODE", javaString(uploadMode))
+        buildConfigField("String", "API_BASE_URL", javaString(apiBaseUrl))
+        buildConfigField("String", "SUPABASE_URL", javaString(supabaseUrl))
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", javaString(supabasePublishableKey))
     }
 
@@ -51,11 +93,26 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (staging) {
+                applicationIdSuffix = ".staging"
+                manifestPlaceholders["itdaAppName"] = "@string/staging_app_name"
+            }
+            if (mock || !uploadEnabled) {
+                manifestPlaceholders["itdaNetworkPolicy"] = "@xml/debug_network_security"
+            }
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+}
+
+androidComponents {
+    beforeVariants { variant ->
+        if ((staging || mock) && variant.buildType != "debug") variant.enable = false
     }
 }
 

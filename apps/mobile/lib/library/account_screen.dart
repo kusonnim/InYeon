@@ -143,10 +143,14 @@ class _AccountScreenState extends State<AccountScreen> {
           ? copy.deviceOnly
           : (account == null ? copy.signedOut : copy.signedIn),
       children: [
-        if (inbox.mode == UploadMode.mock) ...[
-          StatusPill(copy.mockBadge),
+        if (uploadEnvironmentLabel(copy, inbox.mode) case final label?) ...[
+          StatusPill(label),
           const SizedBox(height: 8),
-          Text(copy.mockAccountBody),
+          Text(inbox.mode == UploadMode.staging
+              ? copy.stagingAccountBody
+              : copy.mockAccountBody),
+          if (inbox.stagingApiHost case final host?)
+            Text(copy.stagingApiHost(host)),
           const SizedBox(height: 10),
         ],
         if (disabled)
