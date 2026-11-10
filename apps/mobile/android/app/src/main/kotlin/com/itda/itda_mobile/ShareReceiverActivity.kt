@@ -25,7 +25,7 @@ class ShareReceiverActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val progress = ProgressBar(this).apply {
-            contentDescription = getString(R.string.share_saving)
+            contentDescription = AppLanguage.resources(this@ShareReceiverActivity).getString(R.string.share_saving)
         }
         setContentView(FrameLayout(this).apply {
             addView(progress, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
@@ -104,7 +104,7 @@ class ShareReceiverActivity : Activity() {
                 if (error == null) {
                     acknowledgeAndClose()
                 } else {
-                    Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
+                    toast(error)
                     finish()
                 }
             }
@@ -113,8 +113,12 @@ class ShareReceiverActivity : Activity() {
 
     private fun acknowledgeAndClose() {
         setResult(RESULT_OK)
-        Toast.makeText(this, R.string.share_saved, Toast.LENGTH_SHORT).show()
+        toast(R.string.share_saved)
         finish()
+    }
+
+    private fun toast(message: Int) {
+        Toast.makeText(this, AppLanguage.resources(this).getString(message), Toast.LENGTH_SHORT).show()
     }
 
     private fun initialSourcePackage(): String? =

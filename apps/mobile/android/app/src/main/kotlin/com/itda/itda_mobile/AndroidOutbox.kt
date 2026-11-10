@@ -21,6 +21,7 @@ internal class AndroidOutbox private constructor(context: Context) {
     private val workManager by lazy { WorkManager.getInstance(context) }
 
     val store = localShareStore(context)
+    val originals = LocalOriginals(store, ::activeOwner)
     val notices by lazy { AndroidNotifications(context, config, sessions, store, ::changed) }
     val library by lazy {
         config?.let { AndroidLibrarySync(context, it, checkNotNull(sessions), store, ::changed) { owner, ids ->
@@ -74,17 +75,6 @@ internal class AndroidOutbox private constructor(context: Context) {
     fun requestLibrarySync(owner: UploadOwner) {
         if (activeOwner() != owner) throw UploadProblem.auth()
         library?.request(owner, urgent = true)
-    }
-
-    fun readLocalSource(localId: UUID): Map<String, Any?> {
-        val share = store.read(localId) ?: throw UploadProblem.permanent("local_share_missing")
-        if (share.progress.owner != null && share.progress.owner != activeOwner()) throw UploadProblem.auth()
-        val receipt = share.receipt
-        return mapOf(
-            "source_text" to receipt.stringOrNull("source_text"),
-            "source_url" to receipt.stringOrNull("source_url"),
-            "filename" to receipt.optJSONObject("attachment")?.stringOrNull("filename"),
-        )
     }
 
     fun assign(localId: UUID, expectedUserId: UUID) {

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ITDA</string>
+    <string name="staging_app_name">ITDA 스테이징</string>
+    <string name="notice_channel">저장된 콘텐츠</string>
+    <string name="notice_edit">수정하기</string>
+    <string name="notice_mock">모의</string>
+    <string name="notice_processing">처리 중</string>
+    <string name="notice_completed">분석 완료</string>
+    <string name="notice_partial">부분 분석 완료</string>
+    <string name="notice_failed">분석 실패</string>
+    <string name="notice_source_link">링크</string>
+    <string name="notice_source_note">텍스트</string>
+    <string name="notice_source_image">이미지</string>
+    <string name="notice_source_document">PDF</string>
+    <string name="notice_source_saved">ITDA</string>
+    <string name="notice_title_link">저장한 링크</string>
+    <string name="notice_title_host">%1$s에서 저장한 링크</string>
+    <string name="notice_title_note">저장한 메모</string>
+    <string name="notice_title_image">저장한 이미지</string>
+    <string name="notice_title_document">저장한 PDF</string>
+    <string name="notice_title_saved">저장한 항목</string>
+    <string name="share_saving">ITDA에 저장하는 중</string>
+    <string name="share_saved">이 기기에 저장했어요</string>
+    <string name="share_empty">저장할 콘텐츠가 없어요.</string>
+    <string name="share_unsupported">텍스트, 링크, JPEG, PNG, WebP, PDF를 저장할 수 있어요.</string>
+    <string name="share_unreadable">공유한 파일을 읽을 수 없어요. 원래 앱에서 다시 공유해 주세요.</string>
+    <string name="share_too_large">공유한 콘텐츠가 너무 커서 저장할 수 없어요.</string>
+    <string name="share_storage_failed">이 기기에 콘텐츠를 저장하지 못했어요.</string>
+</resources>

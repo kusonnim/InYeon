@@ -25,6 +25,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -88,6 +89,62 @@ class AndroidShareTest {
         assertEquals(url, record.getString("source_url"))
         assertEquals(text, record.getString("source_text"))
         assertEquals("Article", record.getString("subject"))
+        val summary = store.listShares().single()
+        assertEquals(url, summary["source_url"])
+        assertEquals("Article", summary["subject"])
+        assertEquals(text, summary["link_text"])
+    }
+
+    @Test
+    @SdkSuppress(minSdkVersion = 29)
+    @Suppress("DEPRECATION")
+    fun originalImagePathsRequireValidBytesAndTheCurrentOwner() {
+        val ownerA = UploadOwner(UUID.randomUUID(), "a".repeat(64))
+        val ownerB = UploadOwner(UUID.randomUUID(), ownerA.realm)
+        var activeOwner: UploadOwner? = ownerA
+        val originals = LocalOriginals(store) { activeOwner }
+        val formats = mapOf(
+            "image/jpeg" to Bitmap.CompressFormat.JPEG,
+            "image/png" to Bitmap.CompressFormat.PNG,
+            "image/webp" to Bitmap.CompressFormat.WEBP,
+        )
+        for ((mime, format) in formats) {
+            val bytes = ByteArrayOutputStream().also { output ->
+                val bitmap = Bitmap.createBitmap(96, 48, Bitmap.Config.ARGB_8888)
+                try {
+                    assertTrue(bitmap.compress(format, 90, output))
+                } finally {
+                    bitmap.recycle()
+                }
+            }.toByteArray()
+            val localId = UUID.randomUUID()
+            store.persist(localId, receivedAtMs, ownerA) { file ->
+                file.writeBytes(bytes)
+                JSONObject().put("input_type", "image").put("attachment", JSONObject()
+                    .put("file_ref", LocalShareStore.ATTACHMENT_NAME).put("filename", "saved-image")
+                    .put("media_type", mime).put("size_bytes", bytes.size).put("sha256", sha256(bytes)))
+            }
+            val path = checkNotNull(originals.read(localId)["image_path"] as String?)
+            val file = File(path)
+            assertArrayEquals(bytes, file.readBytes())
+            val ref = NoticeRef(ownerA, UUID.randomUUID())
+            assertNull(originals.readRegistered(ref))
+            store.updateProgress(localId) { it.copy(state = UploadState.SYNCHRONIZED, serverContentId = ref.contentId) }
+            assertEquals(path, originals.readRegistered(ref)?.get("image_path"))
+            activeOwner = ownerB
+            assertThrows(UploadProblem::class.java) { originals.read(localId) }
+            assertThrows(UploadProblem::class.java) { originals.readRegistered(ref) }
+            assertNull(originals.readRegistered(NoticeRef(ownerB, ref.contentId)))
+            val redacted = store.listShares(ownerB).first { it["local_id"] == localId.toString() }
+            assertNull(redacted["input_type"])
+            assertNull(redacted["source_url"])
+            activeOwner = ownerA
+            val changed = bytes.copyOf().also { it[it.lastIndex] = (it.last() + 1).toByte() }
+            file.writeBytes(changed)
+            assertNull(originals.read(localId)["image_path"])
+            check(file.delete())
+            assertNull(originals.readRegistered(ref)?.get("image_path"))
+        }
     }
 
     @Test

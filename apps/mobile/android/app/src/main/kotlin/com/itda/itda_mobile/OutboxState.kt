@@ -87,6 +87,7 @@ internal data class StoredShare(
 ) {
     fun summary(activeOwner: UploadOwner?): Map<String, Any?> {
         val visible = progress.owner == null || progress.owner == activeOwner
+        val sourceUrl = if (visible) receipt.stringOrNull("source_url") else null
         val label = if (visible) {
             receipt.optJSONObject("attachment")?.getString("filename")
                 ?: receipt.optString("source_url").ifEmpty { receipt.getString("source_text").trim() }
@@ -98,6 +99,9 @@ internal data class StoredShare(
             "local_id" to localId.toString(),
             "input_type" to if (visible) receipt.getString("input_type") else null,
             "label" to label.take(200),
+            "source_url" to sourceUrl,
+            "subject" to if (visible) receipt.shareSubject() else null,
+            "link_text" to sourceUrl?.let { receipt.stringOrNull("source_text")?.takeIf { it.length <= 4096 } },
             "received_at_ms" to receipt.getLong("received_at_ms"),
             "upload_state" to state.wire,
             "can_assign" to (progress.owner == null && activeOwner != null),
@@ -106,6 +110,9 @@ internal data class StoredShare(
         )
     }
 }
+
+internal fun JSONObject.shareSubject(): String? =
+    stringOrNull("subject")?.trim()?.take(500)?.takeIf { it.isNotEmpty() }
 
 internal fun JSONObject.stringOrNull(key: String): String? = if (isNull(key)) null else getString(key)
 

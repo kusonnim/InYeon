@@ -80,6 +80,12 @@ class MainActivity : FlutterActivity() {
                 executor.execute {
                     try {
                         when (call.method) {
+                            "getAppLanguage" -> result.success(AppLanguage.get(applicationContext))
+                            "setAppLanguage" -> {
+                                AppLanguage.set(applicationContext, requireNotNull(call.argument("language")))
+                                runCatching { outbox.notices.relocalize() }
+                                result.success(null)
+                            }
                             "listLocalInbox" -> result.success(outbox.listInbox())
                             "readLibrary" -> {
                                 val limit = requireNotNull(call.argument<Number>("limit")).toInt()
@@ -90,9 +96,10 @@ class MainActivity : FlutterActivity() {
                                 outbox.requestLibrarySync(call.uploadOwner())
                                 result.success(null)
                             }
-                            "readLocalSource" -> result.success(outbox.readLocalSource(
+                            "readLocalSource" -> result.success(outbox.originals.read(
                                 parseUuid(requireNotNull(call.argument("local_id"))),
                             ))
+                            "readNoticeOriginal" -> result.success(outbox.originals.readRegistered(call.noticeRef()))
                             "signIn" -> signIn(outbox, call, result)
                             "signOut" -> {
                                 outbox.signOut()

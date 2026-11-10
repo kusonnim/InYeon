@@ -83,6 +83,8 @@ class NoticeDismissReceiver : BroadcastReceiver() {
 internal class AndroidNoticeSurface(private val context: Context, private val mock: Boolean) : NoticeSurface {
     private val manager = checkNotNull(context.getSystemService(NotificationManager::class.java))
 
+    override fun presentationLanguage(): String = AppLanguage.get(context)
+
     override fun canPost(): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -90,7 +92,8 @@ internal class AndroidNoticeSurface(private val context: Context, private val mo
         if (!manager.areNotificationsEnabled()) return false
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, context.getString(R.string.notice_channel), NotificationManager.IMPORTANCE_DEFAULT),
+                NotificationChannel(CHANNEL, AppLanguage.resources(context).getString(R.string.notice_channel),
+                    NotificationManager.IMPORTANCE_DEFAULT),
             )
             return manager.getNotificationChannel(CHANNEL)?.let {
                 it.importance != NotificationManager.IMPORTANCE_NONE
@@ -108,20 +111,56 @@ internal class AndroidNoticeSurface(private val context: Context, private val mo
         if (!canPost()) return
         val ref = record.ref
         val generation = record.state.generation
+        val strings = AppLanguage.resources(context)
+        val metadata = record.content.metadata
+        val sender = sourceAppLabel(metadata?.sourcePackage)
+        val host = metadata?.host
+        val source = listOfNotNull(sender, host).distinct().joinToString(" · ").ifEmpty {
+            strings.getString(when (metadata?.type) {
+                "url" -> R.string.notice_source_link
+                "text" -> R.string.notice_source_note
+                "image" -> R.string.notice_source_image
+                "document" -> R.string.notice_source_document
+                else -> R.string.notice_source_saved
+            })
+        }
+        val title = metadata?.title ?: if (host != null) {
+            strings.getString(R.string.notice_title_host, host)
+        } else {
+            strings.getString(when (metadata?.type) {
+                "url" -> R.string.notice_title_link
+                "text" -> R.string.notice_title_note
+                "image" -> R.string.notice_title_image
+                "document" -> R.string.notice_title_document
+                else -> R.string.notice_title_saved
+            })
+        }
         val card = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notice)
-            .setContentTitle(if (mock) "ITDA · Mock" else context.applicationInfo.loadLabel(context.packageManager))
-            .setContentText(record.content.analysis.text)
+            .setSubText(if (mock) source + " · " + strings.getString(R.string.notice_mock) else source)
+            .setContentTitle(title)
+            .setContentText(strings.getString(record.content.analysis.message))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setOnlyAlertOnce(true)
             .setAutoCancel(false)
             .setContentIntent(NoticeIntents.pending(context, ref, generation, NoticeDestination.DETAILS))
             .setDeleteIntent(NoticeIntents.pending(context, ref, generation, NoticeDestination.DISMISS))
-            .addAction(0, context.getString(R.string.notice_edit), NoticeIntents.pending(context, ref, generation, NoticeDestination.EDIT))
+            .addAction(0, strings.getString(R.string.notice_edit), NoticeIntents.pending(context, ref, generation, NoticeDestination.EDIT))
             .addExtras(Bundle().apply { putLong(GENERATION, generation) })
         val notification = card.build()
         // Notify is an upsert. Keep construction outside the final lookup-to-update window.
         if (!update || activeGeneration(ref) == generation) manager.notify(ref.tag, ANDROID_ID, notification)
+    }
+
+    private fun sourceAppLabel(packageName: String?): String? {
+        if (packageName == null || packageName == context.packageName || packageName in systemSenders) return null
+        val packages = context.packageManager
+        return try {
+            val label = packages.getApplicationLabel(packages.getApplicationInfo(packageName, 0)).toString()
+            NoticeMetadata.safeTitle(label)?.takeIf { it != packageName }
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
     }
 
     override fun cancel(ref: NoticeRef) = manager.cancel(ref.tag, ANDROID_ID)
@@ -140,5 +179,9 @@ internal class AndroidNoticeSurface(private val context: Context, private val mo
         const val CHANNEL = "saved_content"
         const val ANDROID_ID = 1
         private const val GENERATION = "itda_notice_generation"
+        private val systemSenders = setOf(
+            "android", "com.android.shell", "com.android.systemui",
+            "com.android.intentresolver", "com.google.android.intentresolver",
+        )
     }
 }

@@ -10,6 +10,7 @@ import 'package:itda_mobile/library/library_controller.dart';
 import 'package:itda_mobile/main.dart';
 import 'package:itda_mobile/models/content.dart';
 import 'package:itda_mobile/native/catalog_bridge.dart';
+import 'package:itda_mobile/native/language_preference.dart';
 import 'package:itda_mobile/native/notification_bridge.dart';
 import 'package:itda_mobile/native/share_bridge.dart';
 
@@ -41,11 +42,87 @@ void main() {
     });
   }
 
+  testWidgets('defaults to Korean and restores an explicit language choice',
+      (tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
+    final language = _LanguageAdapter();
+    await tester.pumpWidget(ItdaApp(api: api, languagePreference: language));
+    await tester.pumpAndSettle();
+    expect(find.text('아직 저장한 콘텐츠가 없어요'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('계정'));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, '앱 언어');
+    await tester.tap(find.byType(DropdownButton<Locale>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English').last);
+    await tester.pumpAndSettle();
+    expect(find.text('App language'), findsOneWidget);
+    expect(await language.read(), const Locale('en'));
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(ItdaApp(
+      api: api,
+      initialLocale: await language.read(),
+      languagePreference: language,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing saved yet'), findsOneWidget);
+    await tester.tap(find.byTooltip('Account'));
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, 'App language');
+    await tester.tap(find.byType(DropdownButton<Locale>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('한국어').last);
+    await tester.pumpAndSettle();
+    expect(find.text('앱 언어'), findsOneWidget);
+    expect(await language.read(), const Locale('ko'));
+  });
+
+  testWidgets('groups exact repeated links and opens the individual originals',
+      (tester) async {
+    const first = 'https://example.org/events?season=winter';
+    const other = 'https://example.org/events?season=spring';
+    shares
+      ..mode = UploadMode.mock
+      ..items = [
+        _local('a', first, type: InputType.url, subject: 'Winter workshop'),
+        _local('b', first,
+            type: InputType.url, linkText: 'Repair cafe schedule\n' + first),
+        _local('c', other, type: InputType.url, subject: 'Spring workshop'),
+      ];
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'), api: api, shareBridge: shares));
+    await tester.pumpAndSettle();
+    expect(find.text('3 saved items'), findsOneWidget);
+    expect(find.text('2 saves of this link'), findsOneWidget);
+    expect(find.text('Spring workshop'), findsOneWidget);
+    expect(find.byKey(const ValueKey('local:a')), findsNothing);
+    await tester.tap(find.text('2 saves of this link'));
+    await tester.pumpAndSettle();
+    final original = find.byKey(const ValueKey('local:a'));
+    final title = find
+        .descendant(
+          of: original,
+          matching: find.text('Winter workshop'),
+        )
+        .hitTestable();
+    await tester.scrollUntilVisible(title, 150,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(shares.opened, ['a']);
+    expect(find.text('Winter workshop'), findsOneWidget);
+    expect(find.text(first), findsOneWidget);
+  });
+
   testWidgets(
       'shows an empty private library and opens clearly labeled sample details',
       (tester) async {
     final first = example();
-    await tester.pumpWidget(ItdaApp(api: api));
+    await tester
+        .pumpWidget(ItdaApp(initialLocale: const Locale('en'), api: api));
     await tester.pumpAndSettle();
     expect(find.text('Nothing saved yet'), findsOneWidget);
     expect(find.text(first.title!), findsNothing);
@@ -69,7 +146,8 @@ void main() {
     shares
       ..mode = inbox.mode
       ..stagingApiHost = inbox.stagingApiHost;
-    await tester.pumpWidget(ItdaApp(api: api, shareBridge: shares));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'), api: api, shareBridge: shares));
     await tester.pumpAndSettle();
     expect(find.text('Staging mode'), findsOneWidget);
     expect(find.text('Mock mode'), findsNothing);
@@ -84,7 +162,8 @@ void main() {
       'reads new local shares on resume and opens the saved original offline',
       (tester) async {
     shares.mode = UploadMode.live;
-    await tester.pumpWidget(ItdaApp(api: api, shareBridge: shares));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'), api: api, shareBridge: shares));
     await tester.pumpAndSettle();
     expect(find.text('Nothing saved yet'), findsOneWidget);
 
@@ -96,9 +175,9 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
 
-    expect(find.text('example.org'), findsOneWidget);
+    expect(find.text('Link from example.org'), findsOneWidget);
     expect(find.text('Waiting to sync'), findsOneWidget);
-    await tester.tap(find.text('example.org'));
+    await tester.tap(find.text('Link from example.org'));
     await tester.pumpAndSettle();
     expect(find.text('Original source'), findsOneWidget);
     expect(find.text('https://example.org/shared'), findsOneWidget);
@@ -115,7 +194,8 @@ void main() {
         _local('legacy-id', 'Saved before sign-in',
             state: LocalUploadState.authenticationRequired, canAssign: true),
       ];
-    await tester.pumpWidget(ItdaApp(api: api, shareBridge: shares));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'), api: api, shareBridge: shares));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Saved before sign-in'));
     await tester.pumpAndSettle();
@@ -145,6 +225,7 @@ void main() {
     final catalog = _CatalogAdapter((_, __) async =>
         CatalogSnapshot(items: [item], phase: CatalogPhase.current));
     await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
       api: api,
       shareBridge: shares,
       catalogBridge: catalog,
@@ -154,7 +235,10 @@ void main() {
     expect(find.text('1 saved item'), findsOneWidget);
     expect(find.text(item.title!), findsOneWidget);
     expect(find.text('Local preview'), findsNothing);
-    expect(find.text(item.analysis!.summary!), findsOneWidget);
+    final preview = find.textContaining('AI summary · ');
+    expect(preview, findsOneWidget);
+    expect(tester.widget<Text>(preview).maxLines, 2);
+    expect(find.textContaining(item.recommendations.first.text), findsNothing);
     expect(find.text('Synced'), findsOneWidget);
     await tester.tap(find.text(item.title!));
     await tester.pumpAndSettle();
@@ -180,8 +264,11 @@ void main() {
       }
       return CatalogSnapshot(items: [item], phase: CatalogPhase.current);
     });
-    await tester.pumpWidget(
-        ItdaApp(api: api, shareBridge: shares, catalogBridge: catalog));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        shareBridge: shares,
+        catalogBridge: catalog));
     await tester.pumpAndSettle();
     expect(find.text('Connection unavailable'), findsOneWidget);
     expect(find.text('A saved note'), findsOneWidget);
@@ -205,8 +292,11 @@ void main() {
     final catalog = _CatalogAdapter((scope, _) async => CatalogSnapshot(
         items: [scope.ownerId == 'a' ? itemA : itemB],
         phase: CatalogPhase.current));
-    await tester.pumpWidget(
-        ItdaApp(api: api, shareBridge: shares, catalogBridge: catalog));
+    await tester.pumpWidget(ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        shareBridge: shares,
+        catalogBridge: catalog));
     await tester.pumpAndSettle();
     expect(find.text('Account A item'), findsOneWidget);
     await tester.tap(find.byTooltip('Account'));
@@ -272,6 +362,7 @@ void main() {
     final catalog = _CatalogAdapter((_, __) async =>
         CatalogSnapshot(items: [item], phase: CatalogPhase.offline));
     await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
       api: api,
       shareBridge: shares,
       catalogBridge: catalog,
@@ -326,7 +417,8 @@ void main() {
       shares.items = [
         _local('small-screen', 'A long title for a saved item with wrapping')
       ];
-      await tester.pumpWidget(ItdaApp(api: api, shareBridge: shares));
+      await tester.pumpWidget(ItdaApp(
+          initialLocale: const Locale('en'), api: api, shareBridge: shares));
       await tester.pumpAndSettle();
       final library = find.text('Library');
       expect(Theme.of(tester.element(library)).brightness, Brightness.light);
@@ -362,6 +454,8 @@ LocalShare _local(
   LocalUploadState state = LocalUploadState.pending,
   String? serverId,
   bool canAssign = false,
+  String? subject,
+  String? linkText,
 }) =>
     LocalShare(
       localId: id,
@@ -371,7 +465,20 @@ LocalShare _local(
       uploadState: state,
       serverContentId: serverId,
       canAssign: canAssign,
+      sourceUrl: type == InputType.url ? text : null,
+      subject: subject,
+      linkText: linkText,
     );
+
+class _LanguageAdapter implements LanguagePreference {
+  Locale selected = const Locale('ko');
+
+  @override
+  Future<Locale> read() async => selected;
+
+  @override
+  Future<void> write(Locale locale) async => selected = locale;
+}
 
 class _ShareAdapter implements ShareBridge {
   final events = StreamController<void>.broadcast();
@@ -381,6 +488,7 @@ class _ShareAdapter implements ShareBridge {
   UploadAccount? account;
   UploadAccount? nextAccount;
   (String, String)? assigned;
+  final opened = <String>[];
 
   @override
   Stream<void> get changes => events.stream;
@@ -394,9 +502,10 @@ class _ShareAdapter implements ShareBridge {
 
   @override
   Future<LocalSource> readLocalSource(String localId) async {
+    opened.add(localId);
     final item = items.singleWhere((item) => item.localId == localId);
     return item.inputType == InputType.url
-        ? LocalSource(url: item.label)
+        ? LocalSource(url: item.sourceUrl, subject: item.subject)
         : LocalSource(text: item.label);
   }
 
@@ -457,6 +566,9 @@ class _DetailsAdapter implements NotificationBridge {
     if (offline) throw PlatformException(code: 'network_unavailable');
     return RegisteredContent(item, UploadMode.mock, await status(target));
   }
+
+  @override
+  Future<LocalSource?> original(NoticeTarget target) async => null;
 
   @override
   Future<NoticeStatus> status(NoticeTarget target) async => NoticeStatus(

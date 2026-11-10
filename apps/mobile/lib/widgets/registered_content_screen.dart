@@ -9,6 +9,7 @@ import '../native/notification_bridge.dart';
 import '../native/share_bridge.dart';
 import 'content_details.dart';
 import 'library_components.dart';
+import 'original_image.dart';
 
 enum _Request { load, save, restore }
 
@@ -44,13 +45,17 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   late final AppLifecycleListener _lifecycle;
   late bool _editing = widget.openEditor;
   RegisteredContent? _item;
+  LocalSource? _original;
   NoticeStatus? _notice;
   int _statusRequest = 0;
+  int _originalRequest = 0;
   bool _busy = false;
   bool _locked = false;
   bool _verified = false;
   bool _conflict = false;
   bool _reviewDraft = false;
+  bool _readingOriginal = true;
+  bool _viewingImage = false;
   String? _error;
 
   bool get _titleChanged => _title.text != (_item?.content.title ?? '');
@@ -110,6 +115,8 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       _locked = true;
       _editing = false;
       _item = null;
+      _original = null;
+      _viewingImage = false;
       _notice = null;
       _title.clear();
       _note.clear();
@@ -136,6 +143,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   }
 
   Future<void> _load() => _run(_Request.load, () async {
+        unawaited(_loadOriginal());
         final item = await widget.bridge.details(widget.target);
         if (!mounted || _locked) return;
         _accept(item, keepDraft: _editing && _item != null);
@@ -146,6 +154,38 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         });
         await _checkStatus();
       });
+
+  Future<void> _loadOriginal() async {
+    final request = ++_originalRequest;
+    if (!_readingOriginal) setState(() => _readingOriginal = true);
+    try {
+      final original = await widget.bridge.original(widget.target);
+      if (mounted && !_locked && request == _originalRequest) {
+        setState(() {
+          _original = original;
+          if (original?.imagePath == null) _viewingImage = false;
+        });
+      }
+    } on PlatformException catch (error) {
+      if (!mounted || _locked || request != _originalRequest) return;
+      if (_isAuthError(error)) {
+        _lock();
+      } else {
+        setState(() {
+          _original = null;
+          _viewingImage = false;
+        });
+      }
+    } finally {
+      if (mounted && !_locked && request == _originalRequest) {
+        setState(() => _readingOriginal = false);
+      }
+    }
+  }
+
+  void _expandImage() => setState(() => _viewingImage = true);
+
+  void _closeImage() => setState(() => _viewingImage = false);
 
   Future<void> _save(ContentItem content) => _run(_Request.save, () async {
         final copy = AppLocalizations.of(context);
@@ -257,22 +297,32 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
+    final image = _original?.imagePath;
+    final viewingImage = _viewingImage && image != null;
     return PopScope(
-      canPop: !_editing,
+      canPop: !_editing && !viewingImage,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _editing) unawaited(_closeEditor());
+        if (didPop) return;
+        if (viewingImage) {
+          _closeImage();
+        } else if (_editing) {
+          unawaited(_closeEditor());
+        }
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_editing ? copy.editTitle : copy.detailsTitle),
+          leading: viewingImage ? BackButton(onPressed: _closeImage) : null,
+          title: Text(viewingImage
+              ? copy.imageViewer
+              : (_editing ? copy.editTitle : copy.detailsTitle)),
           actions: [
-            if (!_locked && !_editing)
+            if (!_locked && !_editing && !viewingImage)
               IconButton(
                 tooltip: copy.refreshContent,
                 onPressed: _busy ? null : _load,
                 icon: const Icon(Icons.refresh_rounded),
               ),
-            if (!_locked && !_editing && _verified)
+            if (!_locked && !_editing && _verified && !viewingImage)
               IconButton(
                 tooltip: copy.edit,
                 onPressed: _busy ? null : () => setState(() => _editing = true),
@@ -280,12 +330,15 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
               ),
           ],
         ),
-        body: Column(
-          children: [
-            if (_busy)
-              LinearProgressIndicator(semanticsLabel: copy.loadingContent),
-            Expanded(child: _body(copy)),
-          ],
+        body: OriginalImageOverlay(
+          path: viewingImage ? image : null,
+          child: Column(
+            children: [
+              if (_busy)
+                LinearProgressIndicator(semanticsLabel: copy.loadingContent),
+              Expanded(child: _body(copy)),
+            ],
+          ),
         ),
       ),
     );
@@ -302,7 +355,13 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     if (item == null) {
       return PageList(children: [
         if (banner != null) banner,
-        if (widget.openOriginal != null)
+        if (_original != null)
+          OriginalSource(
+            original: _original,
+            openOriginal: widget.openOriginal,
+            openImage: _expandImage,
+          )
+        else if (widget.openOriginal != null)
           TextButton(
               onPressed: widget.openOriginal, child: Text(copy.readOriginal)),
         if (!_editing) ..._notificationControls(copy),
@@ -313,6 +372,9 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       content: item.content,
       badge: _environmentBadge(copy, item.mode),
       openOriginal: widget.openOriginal,
+      original: _original,
+      loadingOriginal: _readingOriginal,
+      openImage: _expandImage,
       header: [
         if (!_verified && banner == null)
           Padding(
@@ -424,9 +486,16 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             controller: _title,
             enabled: !_busy,
             maxLength: 500,
+            minLines: 1,
+            maxLines: 3,
             textInputAction: TextInputAction.next,
             onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(labelText: copy.titleField),
+            decoration: InputDecoration(
+              labelText: copy.titleField,
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              hintText: suggestedTitle(copy, item.content, original: _original),
+              hintMaxLines: 2,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -456,6 +525,13 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
                     child: Text(copy.cancel)),
               ],
             ),
+          ),
+          OriginalSource.fromContent(
+            item.content,
+            original: _original,
+            loadingOriginal: _readingOriginal,
+            openOriginal: widget.openOriginal,
+            openImage: _expandImage,
           ),
           RecommendationSection(
               title: copy.reviewSuggestions,

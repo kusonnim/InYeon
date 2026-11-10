@@ -36,9 +36,7 @@ internal class AndroidNotifications(
     fun permissionEnabled(): Boolean = config != null && surface.canPost()
 
     fun ownsAcknowledgment(ref: NoticeRef): Boolean =
-        activeOwner() == ref.owner && shares.entries().any {
-            it.progress.owner == ref.owner && it.progress.serverContentId == ref.contentId
-        }
+        activeOwner() == ref.owner && shares.acknowledged(ref) != null
 
     fun registered(ref: NoticeRef) {
         // Registration can return an idempotency replay. Read current content before posting.
@@ -48,11 +46,17 @@ internal class AndroidNotifications(
     fun refreshRegistered(append: Boolean = false) {
         hideInactiveAccounts()
         val owner = activeOwner() ?: return
-        val ids = shares.entries().mapNotNull { share ->
-            share.progress.serverContentId?.takeIf { share.progress.owner == owner }
-        }.distinct()
-        for (id in ids) schedule(NoticeRef(owner, id), append)
+        for (ref in acknowledgedRefs(owner)) schedule(ref, append)
     }
+
+    fun relocalize() {
+        val owner = activeOwner() ?: return
+        for (ref in acknowledgedRefs(owner)) lifecycle.refreshPresentation(ref)
+    }
+
+    private fun acknowledgedRefs(owner: UploadOwner): List<NoticeRef> = shares.entries().mapNotNull { share ->
+        share.progress.serverContentId?.takeIf { share.progress.owner == owner }?.let { NoticeRef(owner, it) }
+    }.distinct()
 
     fun refreshSynced(owner: UploadOwner, ids: Set<UUID>) {
         if (activeOwner() != owner) return
@@ -89,8 +93,10 @@ internal class AndroidNotifications(
     }
 
     private fun contentResult(ref: NoticeRef, response: JSONObject): Map<String, Any?> {
-        val content = NoticeContent.fromWire(response, ref)
-        if (ownsAcknowledgment(ref)) lifecycle.observe(ref, content)
+        requireOwner(ref)
+        val share = shares.acknowledged(ref)
+        val content = NoticeContent.fromWire(response, ref, share?.receipt)
+        if (share != null) lifecycle.observe(ref, content)
         requireOwner(ref)
         return mapOf(
             "content" to response.toString(),
@@ -102,19 +108,20 @@ internal class AndroidNotifications(
     fun run(ref: NoticeRef, http: UploadHttp): Result {
         if (!running.add(ref)) return Result.retry()
         try {
-            if (!ownsAcknowledgment(ref)) return Result.success()
+            if (activeOwner() != ref.owner) return Result.success()
+            val share = shares.acknowledged(ref) ?: return Result.success()
             val api = api(http)
             val event = lifecycle.read(ref)?.event?.takeUnless { it.blocked }
             if (event != null) {
                 try {
-                    return if (process(ref, event, api)) Result.retry() else Result.success()
+                    return if (process(ref, event, api, share.receipt)) Result.retry() else Result.success()
                 } catch (problem: UploadProblem) {
                     if (problem.state != UploadState.PERMANENT_FAILURE) throw problem
                     lifecycle.reject(ref, event, problem.code)
                 }
             }
             val response = fetch(ref, api)
-            lifecycle.observe(ref, NoticeContent.fromWire(response, ref))
+            lifecycle.observe(ref, NoticeContent.fromWire(response, ref, share.receipt))
             return Result.success()
         } catch (problem: UploadProblem) {
             if (problem.state == UploadState.AUTH_REQUIRED) onChange()
@@ -127,7 +134,7 @@ internal class AndroidNotifications(
         }
     }
 
-    private fun process(ref: NoticeRef, event: NoticeEvent, api: AuthenticatedApi): Boolean {
+    private fun process(ref: NoticeRef, event: NoticeEvent, api: AuthenticatedApi, receipt: JSONObject): Boolean {
         val restore = event.operation == NoticeOperation.RESTORE
         val body = JSONObject().put("expected_revision", event.revision)
         val path = if (restore) {
@@ -140,7 +147,7 @@ internal class AndroidNotifications(
         }
         val reply = api.request(ref.owner, "POST", path, body, event.key)
         if (reply.status == 409 && reply.errorCode() == "notification_conflict") {
-            val current = NoticeContent.fromWire(fetch(ref, api), ref)
+            val current = NoticeContent.fromWire(fetch(ref, api), ref, receipt)
             return lifecycle.resolveConflict(ref, event, current)
         }
         val result = reply.expectJson(200)
@@ -165,7 +172,7 @@ internal class AndroidNotifications(
         }
         // A retry may replay the original response after a subsequent dismissal.
         // Reconcile current state before applying any visible change from the acknowledgment.
-        val current = NoticeContent.fromWire(fetch(ref, api), ref)
+        val current = NoticeContent.fromWire(fetch(ref, api), ref, receipt)
         if (state.merge(current.state) != current.state) throw UploadProblem.retry("notification_snapshot_behind")
         lifecycle.acknowledge(ref, event, current)
         return false

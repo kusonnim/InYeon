@@ -14,11 +14,13 @@ class AccountScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.openSamples,
+    required this.changeLanguage,
     this.notifications,
   });
 
   final LibraryController controller;
   final VoidCallback openSamples;
+  final Future<void> Function(Locale) changeLanguage;
   final NotificationBridge? notifications;
 
   @override
@@ -30,6 +32,7 @@ class _AccountScreenState extends State<AccountScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
+  bool _changingLanguage = false;
   String? _error;
 
   @override
@@ -84,6 +87,22 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  Future<void> _selectLanguage(Locale? locale) async {
+    if (locale == null) return;
+    setState(() => _changingLanguage = true);
+    try {
+      await widget.changeLanguage(locale);
+    } on PlatformException {
+      if (mounted) {
+        final copy = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(copy.languageChangeProblem)));
+      }
+    } finally {
+      if (mounted) setState(() => _changingLanguage = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
@@ -110,6 +129,21 @@ class _AccountScreenState extends State<AccountScreen> {
           return PageList(
             children: [
               _identity(copy, inbox),
+              SectionCard(
+                title: copy.language,
+                children: [
+                  DropdownButton<Locale>(
+                    isExpanded: true,
+                    value: Localizations.localeOf(context),
+                    items: const [
+                      DropdownMenuItem(value: Locale('ko'), child: Text('한국어')),
+                      DropdownMenuItem(
+                          value: Locale('en'), child: Text('English')),
+                    ],
+                    onChanged: _changingLanguage ? null : _selectLanguage,
+                  ),
+                ],
+              ),
               if (inbox.mode != UploadMode.disabled) _uploads(copy, inbox),
               if (widget.notifications != null &&
                   inbox.mode != UploadMode.disabled)

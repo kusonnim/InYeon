@@ -2,7 +2,6 @@ package com.itda.itda_mobile
 
 import java.io.File
 import java.io.IOException
-import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 import okhttp3.HttpUrl
@@ -160,17 +159,8 @@ internal class UploadPipeline(
 
         fun verifyLocal(file: File) {
             if (!file.isFile || file.length() != size) throw UploadProblem.permanent("local_source_unavailable")
-            val digest = MessageDigest.getInstance("SHA-256")
             val actual = try {
-                file.inputStream().use { input ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count == -1) break
-                        digest.update(buffer, 0, count)
-                    }
-                }
-                digest.digest().toHex()
+                sha256(file)
             } catch (_: IOException) {
                 throw UploadProblem.permanent("local_source_unavailable")
             }

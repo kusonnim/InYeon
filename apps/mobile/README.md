@@ -44,12 +44,33 @@ share one card. A server deletion removes the synchronized card while retaining
 the device original. Dismissed and archived items remain accessible. **Sample
 library** is available from **Account** and from an empty device-only library.
 
-Cards show the saved title or a source-derived label, the source type, and any
-available summary and recommendation preview. A device-only item shows its
-upload state. Details separate the original source, AI summary and coverage,
-information, action and resource recommendations, and personal notes. A pending
-item can open its local original while offline. File details show the stored
-name or a private attachment label. File preview and download are future work.
+Cards show the source type, display title, up to two lines of labeled AI
+summary, and compact status badges. Recommendations are in details. The library
+groups loaded saves with the exact same source URL, including its query and
+fragment. Expand a group to see each save's own title, timestamp, state, and
+details. The group has no effect on ingestion or synchronization.
+
+A saved title takes priority over an Android share subject or a title line
+shared alongside a URL. When these are absent, a localized label names the
+available host. The client preserves the original URL and makes no webpage
+requests to obtain a title. Android share subjects are local receipt metadata.
+Preserving their provenance across devices requires a contract review with
+Developer B.
+
+Details separate the original source, AI summary and coverage, recommendations,
+and personal notes. Locally saved JPEG, PNG and WebP files preview inline in
+details and in the registered editor. Tap an image for a larger view, then
+pinch to zoom and drag to pan. Pending and synchronized originals are available
+offline when the matching device copy is present. Android checks the receipt ID,
+owner and API realm, expected private path, file type, byte count, and checksum
+before returning an in-process path. Both views preserve aspect ratio and cap
+decode dimensions. Images over 64 megapixels stay saved and show an unavailable
+preview.
+
+For a server-only image the screen explains that private download is
+unavailable. The authenticated `GET /v1/assets/{id}/download-url` contract
+requires a short-lived owner-scoped capability, and the checked-in backend
+returns 501. PDFs retain their original-file details behavior.
 
 After an initial sync, server-only items are available across offline restarts
 with the same installed session. **Saved copies** identifies a catalog awaiting
@@ -59,15 +80,22 @@ the source and saved fields offline. Editing requires a current authenticated
 detail response. Sign-out clears the visible account projection. A different
 account or API destination has a separate snapshot.
 
-**Edit** updates only the fields the user changed. A version conflict keeps the
-draft and offers to load the latest version. Untouched fields adopt the latest
-server values. The editor displays the competing saved value for each changed
-field before the user saves again. Existing recommendations are available for
-review in the editor.
+**Edit** pre-fills the saved title and personal notes and shows the original in
+a read-only section. An item without a saved title shows a source-derived hint.
+The hint stays separate from the draft and only changed fields are sent in PATCH.
+A version conflict keeps the draft and offers to load the latest version.
+Untouched fields adopt the latest server values. The editor displays competing
+saved values before the user saves again. Existing recommendations are
+available for review in the editor.
 
-The app follows Android's light and dark setting. Flutter interface strings
-are in `lib/l10n/app_en.arb`; generated Dart files stay local. The Android
-notification action keeps its existing label **수정하기**.
+The app follows Android's light and dark setting. Korean is the default app
+language regardless of the system locale. Choose **한국어** or **English** under
+**App language** in **Account**. Changes apply immediately and persist across
+restarts and account switches. Android uses the same installation preference
+when Flutter is closed. Flutter ARB files and Android string resources cover
+interface text, dates, accessibility labels, share feedback, and notifications.
+Saved originals, edits, and analysis stay in their original language.
+Android app bundles keep both sets of string resources so switching works offline.
 [Flutter localization guide](https://docs.flutter.dev/ui/internationalization)
 
 ## Android library synchronization
@@ -222,11 +250,15 @@ the API and posts one card for its active notification generation. New local
 shares need a server content ID before they can post. Analysis updates change an
 existing card in place and without another alert. The controller reads state on
 registration, app launch or resume, and **Refresh library**. In-app details
-also offer a refresh. Notification text reports the current analysis status.
-Source text and private links stay out of the notification.
+also offer a refresh. A notification shows the identified sender or source host
+when available, a saved title or share subject, and a localized processing,
+completed, partial, or failed status. Localized fallbacks cover absent metadata.
+Raw source text, analysis summaries, and private URLs stay out of the card.
+Title and language changes update active cards in place. The existing generation
+ledger still suppresses dismissed or missing cards.
 
 The body opens the registered item's details. The sole quick action
-**수정하기** opens its title and notes editor. Edits require the current
+**Edit / 수정하기** opens its title and notes editor. Edits require the current
 content version. On a conflict the user can refresh while retaining their draft.
 The sample library remains separate. Mock notifications and registered
 details are labeled as mock, and mock edits are stored in the test server's
@@ -350,4 +382,4 @@ its synthetic feed remains available.
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, durable content and sync persistence, private assets,
 and the future FCM delivery contract. See the
-[verification results](../../docs/STATUS.md#phase-a6-local-and-mock-evidence).
+[mobile verification results](../../docs/STATUS.md#phase-a61-android-checks).

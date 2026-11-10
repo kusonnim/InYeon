@@ -1,12 +1,17 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A6 Android staging preparation.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A6.1 Android UX refinement.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
 and library checkpoints retain their account and realm scope. The checked-in
 backend and database evidence supports local mock verification. Authenticated
 staging, private storage, RLS, web consistency, and FCM remain integration work.
+
+The Android library and editor support Korean and English, compact cards, and
+expandable repeated-link groups. Details and editing show locally available
+original images. Android notifications show a localized source, title, and
+processing state with the existing dismissal and restoration rules.
 
 ## Delivered foundation
 
@@ -18,7 +23,7 @@ staging, private storage, RLS, web consistency, and FCM remain integration work.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build | Two-account live API/RLS verification, private attachment preview, FCM delivery |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview | Two-account live API/RLS verification, server-only private image download, FCM delivery |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
@@ -185,6 +190,26 @@ database and web evidence. The Android notification refresh path is ready to
 evaluate delivery hints after live verification and agreement on registration,
 revocation and dispatch.
 
+### Phase A6.1 Android checks
+
+Local checks used a disposable Android 15 / API 35 x86_64 emulator and the
+existing contract mock with synthetic accounts. The app language preference is
+installation-wide and independent of the device locale. Repeat-link grouping
+is a display projection, and local originals remain account and realm scoped.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, localization generation, fixture parity, static analysis, and all 26 Flutter tests passed. Coverage includes language switching, exact-URL expansion, labeled compact previews, field-level edits and conflict drafts, and offline image zoom |
+| Android instrumentation | All 43 tests passed. The suite covers JPEG, PNG, and WebP original validation, acknowledged versus pending originals, owner isolation, missing and corrupt files, localized in-place notifications, legacy records, and generation suppression |
+| Builds and lint | Default and loopback-mock x86_64 debug APK builds passed. Android lint passed with zero errors and eight warnings after escaping drive letters in the generated Windows SDK properties |
+| Emulator smoke test | Observed Korean on first launch and persisted language choices after process restart. Opened the editor from the Android notification and confirmed that closing it left the mock record and version intact. Verified a repeat-link group with distinct records and a separate card for a different query. Shared a synthetic PNG from Files with networking disabled, opened its inline and expanded previews, synchronized one verified mock asset, and reopened the original offline and in the editor |
+
+The checked-in private download route returns `501 adapter_not_implemented`.
+Server-only images show an unavailable preview until Developer B provides the
+owner-scoped adapter and Developer C verifies private bucket access. Share
+subjects stay in local receipts. A separate A/B/C contract review is needed
+to preserve that metadata across devices.
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
@@ -203,7 +228,9 @@ revocation and dispatch.
 2. Commit ingestion, asset attachment, job, sync event and idempotency receipt in
    one transaction. Implement conditional updates and conflict mapping.
 3. Implement private upload completion verification and URL/document extraction
-   defenses before accepting live content; preserve raw originals on failure.
+   defenses before accepting live content. Preserve raw originals on failure.
+   Provide owner-checked private download capabilities and review a way to
+   preserve original share subjects separately from user-edited titles.
 4. Implement PostgreSQL job claims, leases, retries, bounded LLM adapters, validated
    coverage/results and atomic persistence. Then design durable FCM dispatch with A.
 

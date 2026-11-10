@@ -191,30 +191,84 @@ String uploadName(AppLocalizations copy, UploadMode mode, LocalShare share) {
 }
 
 String contentTitle(AppLocalizations copy, ContentItem item,
-    [LocalShare? local]) {
-  final title = item.title?.trim();
-  if (title != null && title.isNotEmpty) return title;
-  if (local != null) return localTitle(copy, local);
-  return _sourceTitle(item.inputType, item.sourceUrl, item.sourceText) ??
-      sourceName(copy, item.inputType);
-}
+        {LocalShare? local, LocalSource? original}) =>
+    _nonBlank(item.title) ??
+    suggestedTitle(copy, item, local: local, original: original);
+
+String suggestedTitle(AppLocalizations copy, ContentItem item,
+        {LocalShare? local, LocalSource? original}) =>
+    _sourceTitle(
+      copy,
+      item.inputType,
+      subject: original?.subject ?? local?.subject,
+      url: original?.url ?? local?.sourceUrl ?? item.sourceUrl,
+      text: original?.text ?? local?.linkText ?? item.sourceText,
+      filename: original?.filename ?? local?.label,
+    );
 
 String localTitle(AppLocalizations copy, LocalShare share) {
-  if (share.inputType == null) return copy.privateShare;
-  if (share.label.trim().isEmpty) return copy.noTitle;
-  return _sourceTitle(share.inputType, share.label, share.label) ??
-      copy.noTitle;
+  final type = share.inputType;
+  if (type == null) return copy.privateShare;
+  return _sourceTitle(
+    copy,
+    type,
+    subject: share.subject,
+    url: share.sourceUrl ?? (type == InputType.url ? share.label : null),
+    text: type == InputType.url ? share.linkText : share.label,
+    filename: share.label,
+  );
 }
 
-String? _sourceTitle(InputType? type, String? url, String? text) {
-  if (type == InputType.url && url != null) {
-    final uri = Uri.tryParse(url);
-    if (uri != null && uri.host.isNotEmpty) return uri.host;
+String _sourceTitle(AppLocalizations copy, InputType type,
+    {String? subject, String? url, String? text, String? filename}) {
+  final sharedTitle = _nonBlank(subject);
+  if (type == InputType.url) {
+    if (sharedTitle != null && _webUri(sharedTitle) == null) {
+      return sharedTitle;
+    }
+    final uri = _webUri(url);
+    if (uri == null) return copy.linkType;
+    final lines = text
+        ?.split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .take(3)
+        .toList();
+    if (lines != null && lines.length == 2 && lines.contains(url)) {
+      final title = lines.firstWhere((line) => line != url, orElse: () => '');
+      if (title.isNotEmpty &&
+          title.length <= 200 &&
+          !title.contains(RegExp(r'https?://', caseSensitive: false))) {
+        return title;
+      }
+    }
+    return copy.linkFromHost(uri.host);
   }
-  final firstLine = text?.trim().split('\n').first.trim();
-  if (firstLine == null || firstLine.isEmpty) return null;
-  final prefix = firstLine.runes.take(141).toList();
-  return prefix.length > 140
-      ? '${String.fromCharCodes(prefix.take(139))}…'
-      : firstLine;
+  if (sharedTitle != null) return sharedTitle;
+  if (type != InputType.text) {
+    return _nonBlank(filename) ?? sourceName(copy, type);
+  }
+  final firstLine = _nonBlank(text)?.split('\n').first.trim();
+  return firstLine == null ? copy.noTitle : compactText(firstLine, 140);
+}
+
+Uri? _webUri(String? value) {
+  final uri = value == null ? null : Uri.tryParse(value);
+  return uri != null &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty
+      ? uri
+      : null;
+}
+
+String? _nonBlank(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
+}
+
+String compactText(String value, int maxLength) {
+  final prefix = value.runes.take(maxLength + 1).toList();
+  return prefix.length > maxLength
+      ? '${String.fromCharCodes(prefix.take(maxLength - 1))}…'
+      : value;
 }
