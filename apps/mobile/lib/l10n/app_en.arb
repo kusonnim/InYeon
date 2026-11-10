@@ -10,6 +10,7 @@
   "sampleIntro": "Explore examples with synthetic content.",
   "sampleLibraryAction": "Explore sample library",
   "mockBadge": "Mock mode",
+  "stagingBadge": "Staging mode",
   "emptyLibrary": "Nothing saved yet",
   "emptyLibraryBody": "Share a link, note, image, or PDF from another app and choose ITDA.",
   "loadLibraryError": "Could not load this library",
@@ -41,6 +42,15 @@
   "localOnlyBody": "Shares are saved on this device.",
   "signInBody": "Sign in to sync your saves and see them across devices.",
   "mockAccountBody": "Use a synthetic account for this test environment.",
+  "stagingAccountBody": "Use an approved staging account and synthetic content.",
+  "stagingApiHost": "API host {host}",
+  "@stagingApiHost": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
   "email": "Email",
   "password": "Password",
   "signInProblem": "Could not verify your email and password.",
@@ -150,6 +160,7 @@
   "saveChanges": "Save changes",
   "saveConfirmed": "Changes saved.",
   "mockSaveConfirmed": "Saved to mock server.",
+  "stagingSaveConfirmed": "Saved to staging server.",
   "mockContent": "Mock content",
   "contentUnavailable": "Could not load this content.",
   "accountLocked": "Sign in with the account that saved this content.",

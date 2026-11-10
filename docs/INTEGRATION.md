@@ -129,3 +129,63 @@ in STATUS. Full E2E completion requires actual OS and real adapter execution.
   object access. Web sync must retain content after dismissal.
 - Developers A and B agree on device registration, revocation and FCM dispatch.
   A delivery hint can trigger the authenticated refresh path.
+
+## Phase A6 staging handoff
+
+Use the [Android staging runbook](../apps/mobile/STAGING.md) and record evidence
+in [STATUS](STATUS.md#phase-a6-real-staging-evidence). Agree on a matching
+staging API, Supabase Auth project and web environment before testing. Share
+the deployment revision and schema versions with A. Provision two disposable
+email/password users and pass their credentials through the team's approved
+secret channel. Client builds take the project's publishable key.
+
+### Developer B
+
+- Verify JWT signature, issuer, audience, expiry and subject. Every resource
+  and cursor is scoped to the verified subject. Missing or invalid JWTs return
+  structured `401 unauthorized`. A foreign resource returns `404 not_found`.
+- Provide authenticated `GET/POST /v1/contents`, `GET/PATCH /v1/contents/{id}`,
+  and `GET /v1/preferences`. Before a `201` acknowledgment, atomically commit
+  the content, owned verified asset bindings, analysis job, initial
+  notification, sync event, and scoped idempotency record. Exact replay
+  returns the original response across API restarts. Changed payload under
+  the same key returns `409 idempotency_conflict`. A stale edit returns
+  `409 version_conflict` with the current version.
+- Provide private asset reservation and completion through
+  `POST /v1/assets/uploads` and `POST /v1/assets/{id}/complete`.
+  Return a short-lived HTTPS capability for the server-selected object.
+  Verify owner, bytes, hash and MIME before completion or attachment.
+  Expired unverified reservations return `409 upload_expired`. Keep
+  `413`, `415`, and `422` validation distinct from retryable `503`.
+- Persist `POST /v1/notification-events` and
+  `POST /v1/contents/{id}/notification/restore` mutations with scoped
+  idempotency. Return the current generation and revision on
+  `409 notification_conflict`. Dismissal leaves workflow unchanged.
+  Only explicit restoration increments generation, and older-generation
+  dismissal leaves that generation active. Analysis updates an existing
+  notification without changing dismissal.
+- Expose `GET /v1/sync` with durable per-owner commit ordering, replayable
+  opaque cursors, tombstones, and read-after-commit visibility. Return
+  `400 invalid_cursor` on expiry or scope mismatch. Verify catch-up during
+  keyset pagination and coordinate a way to exercise lost acknowledgment,
+  cursor and capability expiry, and deletion with synthetic staging data.
+
+### Developer C
+
+- Provide the applied migration IDs and executable pgTAP results from a
+  disposable database. Verify actual Supabase identities against owner reads,
+  anonymous denial, direct write denial and server-only relations. Confirm
+  same-owner sync sequences follow commit order under concurrency.
+- Verify the `content-assets` bucket stays private. With two real identities,
+  prove A's verified object is readable only by A, B cannot upload or
+  complete it, and anonymous access fails. Confirm clients receive only
+  the publishable key and intended short-lived capabilities.
+- Point the authenticated web library at the same staging API and project.
+  Compare both accounts' web and Android libraries after edits, dismissal,
+  deletion and reconnect. Exercise simultaneous version-checked edits.
+
+The Android notification refresh path can consume a future delivery hint.
+FCM staging acceptance requires the verified HTTP and storage path above,
+then an agreed device registration, revocation and dispatch contract between
+A and B. Provision a staging Firebase app for the isolated package and
+keep the generation and suppression checks in the existing refresh path.

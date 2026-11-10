@@ -170,9 +170,11 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
           _reviewDraft = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(item.mode == UploadMode.mock
-              ? copy.mockSaveConfirmed
-              : copy.saveConfirmed),
+          content: Text(switch (item.mode) {
+            UploadMode.mock => copy.mockSaveConfirmed,
+            UploadMode.staging => copy.stagingSaveConfirmed,
+            _ => copy.saveConfirmed,
+          }),
         ));
       });
 
@@ -309,7 +311,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     if (_editing) return _editor(copy, item, banner);
     return ContentDetails(
       content: item.content,
-      badge: item.mode == UploadMode.mock ? copy.mockContent : null,
+      badge: _environmentBadge(copy, item.mode),
       openOriginal: widget.openOriginal,
       header: [
         if (!_verified && banner == null)
@@ -326,6 +328,11 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       footer: _notificationControls(copy),
     );
   }
+
+  String? _environmentBadge(AppLocalizations copy, UploadMode mode) =>
+      mode == UploadMode.mock
+          ? copy.mockContent
+          : uploadEnvironmentLabel(copy, mode);
 
   Widget? _problem(AppLocalizations copy) {
     if (_conflict) {
@@ -383,10 +390,10 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
           AppLocalizations copy, RegisteredContent item, Widget? banner) =>
       PageList(
         children: [
-          if (item.mode == UploadMode.mock)
+          if (_environmentBadge(copy, item.mode) case final label?)
             Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: StatusPill(copy.mockContent)),
+                child: StatusPill(label)),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Text(copy.editFieldsHelp,

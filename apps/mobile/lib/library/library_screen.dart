@@ -113,6 +113,7 @@ class LibraryScreen extends StatelessWidget {
         builder: (context, _) {
           final inbox = controller.inbox;
           final mode = inbox?.mode ?? UploadMode.disabled;
+          final environment = uploadEnvironmentLabel(copy, mode);
           final entries = controller.entries;
           final issue = controller.catalogIssue;
           final offerSignIn =
@@ -138,15 +139,15 @@ class LibraryScreen extends StatelessWidget {
                           const SizedBox(height: 5),
                           Text(copy.librarySubtitle,
                               style: theme.textTheme.bodyLarge),
-                          if (mode == UploadMode.mock ||
+                          if (environment != null ||
                               controller.showingSavedCopies) ...[
                             const SizedBox(height: 12),
                             Wrap(
                               spacing: 7,
                               runSpacing: 6,
                               children: [
-                                if (mode == UploadMode.mock)
-                                  StatusPill(copy.mockBadge),
+                                if (environment != null)
+                                  StatusPill(environment),
                                 if (controller.showingSavedCopies)
                                   StatusPill(copy.savedCopies),
                               ],

@@ -87,7 +87,8 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
                 savedAt: share.receivedAt,
                 badges: [
                   StatusPill(uploadName(copy, mode, share), error: failed),
-                  if (mode == UploadMode.mock) StatusPill(copy.mockBadge),
+                  if (uploadEnvironmentLabel(copy, mode) case final label?)
+                    StatusPill(label),
                 ],
               ),
               FutureBuilder<LocalSource>(

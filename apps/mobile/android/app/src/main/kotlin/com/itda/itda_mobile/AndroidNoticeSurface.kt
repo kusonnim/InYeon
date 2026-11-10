@@ -110,7 +110,7 @@ internal class AndroidNoticeSurface(private val context: Context, private val mo
         val generation = record.state.generation
         val card = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notice)
-            .setContentTitle(if (mock) "ITDA · Mock" else context.getString(R.string.app_name))
+            .setContentTitle(if (mock) "ITDA · Mock" else context.applicationInfo.loadLabel(context.packageManager))
             .setContentText(record.content.analysis.text)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setOnlyAlertOnce(true)

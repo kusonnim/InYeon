@@ -264,12 +264,23 @@ The sample library uses the `ContentApi` fixture adapter and the synthetic
 catalog copied from `contracts/examples/catalog.json`. The signed-in library uses
 the native authenticated catalog bridge with the same content models.
 
-Android reads the following environment variables at build time. The default
-upload mode is `disabled`, which keeps sharing local. For `live`, configure
-`ITDA_API_BASE_URL` and `ITDA_SUPABASE_URL` with HTTPS URLs and set
-`ITDA_SUPABASE_PUBLISHABLE_KEY` to the project's `sb_publishable_` key.
-The build accepts publishable keys only. Configure the matching real API and
-Supabase project before live verification.
+Android reads upload destinations at build time.
+
+| `ITDA_UPLOAD_MODE` | Build settings | Destination |
+| --- | --- | --- |
+| `disabled` (default) | None | Shares stay on the device |
+| `mock` | `ITDA_API_BASE_URL`, `ITDA_SUPABASE_URL`, `ITDA_SUPABASE_PUBLISHABLE_KEY` | Debug-only loopback contract mock |
+| `staging` | `ITDA_STAGING_API_BASE_URL`, `ITDA_STAGING_SUPABASE_URL`, `ITDA_STAGING_SUPABASE_PUBLISHABLE_KEY` | Debug-only **ITDA Staging** installation with its own app storage and HTTPS API |
+| `live` | `ITDA_API_BASE_URL`, `ITDA_SUPABASE_URL`, `ITDA_SUPABASE_PUBLISHABLE_KEY` | Configured HTTPS production API |
+
+Upload-enabled builds require absolute base URLs and a Supabase `sb_publishable_`
+key. Base URLs cannot contain credentials, a query, or a fragment. Use a separate
+build shell for staging and confirm its API host in **Account** before signing
+in. Its package is `com.itda.itda_mobile.staging`. Its receipts, session and caches
+belong to that installation and the existing account and API-realm binding.
+The default build packages no endpoint values. See the
+[staging runbook](STAGING.md) for preflight, credentials handling, and verification.
+[Supabase key types](https://supabase.com/docs/guides/getting-started/api-keys)
 
 ## Loopback contract mock
 
@@ -339,4 +350,4 @@ its synthetic feed remains available.
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, durable content and sync persistence, private assets,
 and the future FCM delivery contract. See the
-[verification results](../../docs/STATUS.md#phase-a5-android-checks).
+[verification results](../../docs/STATUS.md#phase-a6-local-and-mock-evidence).

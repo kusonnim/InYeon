@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ITDA</string>
+    <string name="staging_app_name">ITDA Staging</string>
     <string name="notice_channel">Saved content</string>
     <string name="notice_edit">수정하기</string>
     <string name="share_saving">Saving to ITDA</string>

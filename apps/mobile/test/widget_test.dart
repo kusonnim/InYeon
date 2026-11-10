@@ -59,6 +59,27 @@ void main() {
     expect(find.text(first.analysis!.summary!), findsOneWidget);
   });
 
+  testWidgets('labels staging and shows its API host before sign-in',
+      (tester) async {
+    final inbox = LocalInbox.fromMessage({
+      'mode': 'staging',
+      'shares': <Object?>[],
+      'staging_api_host': 'api.staging.example.test',
+    });
+    shares
+      ..mode = inbox.mode
+      ..stagingApiHost = inbox.stagingApiHost;
+    await tester.pumpWidget(ItdaApp(api: api, shareBridge: shares));
+    await tester.pumpAndSettle();
+    expect(find.text('Staging mode'), findsOneWidget);
+    expect(find.text('Mock mode'), findsNothing);
+    await tester.tap(find.byTooltip('Account'));
+    await tester.pumpAndSettle();
+    expect(find.text('API host api.staging.example.test'), findsOneWidget);
+    expect(find.text('Use an approved staging account and synthetic content.'),
+        findsOneWidget);
+  });
+
   testWidgets(
       'reads new local shares on resume and opens the saved original offline',
       (tester) async {
@@ -356,6 +377,7 @@ class _ShareAdapter implements ShareBridge {
   final events = StreamController<void>.broadcast();
   List<LocalShare> items = [];
   UploadMode mode = UploadMode.disabled;
+  String? stagingApiHost;
   UploadAccount? account;
   UploadAccount? nextAccount;
   (String, String)? assigned;
@@ -364,8 +386,11 @@ class _ShareAdapter implements ShareBridge {
   Stream<void> get changes => events.stream;
 
   @override
-  Future<LocalInbox> listInbox() async =>
-      LocalInbox(mode: mode, account: account, shares: items);
+  Future<LocalInbox> listInbox() async => LocalInbox(
+      mode: mode,
+      account: account,
+      shares: items,
+      stagingApiHost: stagingApiHost);
 
   @override
   Future<LocalSource> readLocalSource(String localId) async {

@@ -53,6 +53,11 @@ delivers assigned shares under the matching Supabase session. Asset checkpoints
 and the acknowledged content ID are saved before advancing the local state.
 See the [outbox decision](decisions/0004-mobile-outbox-and-account-binding.md).
 
+Phase A6 uses a separate debug installation for staging. Its package, data
+directory and API realm isolate its test data. Stage and live transports
+require HTTPS and use the existing session client.
+[Android staging decision](decisions/0007-android-staging-environment.md)
+
 For images/documents, use the upload contract in OpenAPI: authenticated initiation,
 server-selected owner-prefixed object path and expiring upload capability, upload,
 then authenticated completion with server-side object verification. Only completed,

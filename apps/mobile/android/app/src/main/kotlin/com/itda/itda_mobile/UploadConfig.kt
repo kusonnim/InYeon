@@ -1,5 +1,6 @@
 package com.itda.itda_mobile
 
+import java.net.URI
 import java.security.MessageDigest
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -35,7 +36,7 @@ internal class UploadConfig private constructor(
         )
 
         fun create(mode: String, api: String, supabase: String, key: String, debug: Boolean): UploadConfig? {
-            if (mode != "live" && !(mode == "mock" && debug)) return null
+            if (mode != "live" && !(debug && mode in setOf("mock", "staging"))) return null
             if (!key.matches(Regex("sb_publishable_[A-Za-z0-9_-]+"))) return null
             val apiBase = baseUrl(api, mode) ?: return null
             val authBase = baseUrl(supabase, mode) ?: return null
@@ -43,15 +44,15 @@ internal class UploadConfig private constructor(
         }
 
         private fun baseUrl(value: String, mode: String): HttpUrl? {
-            val url = (value.trimEnd('/') + "/").toHttpUrlOrNull() ?: return null
-            return url.takeIf {
-                permits(it, mode) && it.query == null && it.fragment == null &&
-                    it.username.isEmpty() && it.password.isEmpty()
+            val uri = runCatching { URI(value) }.getOrNull() ?: return null
+            if (uri.host.isNullOrEmpty() || uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null) {
+                return null
             }
+            return (value.trimEnd('/') + "/").toHttpUrlOrNull()?.takeIf { permits(it, mode) }
         }
 
         private fun permits(url: HttpUrl, mode: String): Boolean =
-            if (mode == "live") url.isHttps else url.host in setOf("127.0.0.1", "10.0.2.2", "localhost")
+            if (mode == "mock") url.host in setOf("127.0.0.1", "10.0.2.2", "localhost") else url.isHttps
     }
 }
 

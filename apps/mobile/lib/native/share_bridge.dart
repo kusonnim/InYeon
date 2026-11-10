@@ -14,7 +14,7 @@ abstract interface class ShareBridge {
 
 typedef AccountScope = ({String ownerId, String realm});
 
-enum UploadMode { disabled, mock, live }
+enum UploadMode { disabled, mock, staging, live }
 
 enum LocalUploadState {
   pending('pending_upload'),
@@ -47,6 +47,7 @@ final class LocalInbox {
     this.account,
     required this.shares,
     this.notificationsEnabled = false,
+    this.stagingApiHost,
   });
 
   factory LocalInbox.fromMessage(Map<Object?, Object?> message) {
@@ -65,6 +66,7 @@ final class LocalInbox {
           LocalShare.fromMessage(share as Map<Object?, Object?>),
       ],
       notificationsEnabled: message['notifications_enabled'] == true,
+      stagingApiHost: message['staging_api_host'] as String?,
     );
   }
 
@@ -72,6 +74,7 @@ final class LocalInbox {
   final UploadAccount? account;
   final List<LocalShare> shares;
   final bool notificationsEnabled;
+  final String? stagingApiHost;
 }
 
 final class LocalShare {

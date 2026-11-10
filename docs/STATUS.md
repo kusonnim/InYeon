@@ -1,13 +1,12 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A5 Android library synchronization.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A6 Android staging preparation.**
 
-Android stores an account-scoped server snapshot and incremental checkpoint
-alongside the existing A1/A2 local originals and A3 notification records.
-The unified library supports offline restarts and safe full rebuilds after
-cursor expiry. Android verification uses synthetic Supabase sessions and an
-OpenAPI mock. Live authorization, persistence, private storage, web sync, and
-FCM delivery remain integration work.
+Android has a separate HTTPS-only staging installation with explicit API and
+Supabase configuration. The local originals, upload outbox, notification state
+and library checkpoints retain their account and realm scope. The checked-in
+backend and database evidence supports local mock verification. Authenticated
+staging, private storage, RLS, web consistency, and FCM remain integration work.
 
 ## Delivered foundation
 
@@ -19,10 +18,10 @@ FCM delivery remain integration work.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables including all nine required tables, RLS, private bucket, notification/sync helper functions, pgTAP suite | Live migration execution and adapter wiring |
 | Web | Next.js library/detail, Tailwind/local shadcn-style primitive, shared types, HTTP abstraction, fixture rendering | Login, real editing, pagination UI, persistent sync, production UI |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync | Two-account live API/RLS verification, private attachment preview, FCM delivery |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build | Two-account live API/RLS verification, private attachment preview, FCM delivery |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
-Phase A5 starts from the merged Phase A4 implementation in main at `86ee764` (PR #4).
+Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
 
 ## Verification evidence
 
@@ -142,6 +141,49 @@ The staged bootstrap restarts after interruption. The incremental worker
 resumes at the last durable page. An offline server-only view requires a
 previously synchronized snapshot for the installed account and API realm.
 Android checks used emulators. Physical-device and staging checks are pending.
+
+### Phase A6 local and mock evidence
+
+Local checks used Flutter 3.47.8, Dart 3.13.7, JDK 21 and a disposable
+Android 15 / API 35 x86_64 emulator. The reviewed contract is ITDA API 0.1.0
+(OpenAPI 3.1.0). The reviewed SQL migrations are `202611090001` and
+`202611090002`.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependencies, localization, fixture parity, static analysis and all 20 tests passed. The new check verifies the staging label and destination shown before sign-in |
+| Android instrumentation and lint | All 41 tests passed, including 37 A1–A5 regressions and four A6 checks for config, realm binding, network policy and redirect isolation. The first run hit an unready emulator MediaStore volume. The full rerun passed after the provider responded. Default debug lint reported zero errors and eight warnings, including two resources used by alternate build modes |
+| Build validation | Seven negative Gradle checks rejected incomplete and mixed settings, HTTP, embedded URL credentials and query, a privileged key prefix, and staging release/profile tasks. Rejected settings were omitted from validation messages |
+| Staging APK with example endpoints | Installed alongside the regular APK. All three staging configuration and policy checks passed. Android registered both share targets. A synthetic receipt sent to ITDA Staging was visible only in that package. The signed-out account screen showed the configured example API host |
+| Installed loopback mock APK | Synthetic account A bootstrapped five catalog items alongside three redacted receipts from a prior realm. An offline text share persisted locally. Reconnection produced HTTP `201`, a durable server ID, and one merged library card. After switching to synthetic account B, A's catalog and original text were hidden. The staging receipt remained in its own package |
+| Backend audit | All 13 existing Python contract and fixture tests passed locally, with one Starlette/AnyIO deprecation warning. The health route and fixture adapters execute. The production scaffold still reports unconfigured persistence |
+| Preflight diagnostics | Local TestClient probes rejected fixture mode and observed production scaffold `401` for a missing token and `501` for a synthetic invalid token. A valid synthetic reservation request to the fixture API also returned `501`. The preflight rejected missing mode and cleartext before network and suppressed raw response fields and token material |
+
+### Phase A6 real staging evidence
+
+Live staging and physical-device checks remain pending. The latest merged code
+and fetched branches contain no newer B/C adapter changes. An approved staging
+API/Auth/web tuple and two disposable Supabase accounts were unavailable. The
+deployed API revision and applied database schema versions remain unverified.
+
+| Dependency | Classification | Repository and execution evidence |
+| --- | --- | --- |
+| Supabase Auth with two real accounts | Blocked by infrastructure or credentials | Android exercises password and refresh with synthetic sessions. No approved Auth project or real test credentials were available |
+| FastAPI JWT verification | Missing | `current_user` only recognizes fixture tokens. Non-fixture bearer requests return `501 adapter_not_implemented` |
+| Owner-scoped persistent content and preferences | Missing | The fixture repository is executable and volatile. Production has no data adapter |
+| Private asset reservation and verification | Missing | Reservation, completion and download routes return structured `501`. The separate Android mock exercises the upload flow with synthetic files |
+| Durable idempotency records | Missing API adapter, schema implemented but unverified | The migration defines the table. Backend fixture replays are in memory. No durable transaction or cross-process replay was observed |
+| Notification dismissal and restoration | Implemented and executable in fixture, missing live adapter | Fixture tests execute the transitions. SQL transition functions are authored and unverified on a deployed database |
+| Commit-ordered incremental sync | Sequence allocation implemented but unverified, live feed missing | SQL serializes owner allocation. The executable fixture feed loses its cursor and events after process restart |
+| PostgreSQL RLS and private object access | Implemented but unverified | Policies and 33 pgTAP assertions are authored. Local Docker engine was unavailable and Supabase CLI and psql were absent. Two real Supabase identities and private object checks are pending |
+| Web and Android library convergence | Blocked by the live adapters and web session integration | The checked-in web client uses fixtures by default. No real two-account consistency run was possible |
+
+The [staging runbook](../apps/mobile/STAGING.md) gives the executable build and
+preflight procedure and the two-account test matrix. The
+[B/C handoff](INTEGRATION.md#phase-a6-staging-handoff) lists the required server,
+database and web evidence. The Android notification refresh path is ready to
+evaluate delivery hints after live verification and agreement on registration,
+revocation and dispatch.
 
 ## Next concrete tasks
 

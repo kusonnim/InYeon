@@ -167,6 +167,13 @@ String recommendationName(AppLocalizations copy, RecommendationKind kind) =>
       RecommendationKind.resource => copy.resourceKind,
     };
 
+String? uploadEnvironmentLabel(AppLocalizations copy, UploadMode mode) =>
+    switch (mode) {
+      UploadMode.mock => copy.mockBadge,
+      UploadMode.staging => copy.stagingBadge,
+      _ => null,
+    };
+
 String uploadName(AppLocalizations copy, UploadMode mode, LocalShare share) {
   if (mode == UploadMode.disabled) return copy.localSaved;
   return switch (share.uploadState) {
