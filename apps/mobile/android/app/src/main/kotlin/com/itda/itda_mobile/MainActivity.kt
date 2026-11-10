@@ -73,14 +73,23 @@ class MainActivity : FlutterActivity() {
         ).apply {
             setMethodCallHandler { call, result ->
                 val executor = when (call.method) {
-                    "listCatalog", "noticeDetails", "editNoticeContent" -> contentIo
+                    "noticeDetails", "editNoticeContent" -> contentIo
+                    "readLibrary" -> cacheIo
                     else -> shareIo
                 }
                 executor.execute {
                     try {
                         when (call.method) {
                             "listLocalInbox" -> result.success(outbox.listInbox())
-                            "listCatalog" -> result.success(outbox.listCatalog(call.uploadOwner(), call.argument("cursor")))
+                            "readLibrary" -> {
+                                val limit = requireNotNull(call.argument<Number>("limit")).toInt()
+                                val ids = call.argument<List<String>>("acknowledged")?.mapTo(mutableSetOf(), ::parseUuid)
+                                result.success(outbox.readLibrary(call.uploadOwner(), limit, ids.orEmpty()))
+                            }
+                            "syncLibrary" -> {
+                                outbox.requestLibrarySync(call.uploadOwner())
+                                result.success(null)
+                            }
                             "readLocalSource" -> result.success(outbox.readLocalSource(
                                 parseUuid(requireNotNull(call.argument("local_id"))),
                             ))
@@ -109,7 +118,10 @@ class MainActivity : FlutterActivity() {
                                 for (field in listOf("title", "user_note")) {
                                     if (call.hasArgument(field)) patch.put(field, call.argument<String>(field) ?: JSONObject.NULL)
                                 }
-                                result.success(outbox.notices.edit(call.noticeRef(), patch))
+                                val ref = call.noticeRef()
+                                val updated = outbox.notices.edit(ref, patch)
+                                outbox.library?.request(ref.owner)
+                                result.success(updated)
                             }
                             "restoreNotice" -> {
                                 outbox.notices.restore(call.noticeRef())
@@ -225,7 +237,9 @@ class MainActivity : FlutterActivity() {
         val context = applicationContext
         shareIo.execute {
             try {
-                AndroidOutbox.get(context).notices.refreshRegistered()
+                val outbox = AndroidOutbox.get(context)
+                outbox.notices.refreshRegistered()
+                outbox.library?.requestCurrent()
             } catch (_: Exception) {
                 // Saved receipts can be recovered on a later refresh.
             }
@@ -237,5 +251,6 @@ class MainActivity : FlutterActivity() {
         const val NOTICE_PERMISSION_REQUEST = 301
         val authIo = Executors.newSingleThreadExecutor()
         val contentIo = Executors.newFixedThreadPool(2)
+        val cacheIo = Executors.newSingleThreadExecutor()
     }
 }

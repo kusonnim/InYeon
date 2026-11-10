@@ -60,7 +60,12 @@ class MockUploadServer(ThreadingHTTPServer):
         self.refresh_tokens = {}
         self.assets = {}
         self.contents = {}
+        self.preferences = {}
         self.cursors = {}
+        self.feed = {}
+        self.feed_tokens = {}
+        self.feed_offsets = {}
+        self.hold_reads = set()
         self.receipts = {}
         self.expire_next_capability = args.expire_first_capability
         self.hold_text = args.hold_source_text
@@ -73,6 +78,7 @@ class MockUploadServer(ThreadingHTTPServer):
             for name in (
                 "ContentCreate", "Content", "ContentPage", "ContentPatch", "AssetUploadCreate", "AssetUpload",
                 "AssetComplete", "NotificationEvent", "NotificationRestore", "NotificationResult", "ErrorResponse",
+                "Preferences", "PreferencesPatch", "SyncPage",
             )
         }
         catalog = json.loads((OPENAPI.parent / "examples" / "catalog.json").read_text(encoding="utf-8"))
@@ -85,6 +91,23 @@ class MockUploadServer(ThreadingHTTPServer):
                 item = {**deepcopy(fixture), "user_id": USERS["a@example.test"]}
                 self.validators["Content"].validate(item)
                 self.contents[item["id"]] = item
+                self.emit(item["user_id"], "content", item["id"], item["id"])
+
+    def emit(self, owner, entity_type, entity_id, content_id=None, operation="upsert"):
+        events = self.feed.setdefault(owner, [])
+        events.append({
+            "sequence": str(9007199254740992 + len(events) + 1),
+            "entity_type": entity_type, "entity_id": entity_id, "content_id": content_id,
+            "operation": operation, "occurred_at": utc(time.time()),
+        })
+
+    def sync_token(self, owner, offset):
+        tokens = self.feed_tokens.setdefault(owner, {})
+        if offset not in tokens:
+            token = str(uuid4())
+            tokens[offset] = token
+            self.feed_offsets.setdefault(owner, {})[token] = offset
+        return tokens[offset]
 
     def handle_error(self, _request, _client_address):
         print("Mock request failed validation or connection handling.", flush=True)
@@ -147,6 +170,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path.path.startswith("/mock/analysis/"):
                 status, value = self.mock_analysis(path.path.removeprefix("/mock/analysis/"), body)
                 hold = False
+            elif path.path == "/mock/sync":
+                status, value = self.mock_sync(body)
+                hold = False
             else:
                 status, value, hold = self.api(path.path, body)
         if hold:
@@ -156,11 +182,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path)
+        query = parse_qs(path.query, keep_blank_values=True)
         with self.server.lock:
             if path.path == "/v1/contents":
-                status, value = self.list_contents(parse_qs(path.query, keep_blank_values=True))
+                status, value = self.list_contents(query)
+            elif path.path == "/v1/sync":
+                status, value = self.sync_changes(query)
+            elif path.path == "/v1/preferences":
+                status, value = self.preferences_request()
             else:
                 status, value = self.content_request(path.path)
+            holder = (self.current_owner(), path.path)
+            held = holder in self.server.hold_reads and status == 200
+            if held:
+                self.server.hold_reads.remove(holder)
+        if held:
+            label = "catalog page" if path.path == "/v1/contents" else "content read"
+            print(f"Mock {label} held after capturing its response.", flush=True)
+            time.sleep(20)
         self.respond(status, value)
 
     def do_PATCH(self):
@@ -169,11 +208,14 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self.respond(*error(422, "validation_error"))
             return
-        if not self.server.validators["ContentPatch"].is_valid(body):
+        path = urlsplit(self.path).path
+        preferences = path == "/v1/preferences"
+        schema = "PreferencesPatch" if preferences else "ContentPatch"
+        if not self.server.validators[schema].is_valid(body):
             self.respond(*error(422, "validation_error"))
             return
         with self.server.lock:
-            status, value = self.content_request(urlsplit(self.path).path, body)
+            status, value = self.preferences_request(body) if preferences else self.content_request(path, body)
         self.respond(status, value)
 
     def current_owner(self):
@@ -184,6 +226,77 @@ class Handler(BaseHTTPRequestHandler):
     def owned(self, owner, identifier):
         item = self.server.contents.get(identifier)
         return item if item is not None and item["user_id"] == owner else None
+
+    def sync_changes(self, query):
+        owner = self.current_owner()
+        if owner is None:
+            return error(401, "unauthorized")
+        try:
+            limit = int(query.get("limit", ["20"])[0])
+        except ValueError:
+            return error(422, "validation_error")
+        if not 1 <= limit <= 100:
+            return error(422, "validation_error")
+        limit = min(limit, getattr(self.server.args, "sync_page_size", 100))
+        cursor = query.get("cursor", [None])[0]
+        offset = 0 if cursor is None else self.server.feed_offsets.get(owner, {}).get(cursor)
+        if offset is None:
+            return error(400, "invalid_cursor")
+        events = self.server.feed.get(owner, [])
+        replay = getattr(self.server.args, "replay_sync_prefix", False)
+        prefix = events[offset - 1:offset] if replay and offset and limit > 1 else []
+        new = events[offset:offset + limit - len(prefix)]
+        end = offset + len(new)
+        visible = prefix + new
+        if replay and new and len(visible) < limit:
+            visible.append(new[-1])
+        page = {
+            "events": deepcopy(visible), "next_cursor": self.server.sync_token(owner, end),
+            "has_more": end < len(events),
+        }
+        self.server.validators["SyncPage"].validate(page)
+        return 200, page
+
+    def preferences_request(self, patch=None):
+        owner = self.current_owner()
+        if owner is None:
+            return error(401, "unauthorized")
+        stamp = utc(time.time())
+        value = self.server.preferences.setdefault(owner, {
+            "user_id": owner, "interests": [], "explicit_preferences": [], "mbti": None,
+            "version": 1, "created_at": stamp, "updated_at": stamp,
+        })
+        if patch is not None:
+            if patch["expected_version"] != value["version"]:
+                return error(409, "version_conflict", current_version=value["version"])
+            value.update({key: val for key, val in patch.items() if key != "expected_version"})
+            value.update(version=value["version"] + 1, updated_at=stamp)
+            self.server.emit(owner, "preferences", owner)
+        self.server.validators["Preferences"].validate(value)
+        return 200, deepcopy(value)
+
+    def mock_sync(self, body):
+        owner = self.current_owner()
+        if owner is None:
+            return error(401, "unauthorized")
+        action = body.get("action") if isinstance(body, dict) else None
+        if action == "expire_cursor":
+            self.server.feed_tokens.pop(owner, None)
+            self.server.feed_offsets.pop(owner, None)
+        elif action == "hold_next_catalog":
+            self.server.hold_reads.add((owner, "/v1/contents"))
+        elif action in ("hold_next_content", "delete_content"):
+            identifier = body.get("content_id")
+            if not isinstance(identifier, str) or self.owned(owner, identifier) is None:
+                return error(404, "not_found")
+            if action == "hold_next_content":
+                self.server.hold_reads.add((owner, f"/v1/contents/{identifier}"))
+            else:
+                del self.server.contents[identifier]
+                self.server.emit(owner, "content", identifier, identifier, "delete")
+        else:
+            return error(422, "validation_error")
+        return 200, {"ok": True}
 
     def list_contents(self, query):
         owner = self.current_owner()
@@ -230,6 +343,7 @@ class Handler(BaseHTTPRequestHandler):
                 if key in patch:
                     value[key] = patch[key]
             value.update(version=value["version"] + 1, updated_at=utc(time.time()))
+            self.server.emit(owner, "content", value["id"], value["id"])
         self.server.validators["Content"].validate(value)
         return 200, deepcopy(value)
 
@@ -253,6 +367,8 @@ class Handler(BaseHTTPRequestHandler):
             state = value["notification"]
             if state["visibility"] == "active":
                 state.update(revision=state["revision"] + 1, updated_at=timestamp)
+                self.server.emit(owner, "notification", identifier, identifier)
+            self.server.emit(owner, "content", identifier, identifier)
         self.server.validators["Content"].validate(value)
         return 200, deepcopy(value)
 
@@ -331,6 +447,7 @@ class Handler(BaseHTTPRequestHandler):
             reason = "applied"
             state.update(visibility=target, generation=generation + int(restore_id is not None),
                          revision=state["revision"] + 1, updated_at=utc(time.time()))
+            self.server.emit(owner, "notification", item["id"], item["id"])
         value = {"state": deepcopy(state), "applied": reason == "applied", "reason": reason}
         self.server.validators["NotificationResult"].validate(value)
         return 200, value
@@ -428,6 +545,7 @@ class Handler(BaseHTTPRequestHandler):
         for asset in assets:
             asset["attached"] = True
         server.contents[identifier] = deepcopy(value)
+        server.emit(owner, "content", identifier, identifier)
         return 201, value
 
 
@@ -438,6 +556,8 @@ if __name__ == "__main__":
     parser.add_argument("--expire-first-capability", action="store_true")
     parser.add_argument("--hold-source-text", help="Synthetic text for the lost-acknowledgment test")
     parser.add_argument("--seed-catalog", action="store_true", help="Add synthetic catalog items to account A")
+    parser.add_argument("--sync-page-size", type=int, choices=range(1, 101), default=100, metavar="1..100")
+    parser.add_argument("--replay-sync-prefix", action="store_true", help="Include duplicate sync events in test pages")
     with MockUploadServer(parser.parse_args()) as server:
         print(f"ITDA mock upload server listening on loopback port {server.server_port}", flush=True)
         server.serve_forever()

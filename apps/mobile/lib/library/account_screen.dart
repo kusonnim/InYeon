@@ -66,7 +66,7 @@ class _AccountScreenState extends State<AccountScreen> {
       if (mounted) {
         _password.clear();
         setState(() => _busy = false);
-        unawaited(widget.controller.reload(refreshCatalog: true));
+        unawaited(widget.controller.reload());
       }
     }
   }

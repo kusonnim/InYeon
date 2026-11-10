@@ -59,7 +59,7 @@ void main() {
   });
 
   testWidgets(
-      'a conflict keeps the draft and preserves an untouched server note',
+      'a sync update and conflict keep the draft and preserve a server note',
       (tester) async {
     adapter.navigation =
         NoticeNavigation(adapter.target, NoticeDestination.edit);
@@ -69,10 +69,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'My title draft');
     await tester.pump();
-    await _showControl(tester, 'Save changes');
-    await tester.tap(find.text('Save changes').hitTestable());
-    await tester.pumpAndSettle();
-    expect(adapter.patch!.expectedVersion, originalVersion);
 
     final catalog =
         jsonDecode(File('assets/fixtures/catalog.json').readAsStringSync())
@@ -83,6 +79,16 @@ void main() {
       'user_note': 'A newer server note',
       'version': originalVersion + 1,
     });
+    adapter.events.add(null);
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'My title draft');
+    await _showControl(tester, 'Save changes');
+    await tester.tap(find.text('Save changes').hitTestable());
+    await tester.pumpAndSettle();
+    expect(adapter.patch!.expectedVersion, originalVersion);
+
     adapter.editError = null;
     await _showControl(tester, 'Load latest version', delta: -180);
     await tester.tap(find.text('Load latest version').hitTestable());

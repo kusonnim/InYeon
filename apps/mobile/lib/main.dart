@@ -55,9 +55,8 @@ class _ItdaAppState extends State<ItdaApp> {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(
-        onResume: () => _library.reload(refreshCatalog: true));
-    unawaited(_library.reload(refreshCatalog: true));
+    _lifecycle = AppLifecycleListener(onResume: _library.reload);
+    unawaited(_library.reload());
     final bridge = widget.notificationBridge;
     if (bridge == null) return;
     _noticeChanges = bridge.changes.listen(

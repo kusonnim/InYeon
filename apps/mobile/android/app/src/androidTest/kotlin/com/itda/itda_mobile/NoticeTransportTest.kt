@@ -182,7 +182,7 @@ class NoticeTransportTest {
         val catalog = CatalogApi(AuthenticatedApi(config, sessions, UploadHttp()))
         val cursor = "opaque/+?&= page"
         enqueue(200, page(content(dismissed = true)))
-        val response = JSONObject(catalog.list(ref.owner, cursor))
+        val response = catalog.list(ref.owner, cursor)
         assertEquals(1, response.getJSONArray("items").length())
         val request = take("GET", "/v1/contents")
         assertEquals(cursor, request.url.queryParameter("cursor"))

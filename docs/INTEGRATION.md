@@ -46,11 +46,11 @@ pagination limits and cursor rules. Do not construct cursors or storage paths in
 4. **Analysis milestone:** B implements bounded extraction and provider adapters,
    validates generated output, claims leased PostgreSQL jobs, and atomically saves
    results plus sync events. Simulate partial extraction and provider failure first.
-5. **Notification/sync milestone:** Phase A3 persists Android dismissals, uses
-   versioned restore, and refreshes authoritative content through the existing
-   GET endpoint. B and A agree on device registration and dispatch. C integrates
-   cursor sync and editing conflicts. Run delayed and duplicate FCM tests once
-   the delivery adapter is available.
+5. **Notification/sync milestone:** Android persists dismissals, uses versioned
+   restore and edits, and refreshes authoritative content. Phase A5 persists the
+   library and consumes the existing sync feed with cursor expiry recovery. C
+   integrates cursor sync and editing conflicts. B and A agree on device
+   registration and dispatch, then exercise delayed and duplicate FCM delivery.
 6. **Deployment milestone:** real authorization/storage/worker/OS evidence, separate
    staging secrets, operational retry/retention policies, and repository protections
    precede Railway/Vercel deployment. No production deployment is part of Phase 0.
@@ -68,7 +68,7 @@ add temporary privileged credentials to clients to bypass missing server work.
 | Job -> extraction -> summary/recommendations | Worker stages and coverage fixtures | Job claims/leases, real extraction, hosted model |
 | AI result -> persistence | Distinct source/generated/edit fields and failure tests | Transactional guarded writes and retry recovery |
 | Result -> notification update | Android presentation and local suppression, contract mock refresh and mutations | Owner-scoped live detail/edit and notification transactions, device registration, durable dispatch and FCM |
-| Persisted content -> mobile and web libraries | Android reads and merges owner-scoped catalog pages against the contract mock. Backend sync endpoint/model and SQL sequence helper exist | Live authenticated catalog reads, incremental sync, reconnect/full resync |
+| Persisted content -> mobile and web libraries | Android persists owner-scoped snapshots and page checkpoints against the contract mock. Backend sync models and SQL sequence allocation exist | Live authenticated catalog and feed adapters, two-account bootstrap/expiry/reconnect, web synchronization |
 
 This review establishes architectural feasibility, not a running Android-to-web
 system. Executed local evidence is listed in STATUS and must not be inferred from
@@ -97,9 +97,11 @@ web browser. Keep credentials out of recorded evidence.
    Verify restored generation remains active and replayed restore is a no-op.
 7. Edit the same version on mobile and web. One succeeds, the other gets 409; refetch
    and deliberately resolve. No source or generated text is overwritten by user edits.
-8. Poll paginated sync while concurrent writes commit. Confirm all changes arrive,
-   duplicates are harmless, and cursor storage occurs only after local application.
-   Exercise expired cursor/full resync once retention is implemented.
+8. Start a full sync and insert an item newer than the first catalog page after
+   that page is read. Verify catch-up includes it. Repeat with edits and deletes,
+   disconnect, stop the client process during an incremental page, and expire
+   the cursor. Verify offline copies, atomic recovery and replay without
+   duplicates. Compare each owner's Android and web views after reconnection.
 9. As user B, request user A's content/recommendation/asset and attempt direct table
    writes. Assert API denial, RLS isolation, no private download, and no service key
    in either bundle. Exercise uncompleted/wrong-owner assets and expired capabilities.
@@ -111,14 +113,19 @@ in STATUS. Full E2E completion requires actual OS and real adapter execution.
 
 ## Android live dependencies
 
-- Developer B supplies Supabase JWT verification and owner-scoped durable
-  `GET /v1/contents`, `GET/PATCH /v1/contents/{id}`, `POST /v1/notification-events`, and
-  `POST /v1/contents/{id}/notification/restore`. Mutations need the documented
-  conflict fields and idempotency semantics across process restarts. Live share
-  registration and private assets also depend on the A2 server adapters.
-- Developer C applies the existing migrations on disposable Supabase and
-  verifies notification visibility, owner isolation, RLS, and private object
-  access using two identities. Web sync must retain content after dismissal.
+- Developer B supplies verified Supabase JWT authentication and durable,
+  owner-scoped content, preferences, private asset and notification adapters.
+  Mutations must commit their related events and idempotency receipts with the
+  underlying state. Content edits need the documented conflict response.
+- Developer B exposes the persistent `GET /v1/sync` stream in per-owner commit
+  order. A cursorless request starts at retained history and returns a usable
+  checkpoint even for an empty account. New events continue strictly after the
+  cursor's boundary. Expired or wrong-scope cursors produce `invalid_cursor`.
+  Reads of changed resources must observe commits visible in the feed. Stable
+  catalog ordering and feed catch-up must cover writes during full bootstrap.
+- Developer C applies the migrations on disposable Supabase and verifies the
+  owner sequence and event writes under concurrent commits. Two real identities
+  must verify RLS, notification visibility, account-scoped cursors and private
+  object access. Web sync must retain content after dismissal.
 - Developers A and B agree on device registration, revocation and FCM dispatch.
-  A delivery hint should trigger the current authenticated content read.
-  Phase A3 refreshes after registration, on app resume, or on user request.
+  A delivery hint can trigger the authenticated refresh path.
