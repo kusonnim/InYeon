@@ -1,9 +1,11 @@
-import type { ApiErrorBody, Content, ContentPage, ContentPatch } from "./types.ts";
+import type { ApiErrorBody, Content, ContentPage, ContentPatch, Recommendation, RecommendationPatch, SyncPage } from "./types.ts";
 
 export interface ContentApi {
   listContents(cursor?: string): Promise<ContentPage>;
   getContent(id: string): Promise<Content>;
   updateContent(id: string, patch: ContentPatch): Promise<Content>;
+  updateRecommendation(id: string, patch: RecommendationPatch): Promise<Recommendation>;
+  syncChanges(cursor?: string): Promise<SyncPage>;
 }
 export class ApiError extends Error {
   readonly status: number;
@@ -28,6 +30,7 @@ export class HttpContentApi implements ContentApi {
     if (!token) throw new Error("An authenticated user session is required.");
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
+      signal: AbortSignal.timeout(30_000),
       cache: "no-store",
       headers: { ...init?.headers, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     });
@@ -42,5 +45,13 @@ export class HttpContentApi implements ContentApi {
   }
   updateContent(id: string, patch: ContentPatch): Promise<Content> {
     return this.request(`/v1/contents/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+  updateRecommendation(id: string, patch: RecommendationPatch): Promise<Recommendation> {
+    return this.request(`/v1/recommendations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+  syncChanges(cursor?: string): Promise<SyncPage> {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) params.set("cursor", cursor);
+    return this.request(`/v1/sync?${params}`);
   }
 }
