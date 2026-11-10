@@ -52,6 +52,7 @@ final class NoticeStatus {
     this.canRestore = false,
     this.pending,
     this.error,
+    this.known = true,
   });
 
   factory NoticeStatus.fromMessage(Map<Object?, Object?>? message) =>
@@ -60,12 +61,14 @@ final class NoticeStatus {
         canRestore: message?['can_restore'] == true,
         pending: message?['pending'] as String?,
         error: message?['error'] as String?,
+        known: message?.containsKey('dismissed') == true,
       );
 
   final bool dismissed;
   final bool canRestore;
   final String? pending;
   final String? error;
+  final bool known;
 }
 
 final class RegisteredContent {

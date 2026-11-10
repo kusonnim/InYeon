@@ -1,8 +1,9 @@
 # ITDA mobile — Developer A
 
-The Flutter app displays the synthetic catalog and shares saved on this Android
-device. The native outbox delivers assigned shares to a configured API and the
-notification controller presents acknowledged items.
+ITDA opens to a private library of saved items. On Android, the library combines
+originals on this device with the signed-in account's server catalog. The native
+outbox delivers assigned shares, and Android notifications present acknowledged
+items. A separate sample library uses synthetic fixtures.
 Read the root [AGENTS.md](../../AGENTS.md), [product contract](../../docs/PRODUCT.md),
 and [OpenAPI](../../contracts/openapi.yaml) before changing behavior.
 
@@ -15,6 +16,7 @@ Android emulator or device.
 
 ~~~sh
 flutter pub get --enforce-lockfile
+flutter gen-l10n
 dart run tool/sync_fixtures.dart --check
 flutter analyze
 flutter test
@@ -34,6 +36,38 @@ file copying and hashing, interrupted receipt writes, the HTTP upload protocol,
 and Android notification state, actions, and authenticated retries. Use a
 disposable installation for instrumentation.
 
+## Library and details
+
+The library reads an authenticated page on launch, resume, and refresh. A new
+upload acknowledgment also refreshes the list. **Load more** uses the server
+cursor. A receipt and server item with the same acknowledged ID share one card.
+Dismissed and archived items remain accessible. **Sample library** is available
+from **Account** and from an empty device-only library.
+
+Cards show the saved title or a source-derived label, the source type, and any
+available summary and recommendation preview. A device-only item shows its
+upload state. Details separate the original source, AI summary and coverage,
+information, action and resource recommendations, and personal notes. A pending
+item can open its local original while offline. File details show the stored
+name or a private attachment label. File preview and download are future work.
+
+Loaded catalog pages stay in memory during a connection error.
+Account changes clear it, and offline launches can show durable device receipts.
+Server-only items need a successful load in the current app session. The mobile
+client uses the existing owner-scoped list and detail APIs. Incremental sync
+remains integration work.
+
+**Edit** updates only the fields the user changed. A version conflict keeps the
+draft and offers to load the latest version. Untouched fields adopt the latest
+server values. The editor displays the competing saved value for each changed
+field before the user saves again. Existing recommendations are available for
+review in the editor.
+
+The app follows Android's light and dark setting. Flutter interface strings
+are in `lib/l10n/app_en.arb`; generated Dart files stay local. The Android
+notification action keeps its existing label **수정하기**.
+[Flutter localization guide](https://docs.flutter.dev/ui/internationalization)
+
 ## Android share receipt
 
 Choose **ITDA** in the Android share sheet for plain text, an HTTP(S) URL, one
@@ -51,9 +85,8 @@ provider's reported MIME type when available. The local limit for text is 100,00
 characters to match content creation. Source metadata can include subject, sender
 package, declared MIME type, provider authority and display filename.
 
-Open ITDA to see **Saved on this device** and each upload state. The section
-refreshes on app resume and on native state changes. The separate **Sample
-library** keeps the synthetic fixture list and details.
+Open ITDA to see the new item in **Library**. The list refreshes on app resume
+and on native receipt or upload changes.
 
 ## Inbox and outbox
 
@@ -93,25 +126,26 @@ acknowledgment checks.
 
 ## Upload account and state
 
-Use **Sign in** with a pre-existing Supabase email/password account. The
-native client stores the access and refresh tokens in an Android Keystore
+Open **Account** and use **Sign in** with a pre-existing Supabase email/password
+account. The native client stores the access and refresh tokens in an Android Keystore
 encrypted vault. It refreshes the session when the token is about to expire
 or when an API request returns 401. Account sign-out clears the device session.
 Tokens stay in native code and the app only exposes account labels to Flutter.
 [Supabase session behavior](https://supabase.com/docs/guides/auth/sessions)
 
 New shares are assigned to the active user and API destination when saved.
-For A1 shares and shares received while signed out, select **Upload** and
-confirm the displayed account for each item. Assigned receipts keep that user
-and destination across account changes. Another account sees a redacted row.
+For A1 shares and shares received while signed out, open the item and select
+**Choose account**. Confirm the displayed account for each item. Assigned
+receipts keep that user and destination across account changes. Another
+account sees a redacted card.
 
 | State | Behavior |
 | --- | --- |
-| Pending upload | An assigned item is queued for a connected network |
-| Uploading | A worker is submitting or resuming the item |
+| Waiting to sync | An assigned item is queued for a connected network |
+| Syncing | A worker is submitting or resuming the item |
 | Waiting to retry | A temporary network, server, or local storage error delayed the attempt |
-| Authentication required | The item needs assignment or a valid session for its original account |
-| Synchronized | The matching server content ID was durably saved after a valid 201 acknowledgment |
+| Sign-in required / Choose an account | The item needs a session for its original account or explicit assignment |
+| Synced | The matching server content ID was durably saved after a valid 201 acknowledgment, or the item was read from the authenticated catalog |
 | Upload failed | A permanent error ended automatic retries and kept the original |
 
 WorkManager persists unique per-receipt work with a connected-network constraint.
@@ -132,7 +166,7 @@ The app retains local originals after synchronization.
 
 ## Android notifications
 
-Sign in and select **Enable notifications** to grant Android 13+ permission.
+Sign in and select **Enable notifications** in **Account** to grant Android 13+ permission.
 The same control opens notification settings when the system prompt is unavailable
 or the **Saved content** channel is blocked. Permission denial leaves the library
 and upload outbox accessible.
@@ -142,7 +176,7 @@ After upload acknowledgment is persisted, a worker reads the current content fro
 the API and posts one card for its active notification generation. New local
 shares need a server content ID before they can post. Analysis updates change an
 existing card in place and without another alert. The controller reads state on
-registration, app launch or resume, and **Refresh analysis**. In-app details
+registration, app launch or resume, and **Refresh library**. In-app details
 also offer a refresh. Notification text reports the current analysis status.
 Source text and private links stay out of the notification.
 
@@ -163,12 +197,14 @@ needed. WorkManager uses the A2 session, a connected network, unique per-content
 work and exponential backoff. The original account resumes its queued events
 after signing back in.
 
-Open the registered item in **Saved on this device** and select
+Open an eligible item in **Library** and select
 **Restore notification** after dismissal has synchronized. A queued restore
 leaves the card hidden until the server confirms the current state. A version
 conflict refreshes state. A dismissal may retry at the new revision of the same
 generation with a new key. A conflicting restoration requires a fresh tap.
-Older-generation dismissals cannot suppress the restored card.
+Older-generation dismissals cannot suppress the restored card. Eligibility
+comes from an acknowledged receipt on this device. Catalog-only items can show
+their server visibility in details.
 
 Signing out or switching accounts hides the previous account's Android cards
 without sending dismissal events. Android cards already issued for a generation
@@ -179,9 +215,9 @@ This presentation policy prioritizes durable suppression. See the
 
 ## Configure an upload destination
 
-`ContentApi` is the replaceable catalog interface. The default `ITDA_DATA_MODE` is
-`fixture` and uses the synthetic catalog copied from `contracts/examples/catalog.json`.
-Catalog mode is independent of native upload configuration.
+The sample library uses the `ContentApi` fixture adapter and the synthetic
+catalog copied from `contracts/examples/catalog.json`. The signed-in library uses
+the native authenticated catalog bridge with the same content models.
 
 Android reads the following environment variables at build time. The default
 upload mode is `disabled`, which keeps sharing local. For `live`, configure
@@ -197,7 +233,7 @@ Run the mock from the repository root with Python and the `PyYAML` and
 responses against OpenAPI. It uses synthetic users and in-memory state.
 
 ```sh
-python apps/mobile/tool/mock_upload_server.py --expire-first-capability --hold-source-text A2_PROCESS_KILL
+python apps/mobile/tool/mock_upload_server.py --seed-catalog
 ```
 
 In a second shell, export the Android build variables below and run the app
@@ -214,8 +250,11 @@ flutter run -d <android-device-id>
 
 Sign in with `a@example.test` or `b@example.test` and `itda-test-only`.
 Mock mode is debug-only and restricts URLs to loopback or the Android emulator
-host alias. Acknowledged mock items display **Synchronized (mock)**.
-For the lost-acknowledgment check, send the synthetic text `A2_PROCESS_KILL` and
+host alias. **Mock mode** labels the library and account. **Mock content**
+labels registered details and edits. The optional seed adds synthetic
+catalog-only items to account A. Account B starts with an empty catalog.
+For the lost-acknowledgment check, add the options
+`--expire-first-capability --hold-source-text A2_PROCESS_KILL`, send the synthetic text `A2_PROCESS_KILL`, and
 terminate the app process when the mock reports that it committed the request.
 The retry should replay the receipt using the original key.
 
@@ -232,11 +271,11 @@ curl -fsS -X POST "http://127.0.0.1:8782/mock/analysis/${CONTENT_ID}" \
 
 The mock-only route accepts the contract's five analysis statuses. Completed
 and partial results reuse the synthetic catalog. Open the app or select
-**Refresh analysis** and confirm the card's text changes while its ID stays the
+**Refresh library** and confirm the card's text changes while its ID stays the
 same. Turn on airplane mode and swipe the card. Restart the app, advance the
 mock analysis again, and reconnect. The card stays hidden. After the dismissal
 is synchronized, restore from details and verify a single new generation.
 
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, content and notification persistence, private assets,
-and the future FCM delivery contract. See [verification results](../../docs/STATUS.md#phase-a3-android-checks).
+and the future FCM delivery contract. See [verification results](../../docs/STATUS.md#phase-a4-android-checks).

@@ -6,10 +6,13 @@ import '../models/content.dart';
 abstract interface class ShareBridge {
   Stream<void> get changes;
   Future<LocalInbox> listInbox();
+  Future<LocalSource> readLocalSource(String localId);
   Future<void> signIn(String email, String password);
   Future<void> signOut();
   Future<void> assignShare(String localId, String accountId);
 }
+
+typedef AccountScope = ({String ownerId, String realm});
 
 enum UploadMode { disabled, mock, live }
 
@@ -31,6 +34,11 @@ final class UploadAccount {
   final String id;
   final String email;
   final String? realm;
+
+  AccountScope? get scope {
+    final value = realm;
+    return value == null ? null : (ownerId: id, realm: value);
+  }
 }
 
 final class LocalInbox {
@@ -107,6 +115,14 @@ final class LocalShare {
   final String? serverContentId;
 }
 
+final class LocalSource {
+  const LocalSource({this.text, this.url, this.filename});
+
+  final String? text;
+  final String? url;
+  final String? filename;
+}
+
 final class AndroidShareBridge implements ShareBridge {
   const AndroidShareBridge();
 
@@ -125,6 +141,20 @@ final class AndroidShareBridge implements ShareBridge {
     );
     if (message == null) throw const FormatException('Missing local inbox');
     return LocalInbox.fromMessage(message);
+  }
+
+  @override
+  Future<LocalSource> readLocalSource(String localId) async {
+    final message = await _channel.invokeMapMethod<Object?, Object?>(
+      'readLocalSource',
+      {'local_id': localId},
+    );
+    if (message == null) throw const FormatException('Missing saved original');
+    return LocalSource(
+      text: message['source_text'] as String?,
+      url: message['source_url'] as String?,
+      filename: message['filename'] as String?,
+    );
   }
 
   @override

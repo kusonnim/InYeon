@@ -1,4 +1,4 @@
-"""Loopback-only contract test server for Android uploads and notifications."""
+"""Loopback-only contract test server for the Android library, uploads, and notifications."""
 
 import argparse
 import base64
@@ -60,6 +60,7 @@ class MockUploadServer(ThreadingHTTPServer):
         self.refresh_tokens = {}
         self.assets = {}
         self.contents = {}
+        self.cursors = {}
         self.receipts = {}
         self.expire_next_capability = args.expire_first_capability
         self.hold_text = args.hold_source_text
@@ -70,7 +71,7 @@ class MockUploadServer(ThreadingHTTPServer):
                 format_checker=FormatChecker(),
             )
             for name in (
-                "ContentCreate", "Content", "ContentPatch", "AssetUploadCreate", "AssetUpload",
+                "ContentCreate", "Content", "ContentPage", "ContentPatch", "AssetUploadCreate", "AssetUpload",
                 "AssetComplete", "NotificationEvent", "NotificationRestore", "NotificationResult", "ErrorResponse",
             )
         }
@@ -79,6 +80,11 @@ class MockUploadServer(ThreadingHTTPServer):
             item["analysis_status"]: item["analysis"]
             for item in catalog["items"] if item["analysis"] is not None
         }
+        if getattr(args, "seed_catalog", False):
+            for fixture in catalog["items"]:
+                item = {**deepcopy(fixture), "user_id": USERS["a@example.test"]}
+                self.validators["Content"].validate(item)
+                self.contents[item["id"]] = item
 
     def handle_error(self, _request, _client_address):
         print("Mock request failed validation or connection handling.", flush=True)
@@ -149,8 +155,12 @@ class Handler(BaseHTTPRequestHandler):
         self.respond(status, value)
 
     def do_GET(self):
+        path = urlsplit(self.path)
         with self.server.lock:
-            status, value = self.content_request(urlsplit(self.path).path)
+            if path.path == "/v1/contents":
+                status, value = self.list_contents(parse_qs(path.query, keep_blank_values=True))
+            else:
+                status, value = self.content_request(path.path)
         self.respond(status, value)
 
     def do_PATCH(self):
@@ -174,6 +184,37 @@ class Handler(BaseHTTPRequestHandler):
     def owned(self, owner, identifier):
         item = self.server.contents.get(identifier)
         return item if item is not None and item["user_id"] == owner else None
+
+    def list_contents(self, query):
+        owner = self.current_owner()
+        if owner is None:
+            return error(401, "unauthorized")
+        try:
+            limit = int(query.get("limit", ["20"])[0])
+        except ValueError:
+            return error(422, "validation_error")
+        if not 1 <= limit <= 100:
+            return error(422, "validation_error")
+
+        cursor = query.get("cursor", [None])[0]
+        boundary = self.server.cursors.get((owner, cursor))
+        if cursor is not None and boundary is None:
+            return error(400, "invalid_cursor")
+
+        def order(item):
+            return datetime.fromisoformat(item["created_at"].replace("Z", "+00:00")), item["id"]
+
+        items = sorted((item for item in self.server.contents.values() if item["user_id"] == owner),
+                       key=order, reverse=True)
+        if boundary is not None:
+            items = [item for item in items if order(item) < boundary]
+        next_cursor = None
+        if len(items) > limit:
+            next_cursor = str(uuid4())
+            self.server.cursors[owner, next_cursor] = order(items[limit - 1])
+        page = {"items": deepcopy(items[:limit]), "next_cursor": next_cursor}
+        self.server.validators["ContentPage"].validate(page)
+        return 200, page
 
     def content_request(self, path, patch=None):
         owner = self.current_owner()
@@ -396,6 +437,7 @@ if __name__ == "__main__":
     parser.add_argument("--device-host", choices=["10.0.2.2", "127.0.0.1", "localhost"], default="10.0.2.2")
     parser.add_argument("--expire-first-capability", action="store_true")
     parser.add_argument("--hold-source-text", help="Synthetic text for the lost-acknowledgment test")
+    parser.add_argument("--seed-catalog", action="store_true", help="Add synthetic catalog items to account A")
     with MockUploadServer(parser.parse_args()) as server:
         print(f"ITDA mock upload server listening on loopback port {server.server_port}", flush=True)
         server.serve_forever()

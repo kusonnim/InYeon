@@ -50,3 +50,7 @@ WorkManager resumes queued mutations after process death and reconnect. A
 process interrupted between the local commit and WorkManager enqueue recovers
 the event at the next launch or matching sign-in. Background delivery hints
 and multi-device delivery policy remain integration decisions with Developer B.
+
+Phase A4 builds the Android notification before the last active-card lookup,
+which shortens the window between that lookup and the update call. The same
+generation, issuance, and suppression rules apply.
