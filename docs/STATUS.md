@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A7.1 Android pebble tray.**
+Last updated 2026-11-11 (Asia/Seoul). **Phase A7.2 Android mobile design review.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
@@ -8,16 +8,20 @@ and library checkpoints retain their account and realm scope. The checked-in
 backend and database evidence supports local mock verification. Authenticated
 staging, private storage, RLS, web consistency, and FCM remain integration work.
 
-Android home presents saved items as rigid pebbles. **All saved** exposes the
-non-archived collection, including expandable repeated-link groups. The archive
-is a list. Completion, archiving, and return to pending use versioned workflow
-updates. The app supports Korean and English. Details and editing show locally
-available original images. Android notifications show a localized source,
-title, and processing state with the existing dismissal and restoration rules.
+Android home presents saved items as rigid rounded triangular pebbles.
+**All saved** and **Archive** use plain, searchable rows with pagination.
+Repeated links in **All saved** can expand to their individual saves.
+Pending and completed items can move directly to the archive through a
+versioned workflow update. Explicit restoration returns them to pending.
+The [mobile design draft](DESIGN.md) guides the Korean and English interfaces,
+including reading layouts for images, links, text, and PDFs.
+Android notifications show a localized source, title, and processing state
+with the existing dismissal and restoration rules.
 
 Android details and editing open saved source and recommendation web links
-through Android's external app resolution. Titles and personal notes in
-editable details can focus the corresponding field in the versioned editor.
+through Android's external app resolution. A locally saved PDF opens with a
+temporary read grant to an Android viewer. Titles and personal notes in editable
+details can focus the corresponding field in the versioned editor.
 
 ## Delivered foundation
 
@@ -261,6 +265,26 @@ The host timings cover simulation steps. Mobile frame timing, physical-device
 testing, and live workflow verification remain open. Long titles can truncate
 sharply on narrow pebbles. The collection and details expose the individual
 items outside the tray.
+
+### Phase A7.2 Android checks
+
+A7.2 is stacked on [PR #10](https://github.com/kusonnim/InYeon/pull/10) at
+`3dacfb7`. Checks used Flutter 3.47.8, Dart 3.13.7, the Android Studio JDK,
+and a disposable Android 15 / API 35 x86_64 emulator.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, Korean and English localization generation, fixture parity, and static analysis passed. All 52 tests passed, including source-specific details, long Korean text, empty recommendations, accessibility targets, direct archive and restore, a simulated HTTP 503, and stale-version recovery |
+| Geometry and simulation | All five painted profiles matched their rounded Box2D fixtures within 0.0015 of a normalized diameter across 120 radial samples per variant. The host fixtures capped 500 candidates at 10, 6, and 4 bodies and went to sleep after 162, 134, and 224 steps. Seven emulator pebbles kept their settled positions after visiting details and zooming the original image |
+| Android | All 47 instrumentation tests passed. The added PDF check covers the original bytes, read-only grants, owner scope, and rejected corrupt bytes. Debug lint reported zero errors and eight warnings after escaping the Windows drive separators in the generated local SDK properties |
+| APKs | Built the default multi-ABI debug APK and the loopback mock x86_64 debug APK. The mock APK installed on the emulator |
+| Workflow | The FastAPI fixture accepted pending and completed to archived, and archived to pending. Stale writes returned 409 and a foreign owner received 404. In the emulator, a pending item archived from details, a completed item archived by drag, and an archived item returned to pending. Each move advanced one version and preserved source fields, edits, analysis, recommendations, and notification state. A deliberate stale mock edit displayed the refresh action and kept the item pending |
+| Private originals | Shared a synthetic PNG and PDF through Android and confirmed both mock acknowledgments. The image preview and zoom and the original PDF in the Android viewer remained accessible after the sender copies were removed |
+| Library and account | The mock emulator displayed a paginated collection and expanded two independent saves of the same URL after a search. Account B could not see account A's saved content. The English selection survived a process restart |
+| Visual review | Captured 15 emulator screens with synthetic data, including the settled and mid-cascade tray, image, link, note and PDF details, archive, All saved, account, sign-in, editor, signed-out home, dark mode, and the PDF viewer. A dark English link detail was captured at 880 physical pixels wide with Android font scale 1.8 |
+
+Live workflow, server-only private image and PDF download, and physical-device
+visual and frame timing checks remain open.
 
 ## Next concrete tasks
 
