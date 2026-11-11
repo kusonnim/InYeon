@@ -7,8 +7,10 @@ import '../l10n/generated/app_localizations.dart';
 import '../library/workflow_edit.dart';
 import '../models/content.dart';
 import '../native/notification_bridge.dart';
+import '../native/saved_document.dart';
 import '../native/share_bridge.dart';
 import 'content_details.dart';
+import 'itda_theme.dart';
 import 'library_components.dart';
 import 'original_image.dart';
 
@@ -38,7 +40,6 @@ class RegisteredContentScreen extends StatefulWidget {
   State<RegisteredContentScreen> createState() =>
       _RegisteredContentScreenState();
 }
-
 class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   final _title = TextEditingController();
   final _note = TextEditingController();
@@ -193,6 +194,10 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
 
   void _closeImage() => setState(() => _viewingImage = false);
 
+  VoidCallback? get _openDocument => _original?.inputType == InputType.document
+      ? () => openSavedDocument(context, widget.target.toMessage())
+      : null;
+
   void _beginEdit([FocusNode? focus]) {
     if (!_canEdit || _editing || _viewingImage) return;
     setState(() => _editing = true);
@@ -336,6 +341,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     final copy = AppLocalizations.of(context);
     final image = _original?.imagePath;
     final viewingImage = _viewingImage && image != null;
+    final content = _item?.content;
     return PopScope(
       canPop: !_editing && !viewingImage,
       onPopInvokedWithResult: (didPop, _) {
@@ -349,9 +355,14 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       child: Scaffold(
         appBar: AppBar(
           leading: viewingImage ? BackButton(onPressed: _closeImage) : null,
-          title: Text(viewingImage
-              ? copy.imageViewer
-              : (_editing ? copy.editTitle : copy.detailsTitle)),
+          title: Text(
+            viewingImage
+                ? copy.imageViewer
+                : (_editing ? copy.editTitle : copy.detailsTitle),
+            style: _editing || viewingImage
+                ? null
+                : Theme.of(context).textTheme.labelLarge,
+          ),
           actions: [
             if (!_locked && !_editing && !viewingImage)
               IconButton(
@@ -377,55 +388,67 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             ],
           ),
         ),
+        bottomNavigationBar: !_editing && !viewingImage && content != null
+            ? _workflowAction(copy, content)
+            : null,
       ),
     );
   }
 
   Widget _body(AppLocalizations copy) {
     if (_locked) {
-      return PageList(children: [
-        StatePanel(icon: Icons.lock_outline, title: copy.accountLocked),
-      ]);
+      return PageList(
+        children: [
+          StatePanel(icon: Icons.lock_outline, title: copy.accountLocked),
+        ],
+      );
     }
     final item = _item;
     final banner = _problem(copy);
     if (item == null) {
-      return PageList(children: [
-        if (banner != null) banner,
-        if (_original != null)
-          OriginalSource(
-            original: _original,
-            openOriginal: widget.openOriginal,
-            openImage: _expandImage,
-          )
-        else if (widget.openOriginal != null)
-          TextButton(
-              onPressed: widget.openOriginal, child: Text(copy.readOriginal)),
-        if (!_editing) ..._notificationControls(copy),
-      ]);
+      return PageList(
+        children: [
+          if (banner != null) banner,
+          if (_original != null)
+            OriginalSource(
+              original: _original,
+              openSavedCopy: _openDocument == null ? widget.openOriginal : null,
+              openImage: _expandImage,
+              openDocument: _openDocument,
+            )
+          else if (widget.openOriginal != null)
+            TextButton(
+              onPressed: widget.openOriginal,
+              child: Text(copy.readOriginal),
+            ),
+          if (!_editing) ..._notificationControls(copy),
+        ],
+      );
     }
     if (_editing) return _editor(copy, item, banner);
     return ContentDetails(
       content: item.content,
-      badge: _environmentBadge(copy, item.mode),
-      openOriginal: widget.openOriginal,
+      contextLabel: _environmentBadge(copy, item.mode),
       original: _original,
       loadingOriginal: _readingOriginal,
       openImage: _expandImage,
+      openDocument: _openDocument,
       onEditTitle: _canEdit ? () => _beginEdit(_titleFocus) : null,
       onEditNotes: _canEdit ? () => _beginEdit(_noteFocus) : null,
-      workflowAction: _workflowAction(copy, item.content),
       header: [
         if (!_verified && banner == null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: StatusPill(copy.savedCopies),
+            padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
+            child: Text(
+              copy.savedCopies,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         if (banner != null)
-          Padding(padding: const EdgeInsets.only(bottom: 12), child: banner)
+          Padding(
+            padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
+            child: banner,
+          ),
       ],
       footer: _notificationControls(copy),
     );
@@ -438,17 +461,27 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
 
   Widget _workflowAction(AppLocalizations copy, ContentItem content) {
     final destination = nextWorkflow(content.workflowStatus);
-    final (label, icon) = switch (destination) {
-      WorkflowStatus.completed => (copy.markComplete, Icons.check_rounded),
-      WorkflowStatus.archived => (copy.moveToArchive, Icons.archive_outlined),
-      WorkflowStatus.pending => (copy.returnToTray, Icons.unarchive_outlined),
-    };
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: TextButton.icon(
-        onPressed: _busy ? null : () => _move(content, destination),
-        icon: Icon(icon, size: 18),
-        label: Text(label),
+    final restoring = destination == WorkflowStatus.pending;
+    return PageWidth(
+      shrinkWrap: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          ItdaSpace.page,
+          ItdaSpace.small,
+          ItdaSpace.page,
+          ItdaSpace.medium,
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _canEdit ? () => _move(content, destination) : null,
+            icon: Icon(
+              restoring ? Icons.unarchive_outlined : Icons.archive_outlined,
+              size: 19,
+            ),
+            label: Text(restoring ? copy.returnToTray : copy.archiveAction),
+          ),
+        ),
       ),
     );
   }
@@ -507,97 +540,115 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   }
 
   Widget _editor(
-          AppLocalizations copy, RegisteredContent item, Widget? banner) =>
-      PageList(
-        children: [
-          if (_environmentBadge(copy, item.mode) case final label?)
-            Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: StatusPill(label)),
-          const SizedBox(height: 12),
-          if (banner != null)
-            Padding(padding: const EdgeInsets.only(bottom: 12), child: banner),
-          if (_reviewDraft && _dirty)
-            ContentSection(
-              title: copy.latestSavedValues,
-              children: [
-                Text(copy.reviewDraft),
-                if (_titleChanged) ...[
-                  const SizedBox(height: 8),
-                  Text(copy.titleField,
-                      style: Theme.of(context).textTheme.labelLarge),
-                  Text(item.content.title ?? copy.noTitle),
-                ],
-                if (_noteChanged) ...[
-                  const SizedBox(height: 8),
-                  Text(copy.notes,
-                      style: Theme.of(context).textTheme.labelLarge),
-                  Text(item.content.userNote ?? copy.noNotes),
-                ],
-              ],
-            ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _title,
-                focusNode: _titleFocus,
-                enabled: !_busy,
-                maxLength: 500,
-                minLines: 1,
-                maxLines: 3,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: copy.titleField,
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  hintText:
-                      suggestedTitle(copy, item.content, original: _original),
-                  hintMaxLines: 2,
-                ),
-              ),
+    AppLocalizations copy,
+    RegisteredContent item,
+    Widget? banner,
+  ) => PageList(
+    children: [
+      if (_environmentBadge(copy, item.mode) case final label?)
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+      const SizedBox(height: ItdaSpace.medium),
+      if (banner != null)
+        Padding(padding: const EdgeInsets.only(bottom: 12), child: banner),
+      if (_reviewDraft && _dirty)
+        ContentSection(
+          title: copy.latestSavedValues,
+          children: [
+            Text(copy.reviewDraft),
+            if (_titleChanged) ...[
               const SizedBox(height: 8),
-              TextField(
-                controller: _note,
-                focusNode: _noteFocus,
-                enabled: !_busy,
-                maxLength: 10000,
-                minLines: 4,
-                maxLines: 8,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                    labelText: copy.notes, alignLabelWithHint: true),
+              Text(
+                copy.titleField,
+                style: Theme.of(context).textTheme.labelLarge,
               ),
+              Text(item.content.title ?? copy.noTitle),
             ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 4,
-              children: [
-                FilledButton(
-                  onPressed: !_busy && _verified && !_conflict && _dirty
-                      ? () => _save(item.content)
-                      : null,
-                  child: Text(copy.saveChanges),
-                ),
-                TextButton(
-                    onPressed: _busy ? null : _closeEditor,
-                    child: Text(copy.cancel)),
-              ],
+            if (_noteChanged) ...[
+              const SizedBox(height: 8),
+              Text(copy.notes, style: Theme.of(context).textTheme.labelLarge),
+              Text(item.content.userNote ?? copy.noNotes),
+            ],
+          ],
+        ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _title,
+            focusNode: _titleFocus,
+            enabled: !_busy,
+            maxLength: 500,
+            buildCounter: _fieldCounter,
+            minLines: 1,
+            maxLines: 3,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: copy.titleField,
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              hintText: suggestedTitle(copy, item.content, original: _original),
+              hintMaxLines: 2,
             ),
           ),
-          OriginalSource.fromContent(
-            item.content,
-            original: _original,
-            loadingOriginal: _readingOriginal,
-            openOriginal: widget.openOriginal,
-            openImage: _expandImage,
+          const SizedBox(height: ItdaSpace.large),
+          TextField(
+            controller: _note,
+            focusNode: _noteFocus,
+            enabled: !_busy,
+            maxLength: 10000,
+            buildCounter: _fieldCounter,
+            minLines: 4,
+            maxLines: 8,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: copy.notes,
+              alignLabelWithHint: true,
+            ),
           ),
-          RecommendationSection(
-              title: copy.reviewSuggestions,
-              items: item.content.recommendations),
         ],
-      );
+      ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 4,
+          children: [
+            FilledButton(
+              onPressed: !_busy && _verified && !_conflict && _dirty
+                  ? () => _save(item.content)
+                  : null,
+              child: Text(copy.saveChanges),
+            ),
+            TextButton(
+              onPressed: _busy ? null : _closeEditor,
+              child: Text(copy.cancel),
+            ),
+          ],
+        ),
+      ),
+      OriginalSource.fromContent(
+        item.content,
+        original: _original,
+        loadingOriginal: _readingOriginal,
+        openImage: _expandImage,
+        openDocument: _openDocument,
+      ),
+      RecommendationSection(
+        title: copy.reviewSuggestions,
+        items: item.content.recommendations,
+      ),
+    ],
+  );
+
+  Widget? _fieldCounter(
+    BuildContext context, {
+    required int currentLength,
+    required bool isFocused,
+    required int? maxLength,
+  }) => maxLength != null && currentLength >= maxLength - 20
+      ? Text('$currentLength / $maxLength')
+      : null;
 }

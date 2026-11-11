@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:forge2d/forge2d.dart';
+import 'package:itda_mobile/tray/pebble_design.dart';
 import 'package:itda_mobile/tray/pebble_simulation.dart';
 
 const _regular = TrayGeometry(Size(360, 460));
@@ -15,9 +17,42 @@ void main() {
     expect(designs.map((design) => design.color).toSet(), hasLength(6));
     for (final (index, id) in ids.indexed) {
       final same = PebbleDesign.forId(id);
-      expect(same.outline, designs[index].outline);
+      expect(same.vertices, designs[index].vertices);
       expect(same.color, designs[index].color);
     }
+  });
+
+  test('each matte silhouette follows the rounded Box2D boundary', () {
+    final world = World(gravity: Vector2.zero());
+    addTearDown(world.destroy);
+    final variants = <int>{};
+    for (var index = 0; index < 32; index++) {
+      final design = PebbleDesign.forId('local:receipt-$index');
+      if (!variants.add(design.variant)) continue;
+      final body = world.createBody();
+      final fixture = body.createShape(
+        Polygon([
+          for (final p in design.vertices) Vector2(p.dx, p.dy),
+        ], radius: PebbleDesign.radius),
+      );
+      final path = design.silhouette;
+      for (var angle = 0; angle < 360; angle += 3) {
+        final direction = angle * math.pi / 180;
+        expect(path.contains(Offset.fromDirection(direction, .42)), isTrue);
+        expect(path.contains(Offset.fromDirection(direction, .51)), isFalse);
+        final visibleRadius = _edgeRadius(direction, path.contains);
+        final fixtureRadius = _edgeRadius(
+          direction, (p) => fixture.testPoint(Vector2(p.dx, p.dy)),
+        );
+        expect(
+          visibleRadius,
+          closeTo(fixtureRadius, .0015),
+          reason: 'Variant ${design.variant} at $angle°',
+        );
+      }
+      body.destroy();
+    }
+    expect(variants, hasLength(5));
   });
 
   test('releases a staggered cascade above the tray and falls to sleep', () {
@@ -68,7 +103,11 @@ void main() {
       final initial = scene.poses.first;
       expect(scene.pickUp(initial.id, initial.center), isTrue);
       expect(scene.pickUp('two', initial.center), isFalse);
-      scene.drag(const Offset(-150, 700));
+      final tray = scene.geometry.interior;
+      final oppositeSide = initial.center.dx < tray.center.dx
+          ? tray.right + 150
+          : tray.left - 150;
+      scene.drag(Offset(oppositeSide, tray.top - 150));
       _steps(scene, 90);
       final held = scene.poses.first;
       expect((held.center - initial.center).distance, greaterThan(15));
@@ -111,6 +150,20 @@ void main() {
   });
 }
 
+double _edgeRadius(double direction, bool Function(Offset) contains) {
+  var inside = .42;
+  var outside = .52;
+  while (outside - inside > .00002) {
+    final radius = (inside + outside) / 2;
+    if (contains(Offset.fromDirection(direction, radius))) {
+      inside = radius;
+    } else {
+      outside = radius;
+    }
+  }
+  return (inside + outside) / 2;
+}
+
 void _steps(PebbleSimulation scene, int count) {
   for (var step = 0; step < count; ++step) {
     scene.step();
@@ -128,7 +181,7 @@ int _runUntilSleep(PebbleSimulation scene) {
 }
 
 List<Offset> _vertices(PebblePose pose, double width) => [
-  for (final p in pose.design.outline)
+  for (final p in pose.design.vertices)
     pose.center +
         Offset(
               p.dx * math.cos(pose.angle) - p.dy * math.sin(pose.angle),
@@ -139,13 +192,17 @@ List<Offset> _vertices(PebblePose pose, double width) => [
 
 void _expectContained(PebbleSimulation scene, {double tolerance = 2}) {
   final tray = scene.geometry.interior;
+  final radius = PebbleDesign.radius * scene.geometry.pebbleWidth;
   for (final stone in scene.poses) {
     for (final point in _vertices(stone, scene.geometry.pebbleWidth)) {
       expect(
         point.dx,
-        inInclusiveRange(tray.left - tolerance, tray.right + tolerance),
+        inInclusiveRange(
+          tray.left + radius - tolerance,
+          tray.right - radius + tolerance,
+        ),
       );
-      expect(point.dy, lessThanOrEqualTo(tray.bottom + tolerance));
+      expect(point.dy + radius, lessThanOrEqualTo(tray.bottom + tolerance));
     }
   }
 }
@@ -154,11 +211,36 @@ void _expectSeparated(PebbleSimulation scene) {
   final stones = scene.poses
       .map((pose) => _vertices(pose, scene.geometry.pebbleWidth))
       .toList();
+  final radius = PebbleDesign.radius * scene.geometry.pebbleWidth;
   for (var i = 0; i < stones.length; ++i) {
     for (var j = i + 1; j < stones.length; ++j) {
-      expect(_overlap(stones[i], stones[j]), lessThan(2));
+      expect(_overlap(stones[i], stones[j]), lessThan(0));
+      expect(
+        math.min(
+          _edgeDistance(stones[i], stones[j]),
+          _edgeDistance(stones[j], stones[i]),
+        ),
+        greaterThan(2 * radius - 2),
+      );
     }
   }
+}
+
+double _edgeDistance(List<Offset> vertices, List<Offset> polygon) {
+  double dot(Offset a, Offset b) => a.dx * b.dx + a.dy * b.dy;
+  var minimum = double.infinity;
+  for (final vertex in vertices) {
+    for (var i = 0; i < polygon.length; i++) {
+      final start = polygon[i];
+      final edge = polygon[(i + 1) % polygon.length] - start;
+      final along = (dot(vertex - start, edge) / edge.distanceSquared).clamp(
+        0.0,
+        1.0,
+      );
+      minimum = math.min(minimum, (vertex - (start + edge * along)).distance);
+    }
+  }
+  return minimum;
 }
 
 double _overlap(List<Offset> first, List<Offset> second) {

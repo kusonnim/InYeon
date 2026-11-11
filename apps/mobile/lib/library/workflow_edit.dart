@@ -4,8 +4,7 @@ import '../models/content.dart';
 import '../native/notification_bridge.dart';
 
 WorkflowStatus nextWorkflow(WorkflowStatus status) => switch (status) {
-  WorkflowStatus.pending => WorkflowStatus.completed,
-  WorkflowStatus.completed => WorkflowStatus.archived,
+  WorkflowStatus.pending || WorkflowStatus.completed => WorkflowStatus.archived,
   WorkflowStatus.archived => WorkflowStatus.pending,
 };
 

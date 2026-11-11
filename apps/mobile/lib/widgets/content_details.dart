@@ -5,6 +5,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../models/content.dart';
 import '../native/external_link.dart';
 import '../native/share_bridge.dart';
+import 'itda_theme.dart';
 import 'library_components.dart';
 import 'original_image.dart';
 
@@ -12,172 +13,177 @@ class ContentHeading extends StatelessWidget {
   const ContentHeading({
     super.key,
     required this.title,
-    required this.inputType,
-    required this.savedAt,
-    this.badges = const [],
+    required this.source,
+    this.contextLabel,
     this.onEditTitle,
   });
 
   final String title;
-  final InputType? inputType;
-  final DateTime savedAt;
-  final List<Widget> badges;
+  final String source;
+  final String? contextLabel;
   final VoidCallback? onEditTitle;
 
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final titleText = Text(title, style: theme.textTheme.headlineMedium);
-    final edit = onEditTitle;
+    final titleText = Text(title, style: theme.textTheme.headlineSmall);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.only(bottom: ItdaSpace.large),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(sourceIcon(inputType),
-                  color: theme.colorScheme.primary, size: 20),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  sourceName(copy, inputType),
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(color: theme.colorScheme.primary),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
           Semantics(
-            container: edit != null,
+            container: onEditTitle != null,
             header: true,
-            button: edit != null,
-            label: edit == null ? null : copy.editContentTitle,
-            child: edit == null
+            button: onEditTitle != null,
+            label: onEditTitle == null ? null : copy.editContentTitle,
+            child: onEditTitle == null
                 ? titleText
                 : Tooltip(
                     message: copy.editContentTitle,
                     excludeFromSemantics: true,
                     child: InkWell(
-                      onTap: edit,
-                      borderRadius: BorderRadius.circular(8),
+                      onTap: onEditTitle,
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
+                        constraints: const BoxConstraints(
+                          minHeight: ItdaSpace.touchTarget,
+                        ),
                         child: Row(
                           children: [
                             Expanded(child: titleText),
-                            const SizedBox(width: 8),
-                            Icon(Icons.edit_outlined,
-                                size: 18,
-                                color: theme.colorScheme.onSurfaceVariant),
+                            const SizedBox(width: ItdaSpace.small),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ],
                         ),
                       ),
                     ),
                   ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            MaterialLocalizations.of(context)
-                .formatMediumDate(savedAt.toLocal()),
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(height: ItdaSpace.tiny),
+          Wrap(
+            spacing: ItdaSpace.medium,
+            runSpacing: ItdaSpace.tiny,
+            children: [
+              Text(source, style: theme.textTheme.bodySmall),
+              if (contextLabel != null)
+                Text(contextLabel!, style: theme.textTheme.bodySmall),
+            ],
           ),
-          if (badges.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(spacing: 7, runSpacing: 6, children: badges),
-          ],
         ],
       ),
     );
   }
 }
-
 class ContentDetails extends StatelessWidget {
   const ContentDetails({
     super.key,
     required this.content,
-    this.title,
-    this.badge,
+    this.contextLabel,
     this.header = const [],
     this.footer = const [],
-    this.openOriginal,
     this.original,
     this.loadingOriginal = false,
     this.openImage,
+    this.openDocument,
     this.onEditTitle,
     this.onEditNotes,
-    this.workflowAction,
   });
 
   final ContentItem content;
-  final String? title;
-  final String? badge;
+  final String? contextLabel;
   final List<Widget> header;
   final List<Widget> footer;
-  final VoidCallback? openOriginal;
   final LocalSource? original;
   final bool loadingOriginal;
   final VoidCallback? openImage;
+  final VoidCallback? openDocument;
   final VoidCallback? onEditTitle;
   final VoidCallback? onEditNotes;
-  final Widget? workflowAction;
 
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
-    final information = content.recommendations
-        .where((item) => item.kind == RecommendationKind.information);
-    final suggestions = content.recommendations
-        .where((item) => item.kind != RecommendationKind.information);
+    final type = content.inputType;
+    final image = type == InputType.image;
+    final web = type == InputType.url;
+    final title = contentTitle(copy, content, original: original);
+    final source = OriginalSource.fromContent(
+      content,
+      original: original,
+      loadingOriginal: loadingOriginal,
+      openDocument: openDocument,
+      displayedTitle: title,
+      disclose: web || image,
+    );
+    final link = source._link;
+    final recommendations = content.recommendations;
+    final notes = content.userNote;
     final editNotes = onEditNotes;
-    final workflow = switch (content.workflowStatus) {
-      WorkflowStatus.pending => null,
-      WorkflowStatus.completed => copy.completedItem,
-      WorkflowStatus.archived => copy.archivedItem,
-    };
     return PageList(
       children: [
-        ContentHeading(
-          title: title ?? contentTitle(copy, content, original: original),
-          inputType: content.inputType,
-          savedAt: content.createdAt,
-          onEditTitle: onEditTitle,
-          badges: [
-            if (badge != null) StatusPill(badge!),
-            if (workflow != null) StatusPill(workflow),
-          ],
-        ),
         ...header,
-        if (workflowAction case final action?) action,
-        OriginalSource.fromContent(
-          content,
-          original: original,
-          loadingOriginal: loadingOriginal,
-          openOriginal: openOriginal,
-          openImage: openImage,
+        if (image)
+          OriginalImagePreview(
+            original: original,
+            loading: loadingOriginal,
+            onExpand: openImage,
+          ),
+        ContentHeading(
+          title: title,
+          source: sourceCue(copy, type, source._url),
+          contextLabel: contextLabel,
+          onEditTitle: onEditTitle,
         ),
-        _AnalysisSection(content: content),
-        if (information.isNotEmpty)
+        if (web && link?.canOpen == true)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: _openButton(context, link!, copy.openOriginal),
+          ),
+        if (!web && !image) source,
+        _AnalysisSection(content: content, discloseSummary: !web),
+        if (recommendations.isNotEmpty)
           RecommendationSection(
-              title: copy.importantInformation, items: information),
-        if (suggestions.isNotEmpty || content.recommendations.isEmpty)
-          RecommendationSection(
-              title: copy.recommendations, items: suggestions),
-        ContentSection(
+            title: copy.recommendations,
+            items: recommendations,
+          ),
+        if (web || image) source,
+        if (notes?.trim().isNotEmpty == true)
+          ContentSection(
             title: copy.notes,
             action: editNotes == null
                 ? null
                 : (onTap: editNotes, label: copy.editNotes),
-            children: [Text(content.userNote ?? copy.noNotes)]),
+            children: [Text(notes!)],
+          )
+        else if (editNotes != null)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              onPressed: editNotes,
+              child: Text(copy.editNotes),
+            ),
+          ),
         ...footer,
+        Padding(
+          padding: const EdgeInsets.only(top: ItdaSpace.medium),
+          child: Text(
+            copy.savedOn(
+              MaterialLocalizations.of(
+                context,
+              ).formatMediumDate(content.createdAt.toLocal()),
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
       ],
     );
   }
 }
-
 class OriginalSource extends StatelessWidget {
   const OriginalSource({
     super.key,
@@ -187,26 +193,33 @@ class OriginalSource extends StatelessWidget {
     this.original,
     this.loadingOriginal = false,
     this.hasAttachment = false,
-    this.openOriginal,
+    this.openSavedCopy,
     this.openImage,
+    this.openDocument,
+    this.displayedTitle,
+    this.disclose = false,
   });
 
   OriginalSource.fromContent(
     ContentItem content, {
     LocalSource? original,
     bool loadingOriginal = false,
-    VoidCallback? openOriginal,
     VoidCallback? openImage,
+    VoidCallback? openDocument,
+    String? displayedTitle,
+    bool disclose = false,
   }) : this(
-          text: content.sourceText,
-          url: content.sourceUrl,
-          inputType: content.inputType,
-          original: original,
-          loadingOriginal: loadingOriginal,
-          hasAttachment: content.assetIds.isNotEmpty,
-          openOriginal: openOriginal,
-          openImage: openImage,
-        );
+         text: content.sourceText,
+         url: content.sourceUrl,
+         inputType: content.inputType,
+         original: original,
+         loadingOriginal: loadingOriginal,
+         hasAttachment: content.assetIds.isNotEmpty,
+         openImage: openImage,
+         openDocument: openDocument,
+         displayedTitle: displayedTitle,
+         disclose: disclose,
+       );
 
   final String? text;
   final String? url;
@@ -214,84 +227,101 @@ class OriginalSource extends StatelessWidget {
   final LocalSource? original;
   final bool loadingOriginal;
   final bool hasAttachment;
-  final VoidCallback? openOriginal;
+  final VoidCallback? openSavedCopy;
   final VoidCallback? openImage;
+  final VoidCallback? openDocument;
+  final String? displayedTitle;
+  final bool disclose;
+
+  String? get _url => original?.url ?? url;
+
+  ExternalLink? get _link {
+    final url = _url;
+    if (url == null) return null;
+    final link = ExternalLink(url);
+    return link.isProtected ? null : link;
+  }
 
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
-    final url = original?.url ?? this.url;
-    final candidate = url == null ? null : ExternalLink(url);
-    final link = candidate?.isProtected == true ? null : candidate;
+    final meta = Theme.of(context).textTheme.bodySmall;
+    final url = _url;
+    final link = _link;
     final originalText = original?.text ?? text;
-    final visibleText = candidate != null && candidate.isProtected
-        ? originalText?.replaceAll(candidate.value, '')
+    final visibleText = url != null && link == null
+        ? originalText?.replaceAll(url, '')
         : originalText;
-    final filename = original?.filename;
     final trimmed = visibleText?.trim();
     final sourceText = trimmed != null && trimmed.isNotEmpty && trimmed != url
         ? visibleText
         : null;
-    final isImage = (inputType ?? original?.inputType) == InputType.image;
-    final imagePath = original?.imagePath;
-    final viewOriginal = isImage ? null : openOriginal;
-    return ContentSection(
-      title: copy.originalSource,
-      children: [
-        if (link != null) _linkText(context, link),
-        if (sourceText != null) ...[
-          if (link != null) const SizedBox(height: 8),
-          SelectableText(sourceText),
-        ],
-        if (hasAttachment || filename != null) ...[
-          if (link != null || sourceText != null) const SizedBox(height: 8),
-          Text(filename ?? copy.originalAttachment),
-        ],
-        if (isImage) ...[
-          const SizedBox(height: 8),
-          if (imagePath != null && openImage != null)
-            OriginalImage(path: imagePath, onExpand: openImage)
-          else if (loadingOriginal)
-            LinearProgressIndicator(semanticsLabel: copy.loadingImage)
-          else
-            Text(original != null || openOriginal != null
-                ? copy.imageUnavailable
-                : copy.remoteImageUnavailable),
-        ],
-        if (!isImage &&
-            link == null &&
-            sourceText == null &&
-            !hasAttachment &&
-            filename == null)
-          Text(copy.sourceUnavailable),
-        if (link != null || sourceText != null || viewOriginal != null)
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              if (link != null)
-                ..._linkActions(context, link, copy.openOriginal)
-              else if (sourceText != null)
-                _copyButton(context, sourceText, isLink: false),
-              if (viewOriginal != null)
-                TextButton(
-                    onPressed: viewOriginal, child: Text(copy.readOriginal)),
-            ],
-          ),
+    final filename = original?.filename;
+    final type = inputType ?? original?.inputType;
+    final image = type == InputType.image;
+    final document = type == InputType.document;
+    final children = <Widget>[
+      if (image && !disclose && openImage != null)
+        OriginalImagePreview(
+          original: original,
+          loading: loadingOriginal,
+          onExpand: openImage,
+        ),
+      if (link != null) _linkText(context, link),
+      if (sourceText != null) ...[
+        if (link != null) const SizedBox(height: ItdaSpace.small),
+        _ReadingExcerpt(text: sourceText),
       ],
-    );
+      if (filename != null && filename != displayedTitle)
+        Text(filename, style: meta)
+      else if (hasAttachment && filename == null && !image && !document)
+        Text(copy.originalAttachment, style: meta),
+      if (document)
+        if (openDocument != null)
+          TextButton.icon(
+            onPressed: openDocument,
+            icon: const Icon(Icons.open_in_new, size: 17),
+            label: Text(copy.openOriginal),
+          )
+        else if (!loadingOriginal && openSavedCopy == null)
+          Text(copy.documentUnavailable, style: meta),
+      if (link != null || sourceText != null || openSavedCopy != null)
+        Wrap(
+          spacing: ItdaSpace.small,
+          children: [
+            if (link != null) ...[
+              if (!disclose && link.canOpen)
+                _openButton(context, link, copy.openOriginal),
+              _copyButton(context, link.value, isLink: true),
+            ] else if (sourceText != null)
+              _copyButton(context, sourceText, isLink: false),
+            if (openSavedCopy != null && !image)
+              TextButton(
+                onPressed: openSavedCopy,
+                child: Text(copy.readOriginal),
+              ),
+          ],
+        ),
+    ];
+    if (children.isEmpty) {
+      if (image || (document && loadingOriginal))
+        return const SizedBox.shrink();
+      children.add(Text(copy.sourceUnavailable, style: meta));
+    }
+    return disclose
+        ? ContentDisclosure(title: copy.originalSource, children: children)
+        : ContentSection(title: copy.originalSource, children: children);
   }
 }
 
 Widget _linkText(BuildContext context, ExternalLink link) {
   if (!link.canOpen) return SelectableText(link.value);
   return Semantics(
-    container: true,
     link: true,
     child: InkWell(
       onTap: () => _openLink(context, link),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
+        constraints: const BoxConstraints(minHeight: ItdaSpace.touchTarget),
         child: Align(
           alignment: AlignmentDirectional.centerStart,
           heightFactor: 1,
@@ -308,17 +338,12 @@ Widget _linkText(BuildContext context, ExternalLink link) {
   );
 }
 
-List<Widget> _linkActions(
-        BuildContext context, ExternalLink link, String openLabel) =>
-    [
-      if (link.canOpen)
-        TextButton.icon(
-          onPressed: () => _openLink(context, link),
-          icon: const Icon(Icons.open_in_new, size: 17),
-          label: Text(openLabel),
-        ),
-      _copyButton(context, link.value, isLink: true),
-    ];
+Widget _openButton(BuildContext context, ExternalLink link, String label) =>
+    TextButton.icon(
+      onPressed: () => _openLink(context, link),
+      icon: const Icon(Icons.open_in_new, size: 17),
+      label: Text(label),
+    );
 
 Future<void> _openLink(BuildContext context, ExternalLink link) async {
   if (await link.open() || !context.mounted) return;
@@ -329,7 +354,7 @@ Future<void> _openLink(BuildContext context, ExternalLink link) async {
 
 Widget _copyButton(BuildContext context, String value, {required bool isLink}) {
   final copy = AppLocalizations.of(context);
-  return TextButton.icon(
+  return TextButton(
     onPressed: () async {
       await Clipboard.setData(ClipboardData(text: value));
       if (context.mounted) {
@@ -338,21 +363,85 @@ Widget _copyButton(BuildContext context, String value, {required bool isLink}) {
         );
       }
     },
-    icon: const Icon(Icons.copy_outlined, size: 17),
-    label: Text(isLink ? copy.copyLink : copy.copySource),
+    child: Text(isLink ? copy.copyLink : copy.copySource),
   );
 }
+class _ReadingExcerpt extends StatefulWidget {
+  const _ReadingExcerpt({required this.text});
 
-class _AnalysisSection extends StatelessWidget {
-  const _AnalysisSection({required this.content});
+  final String text;
 
-  final ContentItem content;
+  @override
+  State<_ReadingExcerpt> createState() => _ReadingExcerptState();
+}
+class _ReadingExcerptState extends State<_ReadingExcerpt> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
-    final theme = Theme.of(context);
+    final style = Theme.of(context).textTheme.bodyLarge!;
+    const previewLines = 6;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.localeOf(context),
+          maxLines: previewLines,
+          ellipsis: '…',
+        )..layout(maxWidth: constraints.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+        painter.dispose();
+        if (!overflows || _expanded) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelectableText(widget.text, style: style),
+              if (overflows)
+                TextButton(
+                  onPressed: () => setState(() => _expanded = false),
+                  child: Text(copy.showLess),
+                ),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.text,
+              style: style,
+              maxLines: previewLines,
+              overflow: TextOverflow.ellipsis,
+            ),
+            TextButton(
+              onPressed: () => setState(() => _expanded = true),
+              child: Text(copy.readMore),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+class _AnalysisSection extends StatelessWidget {
+  const _AnalysisSection({
+    required this.content,
+    required this.discloseSummary,
+  });
+
+  final ContentItem content;
+
+  final bool discloseSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = AppLocalizations.of(context);
+    final meta = Theme.of(context).textTheme.bodySmall;
     final analysis = content.analysis;
+    final status = content.analysisStatus;
     final coverage = switch (analysis?.coverage) {
       AnalysisCoverage.fullText => copy.coverageFull,
       AnalysisCoverage.partialText => copy.coveragePartial,
@@ -360,105 +449,126 @@ class _AnalysisSection extends StatelessWidget {
       AnalysisCoverage.unsupported => copy.coverageUnsupported,
       null => null,
     };
-    final waiting = content.analysisStatus == AnalysisStatus.pending ||
-        content.analysisStatus == AnalysisStatus.processing;
+    final limitations = analysis?.limitations ?? const <String>[];
     final summary = analysis?.summary?.trim();
-    return ContentSection(
-      title: copy.aiSummary,
-      children: [
-        Wrap(
-          spacing: 7,
-          runSpacing: 6,
-          children: [
-            StatusPill(analysisName(copy, content.analysisStatus),
-                highlight: !waiting),
-            if (analysis != null) StatusPill(copy.generated),
-          ],
+    final hasSummary = summary != null && summary.isNotEmpty;
+    final incomplete =
+        coverage != null && analysis?.coverage != AnalysisCoverage.fullText;
+    final coverageDetails = <Widget>[
+      if (coverage != null && !incomplete) Text(coverage, style: meta),
+      for (final limitation in limitations)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ItdaSpace.tiny),
+          child: Text(limitation, style: meta),
         ),
-        const SizedBox(height: 10),
-        Text(summary == null || summary.isEmpty
-            ? (waiting ? copy.noSummaryPending : copy.noSummary)
-            : summary),
-        if (coverage != null) ...[
-          const SizedBox(height: 10),
-          Text(coverage, style: theme.textTheme.labelLarge),
-        ],
-        for (final limitation in analysis?.limitations ?? const <String>[])
-          Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Text(limitation,
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-          ),
+    ];
+    final statusLines = <Widget>[
+      if (status != AnalysisStatus.completed)
+        Text(analysisName(copy, status), style: meta),
+      if (incomplete) Text(coverage, style: meta),
+    ];
+    final body = <Widget>[
+      if (!discloseSummary) ...statusLines,
+      if (hasSummary) ...[
+        if (!discloseSummary && statusLines.isNotEmpty)
+          const SizedBox(height: ItdaSpace.small),
+        _ReadingExcerpt(text: summary),
       ],
+      if (coverageDetails.isNotEmpty)
+        ContentDisclosure(
+          title: copy.analysisDetails,
+          children: coverageDetails,
+        ),
+    ];
+    if (hasSummary && !discloseSummary) {
+      return ContentSection(title: copy.aiSummary, children: body);
+    }
+    if (statusLines.isEmpty && body.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (discloseSummary) ...statusLines,
+          if (hasSummary)
+            ContentDisclosure(title: copy.aiSummary, children: body)
+          else
+            ...body,
+        ],
+      ),
     );
   }
 }
-
 class RecommendationSection extends StatelessWidget {
   const RecommendationSection(
       {super.key, required this.title, required this.items});
 
   final String title;
-  final Iterable<Recommendation> items;
+  final List<Recommendation> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final copy = AppLocalizations.of(context);
+    return ContentSection(
+      title: title,
+      children: [
+        _RecommendationBody(item: items.first),
+        if (items.length > 1)
+          ContentDisclosure(
+            title: copy.moreRecommendations,
+            children: [
+              for (final item in items.skip(1))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+                  child: _RecommendationBody(item: item),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+class _RecommendationBody extends StatelessWidget {
+  const _RecommendationBody({required this.item});
+
+  final Recommendation item;
 
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    return ContentSection(
-      title: title,
+    final url = item.sourceUrl;
+    final link = url == null ? null : ExternalLink(url);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (items.isEmpty) Text(copy.noRecommendations),
-        for (final (index, item) in items.indexed) ...[
-          if (index > 0) const Divider(height: 24),
+        Text(
+          [
+            recommendationName(copy, item.kind),
+            if (item.accepted) copy.accepted,
+          ].join(' · '),
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: ItdaSpace.tiny),
+        _ReadingExcerpt(text: item.text),
+        if (link != null && !link.isProtected)
           Wrap(
-            spacing: 7,
-            runSpacing: 6,
+            spacing: ItdaSpace.small,
             children: [
-              StatusPill(recommendationName(copy, item.kind), highlight: true),
-              StatusPill(copy.generated),
-              if (item.accepted) StatusPill(copy.accepted),
+              if (link.canOpen)
+                _openButton(context, link, copy.openResource)
+              else
+                SelectableText(link.value),
+              _copyButton(context, link.value, isLink: true),
             ],
           ),
-          const SizedBox(height: 7),
-          Text(item.text),
-          if (item.sourceUrl case final url?)
-            _RecommendationLink(link: ExternalLink(url)),
-          if (item.userText != null) ...[
-            const SizedBox(height: 10),
-            Text(copy.yourEdit, style: theme.textTheme.labelLarge),
-            Text(item.userText!),
-          ],
+        if (item.userText?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: ItdaSpace.small),
+          Text(copy.yourEdit, style: theme.textTheme.labelLarge),
+          Text(item.userText!),
         ],
       ],
-    );
-  }
-}
-
-class _RecommendationLink extends StatelessWidget {
-  const _RecommendationLink({required this.link});
-
-  final ExternalLink link;
-
-  @override
-  Widget build(BuildContext context) {
-    if (link.isProtected) return const SizedBox.shrink();
-    final copy = AppLocalizations.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(copy.recommendationLink,
-              style: Theme.of(context).textTheme.labelLarge),
-          _linkText(context, link),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: _linkActions(context, link, copy.openResource),
-          ),
-        ],
-      ),
     );
   }
 }

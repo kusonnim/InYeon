@@ -3,76 +3,7 @@ import 'dart:ui';
 
 import 'package:forge2d/forge2d.dart';
 
-/// The same convex silhouettes drive the artwork and the collision fixtures.
-final class PebbleDesign {
-  const PebbleDesign(this.variant, this.color);
-
-  factory PebbleDesign.forId(String id) {
-    var hash = 0x811c9dc5;
-    for (final unit in id.codeUnits) {
-      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
-    }
-    return PebbleDesign(hash % _outlines.length, (hash >> 8) % 6);
-  }
-
-  final int variant;
-  final int color;
-
-  List<Offset> get outline => _outlines[variant];
-
-  static const _outlines = [
-    [
-      Offset(-.50, -.08),
-      Offset(-.34, -.30),
-      Offset(.07, -.34),
-      Offset(.40, -.23),
-      Offset(.49, .04),
-      Offset(.25, .29),
-      Offset(-.16, .33),
-      Offset(-.43, .21),
-    ],
-    [
-      Offset(-.48, -.18),
-      Offset(-.21, -.33),
-      Offset(.15, -.31),
-      Offset(.46, -.08),
-      Offset(.44, .18),
-      Offset(.16, .33),
-      Offset(-.22, .28),
-      Offset(-.49, .09),
-    ],
-    [
-      Offset(-.50, .02),
-      Offset(-.36, -.25),
-      Offset(-.03, -.34),
-      Offset(.28, -.27),
-      Offset(.48, -.08),
-      Offset(.39, .24),
-      Offset(.04, .34),
-      Offset(-.31, .27),
-    ],
-    [
-      Offset(-.46, -.14),
-      Offset(-.14, -.32),
-      Offset(.26, -.32),
-      Offset(.49, -.13),
-      Offset(.47, .11),
-      Offset(.20, .28),
-      Offset(-.26, .34),
-      Offset(-.49, .17),
-    ],
-    [
-      Offset(-.50, -.12),
-      Offset(-.32, -.28),
-      Offset(.05, -.35),
-      Offset(.36, -.18),
-      Offset(.48, .11),
-      Offset(.23, .30),
-      Offset(-.18, .33),
-      Offset(-.42, .18),
-    ],
-  ];
-}
+import 'pebble_design.dart';
 
 final class TrayGeometry {
   const TrayGeometry(this.size);
@@ -84,8 +15,14 @@ final class TrayGeometry {
 
   bool get fits => size.width >= 170 && size.height >= 112;
 
-  double get pebbleWidth =>
-      math.min(138, math.min(interior.width * .44, interior.height * .49));
+  double get pebbleWidth {
+    final tray = interior;
+    final packingWidth = math.sqrt(tray.width * tray.height * .80 / capacity);
+    return math.min(
+      124,
+      math.min(packingWidth, math.min(tray.width * .40, tray.height * .49)),
+    );
+  }
 
   int get capacity {
     if (!fits) return 0;
@@ -93,7 +30,6 @@ final class TrayGeometry {
     return size.width < 320 || interior.height < 265 ? 6 : 10;
   }
 }
-
 typedef PebblePose = ({
   String id,
   Offset center,
@@ -247,7 +183,9 @@ final class PebbleSimulation {
       ),
     );
     body.createShape(
-      Polygon([for (final point in design.outline) _point(point * width)]),
+      Polygon([
+        for (final point in design.vertices) _point(point * width),
+      ], radius: PebbleDesign.radius * width / _pixelsPerMeter),
       ShapeDef(
         material: SurfaceMaterial(
           friction: .74,
