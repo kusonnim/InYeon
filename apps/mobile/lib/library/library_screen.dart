@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import '../models/content.dart';
 import '../native/notification_bridge.dart';
 import '../native/share_bridge.dart';
 import '../tray/pebble_tray.dart';
+import '../widgets/itda_theme.dart';
 import '../widgets/library_components.dart';
 import '../widgets/registered_content_screen.dart';
 import 'account_screen.dart';
@@ -16,6 +18,7 @@ import 'library_collection.dart';
 import 'library_controller.dart';
 import 'local_content_screen.dart';
 import 'sample_library_screen.dart';
+import 'sign_in_screen.dart';
 import 'workflow_edit.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -35,7 +38,6 @@ class LibraryScreen extends StatefulWidget {
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
-
 class _LibraryScreenState extends State<LibraryScreen> {
   final _archiveDock = GlobalKey();
   final _archiveRequests = <(AccountScope, String)>{};
@@ -64,14 +66,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  void _openAccount() {
+  void _openAccount({bool replace = false}) {
+    final route = MaterialPageRoute<void>(
+      builder: (_) => AccountScreen(
+        controller: controller,
+        notifications: widget.notifications,
+        changeLanguage: widget.changeLanguage,
+        openSamples: _openSamples,
+      ),
+    );
+    final navigator = Navigator.of(context);
+    if (replace) {
+      navigator.pushReplacement<void, void>(route);
+    } else {
+      navigator.push<void>(route);
+    }
+  }
+
+  void _openSignIn() {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => AccountScreen(
+        builder: (_) => SignInScreen(
           controller: controller,
-          notifications: widget.notifications,
-          changeLanguage: widget.changeLanguage,
-          openSamples: _openSamples,
+          openAccountSettings: () => _openAccount(replace: true),
         ),
       ),
     );
@@ -164,10 +181,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _showStatus(copy.workflowNeedsSync);
       return;
     }
-    if (item.workflowStatus != WorkflowStatus.completed) {
-      _showStatus(copy.completeBeforeArchiving);
-      return;
-    }
     final request = (owner, item.id);
     if (!_archiveRequests.add(request)) return;
     try {
@@ -187,8 +200,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         'version_conflict' => copy.workflowConflict,
         'network_unavailable' ||
         'authentication_required' ||
-        'account_changed' =>
-          copy.workflowUnavailable,
+        'account_changed' => copy.workflowUnavailable,
         _ => copy.operationUnconfirmed,
       });
       if (error.code == 'version_conflict')
@@ -206,49 +218,58 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          copy.appName,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontSize: 20,
-            letterSpacing: .6,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => _openCollection(archived: false),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 150),
-              child: Text(
-                copy.allSaved,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final mode = controller.inbox?.mode ?? UploadMode.disabled;
+        final signedOut =
+            mode != UploadMode.disabled && controller.scope == null;
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final actionTextSize = theme.textTheme.labelLarge!.fontSize!;
+        final entries = controller.entries
+            .where((entry) => !entry.archived)
+            .toList();
+        final pebbles = entries.where((entry) => entry.type != null).toList()
+          ..sort((a, b) {
+            final order = b.pebbleSavedAt.compareTo(a.pebbleSavedAt);
+            return order == 0 ? b.pebbleId.compareTo(a.pebbleId) : order;
+          });
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(copy.appName),
+            toolbarHeight: math.max(
+              kToolbarHeight,
+              MediaQuery.textScalerOf(context).scale(actionTextSize) * 2.4 +
+                  ItdaSpace.large,
             ),
+            actions: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: screenWidth * .40),
+                child: TextButton(
+                  onPressed: () => _openCollection(archived: false),
+                  child: Text(copy.allSaved, textAlign: TextAlign.center),
+                ),
+              ),
+              if (signedOut)
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: screenWidth * .32),
+                  child: TextButton(
+                    onPressed: _openSignIn,
+                    child: Text(copy.signIn, textAlign: TextAlign.center),
+                  ),
+                )
+              else
+                IconButton(
+                  tooltip: copy.account,
+                  onPressed: _openAccount,
+                  icon: const Icon(Icons.person_outline_rounded),
+                ),
+              const SizedBox(width: ItdaSpace.small),
+            ],
           ),
-          IconButton(
-            tooltip: copy.account,
-            onPressed: _openAccount,
-            icon: const Icon(Icons.person_outline_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) {
-          final mode = controller.inbox?.mode ?? UploadMode.disabled;
-          final entries =
-              controller.entries.where((entry) => !entry.archived).toList();
-          final pebbles = entries.where((entry) => entry.type != null).toList()
-            ..sort((a, b) {
-              final order = b.pebbleSavedAt.compareTo(a.pebbleSavedAt);
-              return order == 0 ? b.pebbleId.compareTo(a.pebbleId) : order;
-            });
-          return PageWidth(
+          body: PageWidth(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
+              padding: const EdgeInsets.symmetric(horizontal: ItdaSpace.page),
               child: Column(
                 children: [
                   Expanded(
@@ -262,8 +283,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               (
                                 id: entry.pebbleId,
                                 title: entryTitle(copy, entry),
-                                canArchive: entry.remote?.workflowStatus ==
-                                    WorkflowStatus.completed,
+                                canArchive:
+                                    entry.remote != null &&
+                                    controller.scope != null &&
+                                    widget.notifications != null,
                               ),
                           ],
                           onOpen: _openPebble,
@@ -288,11 +311,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                     TextButton(
                                       onPressed: _openSamples,
                                       child: Text(copy.sampleLibraryAction),
-                                    )
-                                  else if (controller.scope == null)
-                                    TextButton(
-                                      onPressed: _openAccount,
-                                      child: Text(copy.signIn),
                                     ),
                                 ],
                               ),
@@ -303,20 +321,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           left: 0,
                           right: 0,
                           child: LibraryStatus(
-                              controller: controller, refresh: _refresh),
+                            controller: controller,
+                            refresh: _refresh,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 4, bottom: 8),
+                    padding: const EdgeInsets.only(
+                      top: ItdaSpace.small,
+                      bottom: ItdaSpace.medium,
+                    ),
                     child: TextButton.icon(
                       key: _archiveDock,
                       style: TextButton.styleFrom(
                         backgroundColor: _archiveHover
-                            ? theme.colorScheme.surfaceContainerHighest
-                            : null,
-                        minimumSize: const Size(110, 48),
+                            ? theme.colorScheme.primaryContainer
+                            : theme.colorScheme.surfaceContainerHighest,
+                        minimumSize: const Size(128, ItdaSpace.touchTarget),
                       ),
                       onPressed: () => _openCollection(archived: true),
                       icon: const Icon(Icons.archive_outlined, size: 19),
@@ -326,9 +349,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ],
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

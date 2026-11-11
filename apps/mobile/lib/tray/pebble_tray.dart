@@ -35,7 +35,6 @@ class PebbleTray extends StatelessWidget {
     ),
   );
 }
-
 class _Scene extends StatefulWidget {
   const _Scene({
     required this.size,
@@ -50,7 +49,6 @@ class _Scene extends StatefulWidget {
   @override
   State<_Scene> createState() => _SceneState();
 }
-
 class _SceneState extends State<_Scene> with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   PebbleSimulation? _simulation;
@@ -216,7 +214,6 @@ class _SceneState extends State<_Scene> with SingleTickerProviderStateMixin {
     );
   }
 }
-
 class _Stone extends StatefulWidget {
   const _Stone({
     super.key,
@@ -242,7 +239,6 @@ class _Stone extends StatefulWidget {
   @override
   State<_Stone> createState() => _StoneState();
 }
-
 class _StoneState extends State<_Stone> {
   static const _light = [
     Color(0xffc2c8ad),
@@ -253,12 +249,12 @@ class _StoneState extends State<_Stone> {
     Color(0xffb8becb),
   ];
   static const _dark = [
-    Color(0xff515b45),
-    Color(0xff664c3f),
-    Color(0xff605438),
-    Color(0xff435b58),
-    Color(0xff5b4c5b),
-    Color(0xff4b556a),
+    Color(0xff494f35),
+    Color(0xff574235),
+    Color(0xff62594c),
+    Color(0xff465743),
+    Color(0xff59483d),
+    Color(0xff455360),
   ];
   bool _focused = false;
 
@@ -268,16 +264,12 @@ class _StoneState extends State<_Stone> {
     final width = widget.width;
     final half = width * .55;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = dark ? const Color(0xfffff6e7) : const Color(0xff27241f);
-    final cos = math.cos(pose.angle);
-    final sin = math.sin(pose.angle);
-    final outline = [
-      for (final p in pose.design.outline)
-        Offset(
-          half + width * (p.dx * cos - p.dy * sin),
-          half + width * (p.dx * sin + p.dy * cos),
-        ),
-    ];
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final transform = Matrix4.identity()
+      ..translateByDouble(half, half, 0, 1)
+      ..rotateZ(pose.angle)
+      ..scaleByDouble(width, width, 1, 1);
+    final outline = pose.design.silhouette.transform(transform.storage);
     return Positioned(
       left: pose.center.dx - half,
       top: pose.center.dy - half,
@@ -306,18 +298,18 @@ class _StoneState extends State<_Stone> {
             onPanCancel: widget.onCancel,
             child: CustomPaint(
               painter: _StoneOutline(
-                _rounded(outline),
+                outline,
                 (dark ? _dark : _light)[pose.design.color],
                 _focused ? textColor : null,
               ),
               child: IgnorePointer(
                 child: Center(
                   child: SizedBox(
-                    width: width * .58,
+                    width: width * .51,
                     child: ExcludeSemantics(
                       child: Text(
                         widget.title,
-                        maxLines: 2,
+                        maxLines: width < 80 ? 1 : 2,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         textScaler: MediaQuery.textScalerOf(
@@ -325,7 +317,7 @@ class _StoneState extends State<_Stone> {
                         ).clamp(maxScaleFactor: 1.25),
                         style: TextStyle(
                           color: textColor,
-                          fontSize: width < 94 ? 11 : 13,
+                          fontSize: width < 84 ? 11 : 13,
                           fontWeight: FontWeight.w600,
                           height: 1.12,
                         ),
@@ -341,31 +333,6 @@ class _StoneState extends State<_Stone> {
     );
   }
 }
-
-Path _rounded(List<Offset> vertices) {
-  final path = Path();
-  for (var i = 0; i < vertices.length; ++i) {
-    final vertex = vertices[i];
-    final before = Offset.lerp(
-      vertex,
-      vertices[(i - 1) % vertices.length],
-      .29,
-    )!;
-    final after = Offset.lerp(
-      vertex,
-      vertices[(i + 1) % vertices.length],
-      .29,
-    )!;
-    if (i == 0) {
-      path.moveTo(before.dx, before.dy);
-    } else {
-      path.lineTo(before.dx, before.dy);
-    }
-    path.quadraticBezierTo(vertex.dx, vertex.dy, after.dx, after.dy);
-  }
-  return path..close();
-}
-
 class _StoneOutline extends CustomPainter {
   const _StoneOutline(this.path, this.fill, this.focus);
 
@@ -396,7 +363,6 @@ class _StoneOutline extends CustomPainter {
       fill != oldDelegate.fill ||
       focus != oldDelegate.focus;
 }
-
 class _TrayOutline extends CustomPainter {
   const _TrayOutline(this.tray, this.color);
 

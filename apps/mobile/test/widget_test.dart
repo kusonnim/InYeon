@@ -84,68 +84,91 @@ void main() {
     expect(await language.read(), const Locale('ko'));
   });
 
-  testWidgets('groups exact repeated links and opens the individual originals',
-      (tester) async {
-    const first = 'https://example.org/events?season=winter';
-    const other = 'https://example.org/events?season=spring';
-    shares
-      ..mode = UploadMode.mock
-      ..items = [
-        _local('a', first, type: InputType.url, subject: 'Winter workshop'),
-        _local('b', first,
-            type: InputType.url, linkText: 'Repair cafe schedule\n' + first),
-        _local('c', other, type: InputType.url, subject: 'Spring workshop'),
-      ];
-    await tester.pumpWidget(ItdaApp(
-        initialLocale: const Locale('en'), api: api, shareBridge: shares));
-    await tester.pumpAndSettle();
-    for (final id in ['a', 'b', 'c']) {
-      expect(find.byKey(ValueKey('pebble:local:$id')), findsOneWidget);
-    }
-    await tester.tap(find.text('All saved'));
-    await tester.pumpAndSettle();
-    expect(find.text('2 saves of this link'), findsOneWidget);
-    expect(find.text('Spring workshop'), findsOneWidget);
-    expect(find.byKey(const ValueKey('local:a')), findsNothing);
-    await tester.tap(find.text('2 saves of this link'));
-    await tester.pumpAndSettle();
-    final original = find.byKey(const ValueKey('local:a'));
-    final title = find
-        .descendant(
-          of: original,
-          matching: find.text('Winter workshop'),
-        )
-        .hitTestable();
-    await tester.scrollUntilVisible(title, 150,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(title);
-    await tester.pumpAndSettle();
-    expect(shares.opened, ['a']);
-    expect(find.text('Winter workshop'), findsOneWidget);
-    expect(find.text(first), findsOneWidget);
-  });
+  testWidgets(
+    'groups exact repeated links and opens the individual originals',
+    (tester) async {
+      const first = 'https://example.org/events?season=winter';
+      const other = 'https://example.org/events?season=spring';
+      shares
+        ..mode = UploadMode.mock
+        ..items = [
+          _local('a', first, type: InputType.url, subject: 'Winter workshop'),
+          _local(
+            'b',
+            first,
+            type: InputType.url,
+            linkText: 'Repair cafe schedule\n' + first,
+          ),
+          _local('c', other, type: InputType.url, subject: 'Spring workshop'),
+        ];
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          shareBridge: shares,
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final id in ['a', 'b', 'c']) {
+        expect(find.byKey(ValueKey('pebble:local:$id')), findsOneWidget);
+      }
+      await tester.tap(find.text('All saved'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 saves of this link'), findsOneWidget);
+      expect(find.text('Spring workshop'), findsOneWidget);
+      expect(find.byKey(const ValueKey('local:a')), findsNothing);
+      await tester.tap(find.byTooltip('Search saved items'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'repair cafe');
+      await tester.pumpAndSettle();
+      expect(find.text('Spring workshop'), findsNothing);
+      await tester.tap(find.text('2 saves of this link'));
+      await tester.pumpAndSettle();
+      final original = find.byKey(const ValueKey('local:a'));
+      final title = find
+          .descendant(of: original, matching: find.text('Winter workshop'))
+          .hitTestable();
+      await tester.scrollUntilVisible(
+        title,
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(title);
+      await tester.pumpAndSettle();
+      expect(shares.opened, ['a']);
+      expect(find.text('Winter workshop'), findsOneWidget);
+    await _expandDetails(tester);
+      expect(find.text(first), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'shows an empty private library and opens clearly labeled sample details',
-      (tester) async {
-    final first = example();
-    await tester
-        .pumpWidget(ItdaApp(initialLocale: const Locale('en'), api: api));
-    await tester.pumpAndSettle();
-    expect(find.text('Nothing saved yet'), findsOneWidget);
-    expect(find.text(first.title!), findsNothing);
-    await tester.tap(find.text('Explore sample library'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(first.title!));
-    await tester.pumpAndSettle();
-    expect(find.text('Samples'), findsOneWidget);
-    expect(find.text('Original source'), findsOneWidget);
-    await _scrollTo(tester, 'AI summary');
-    expect(find.text(first.analysis!.summary!), findsOneWidget);
-  });
+    'shows an empty private library and opens clearly labeled sample details',
+    (tester) async {
+      final first = example();
+      await tester.pumpWidget(
+        ItdaApp(initialLocale: const Locale('en'), api: api),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing saved yet'), findsOneWidget);
+      expect(find.text(first.title!), findsNothing);
+      await tester.tap(find.text('Explore sample library'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(first.title!));
+      await tester.pumpAndSettle();
+      expect(find.text('Samples'), findsNothing);
+      expect(find.text(first.analysis!.summary!), findsOneWidget);
+      expect(find.text('AI summary'), findsNothing);
+      await _expandDetails(tester);
+      expect(find.text('Samples'), findsOneWidget);
+      await _scrollTo(tester, 'Original source');
+      expect(find.text('Original source'), findsOneWidget);
+    },
+  );
 
-  testWidgets('labels staging and shows its API host before sign-in',
-      (tester) async {
+  testWidgets('labels staging and shows its API host before sign-in', (
+    tester,
+  ) async {
     final inbox = LocalInbox.fromMessage({
       'mode': 'staging',
       'shares': <Object?>[],
@@ -154,16 +177,68 @@ void main() {
     shares
       ..mode = inbox.mode
       ..stagingApiHost = inbox.stagingApiHost;
-    await tester.pumpWidget(ItdaApp(
-        initialLocale: const Locale('en'), api: api, shareBridge: shares));
+    await tester.pumpWidget(
+      ItdaApp(initialLocale: const Locale('en'), api: api, shareBridge: shares),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Staging mode'), findsOneWidget);
     expect(find.text('Mock mode'), findsNothing);
-    await tester.tap(find.byTooltip('Account'));
+    await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(find.text('App language'), findsNothing);
+    await tester.tap(find.text('Account settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNothing);
     expect(find.text('API host api.staging.example.test'), findsOneWidget);
-    expect(find.text('Use an approved staging account and synthetic content.'),
-        findsOneWidget);
+    expect(
+      find.text('Use an approved staging account and synthetic content.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('signed-out home opens sign-in directly and Back returns to home',
+      (tester) async {
+    final response = Completer<void>();
+    shares
+      ..mode = UploadMode.mock
+      ..signInGate = response.future
+      ..signInError = 'invalid_sign_in';
+    await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
+      api: api,
+      shareBridge: shares,
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(find.text('App language'), findsNothing);
+    await tester.enterText(find.byType(TextFormField).first, 'a@example.test');
+    await tester.enterText(find.byType(TextFormField).last, 'synthetic');
+    final submit = find.widgetWithText(FilledButton, 'Sign in');
+    await tester.tap(submit);
+    await tester.pump();
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    expect(find.bySemanticsLabel('Signing in'), findsOneWidget);
+    response.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Could not verify your email and password.'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNothing);
+    shares
+      ..signInError = null
+      ..nextAccount = _account('a');
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'a@example.test');
+    await tester.enterText(find.byType(TextFormField).last, 'synthetic');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.byTooltip('Account'), findsOneWidget);
   });
 
   testWidgets(
@@ -195,9 +270,12 @@ void main() {
     await _tapPebble(tester, 'local:new-item');
     await tester.pumpAndSettle();
     expect(find.text('Waiting to sync'), findsOneWidget);
+    expect(find.text('Open original'), findsNothing);
+    await _expandDetails(tester);
     expect(find.text('Original source'), findsOneWidget);
     expect(find.text('https://example.org/shared'), findsOneWidget);
-    await tester.tap(find.text('Open original'));
+    await _scrollTo(tester, 'Open original');
+    await tester.tap(find.text('Open original').hitTestable());
     await tester.pumpAndSettle();
     expect(launched.single.method, 'openExternalLink');
     expect(launched.single.arguments, 'https://example.org/shared');
@@ -267,6 +345,7 @@ void main() {
     expect(find.text('Content details'), findsOneWidget);
     expect(find.text('Revised title'), findsOneWidget);
 
+    await _expandDetails(tester);
     await _scrollTo(tester, 'Saved personal note');
     await tester.tap(find.text('Saved personal note').hitTestable());
     await tester.pumpAndSettle();
@@ -313,43 +392,58 @@ void main() {
   });
 
   testWidgets(
-      'merges a receipt and its dismissed server item into one openable pebble',
-      (tester) async {
-    final item = example(dismissed: true);
-    shares
-      ..mode = UploadMode.mock
-      ..account = _account(item.userId)
-      ..items = [
-        _local('registered', 'Local preview',
-            state: LocalUploadState.synchronized, serverId: item.id)
-      ];
-    final catalog = _CatalogAdapter((_, __) async =>
-        CatalogSnapshot(items: [item], phase: CatalogPhase.current));
-    await tester.pumpWidget(ItdaApp(
-      initialLocale: const Locale('en'),
-      api: api,
-      shareBridge: shares,
-      catalogBridge: catalog,
-      notificationBridge: _DetailsAdapter(item),
-    ));
-    await tester.pumpAndSettle();
-    expect(
-        find.byKey(const ValueKey('pebble:local:registered')), findsOneWidget);
-    expect(find.byKey(ValueKey('pebble:server:${item.id}')), findsNothing);
-    expect(find.text(item.title!), findsOneWidget);
-    expect(find.text('Local preview'), findsNothing);
-    expect(find.textContaining('AI summary'), findsNothing);
-    expect(find.textContaining(item.recommendations.first.text), findsNothing);
-    await tester.tap(find.text('All saved'));
-    await tester.pumpAndSettle();
-    expect(find.text('Synced'), findsOneWidget);
-    await tester.tap(find.text(item.title!));
-    await tester.pumpAndSettle();
-    expect(find.text('Content details'), findsOneWidget);
-    await _scrollTo(tester, 'Notification dismissed');
-    expect(find.text('Notification dismissed'), findsOneWidget);
-    expect(find.text('Restore notification'), findsNothing);
-  });
+    'merges a receipt and its dismissed server item into one openable pebble',
+    (tester) async {
+      final item = example(dismissed: true);
+      shares
+        ..mode = UploadMode.mock
+        ..account = _account(item.userId)
+        ..items = [
+          _local(
+            'registered',
+            'Local preview',
+            state: LocalUploadState.synchronized,
+            serverId: item.id,
+          ),
+        ];
+      final catalog = _CatalogAdapter(
+        (_, __) async =>
+            CatalogSnapshot(items: [item], phase: CatalogPhase.current),
+      );
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          shareBridge: shares,
+          catalogBridge: catalog,
+          notificationBridge: _DetailsAdapter(item),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('pebble:local:registered')),
+        findsOneWidget,
+      );
+      expect(find.byKey(ValueKey('pebble:server:${item.id}')), findsNothing);
+      expect(find.text(item.title!), findsOneWidget);
+      expect(find.text('Local preview'), findsNothing);
+      expect(find.textContaining('AI summary'), findsNothing);
+      expect(
+        find.textContaining(item.recommendations.first.text),
+        findsNothing,
+      );
+      await tester.tap(find.text('All saved'));
+      await tester.pumpAndSettle();
+      expect(find.text('Synced'), findsNothing);
+      await tester.tap(find.text(item.title!));
+      await tester.pumpAndSettle();
+      expect(find.text('Content details'), findsOneWidget);
+      await _expandDetails(tester);
+      await _scrollTo(tester, 'Notification dismissed');
+      expect(find.text('Notification dismissed'), findsOneWidget);
+      expect(find.text('Restore notification'), findsNothing);
+    },
+  );
 
   testWidgets(
       'keeps local items available through connection errors and a retry',
@@ -442,110 +536,167 @@ void main() {
     expect(find.text('Content details'), findsOneWidget);
   });
 
-  testWidgets('local workflow intent explains synchronization without editing',
-      (tester) async {
-    shares.items = [_local('unsynced', 'Planting schedule')];
-    await tester.pumpWidget(ItdaApp(
-        initialLocale: const Locale('en'), api: api, shareBridge: shares));
-    await tester.pumpAndSettle();
-    await _tapPebble(tester, 'local:unsynced');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Mark complete'));
-    await tester.pumpAndSettle();
-    expect(find.text('Sync this item before changing its status.'),
-        findsOneWidget);
-    expect(find.text('Planting schedule'), findsWidgets);
-    expect(find.text('Move to archive'), findsNothing);
-  });
+  testWidgets(
+    'local workflow intent explains synchronization without editing',
+    (tester) async {
+      shares.items = [_local('unsynced', 'Planting schedule')];
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          shareBridge: shares,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _tapPebble(tester, 'local:unsynced');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive').hitTestable());
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Sync this item before changing its status.'),
+        findsOneWidget,
+      );
+      expect(find.text('Planting schedule'), findsWidgets);
+      expect(find.text('Return to tray'), findsNothing);
+    },
+  );
 
   testWidgets(
-      'versioned completion, confirmed drag archive, and explicit return',
-      (tester) async {
-    final raw = Map<String, dynamic>.of(
-        (fixture['items'] as List).first as Map<String, dynamic>);
-    final server = _WorkflowAdapter(raw);
-    final item = server.item;
-    shares
-      ..mode = UploadMode.mock
-      ..account = _account(item.userId);
-    final catalog = _CatalogAdapter((_, __) async => CatalogSnapshot(
-          items: [server.item],
-          phase: CatalogPhase.current,
-        ));
-    await tester.pumpWidget(ItdaApp(
-        initialLocale: const Locale('en'),
-        api: api,
-        shareBridge: shares,
-        catalogBridge: catalog,
-        notificationBridge: server));
-    await tester.pumpAndSettle();
-    final stone = find.byKey(ValueKey('pebble:server:${item.id}'));
-    expect(stone, findsOneWidget);
-    await tester.tapAt(tester.getCenter(stone));
-    await tester.pumpAndSettle();
-    expect(find.text('Mark complete'), findsOneWidget);
+    'pending pebbles archive in one confirmed PATCH and restore to pending',
+    (tester) async {
+      final raw = Map<String, dynamic>.of(
+        (fixture['items'] as List).first as Map<String, dynamic>,
+      );
+      final server = _WorkflowAdapter(raw);
+      final item = server.item;
+      shares
+        ..mode = UploadMode.mock
+        ..account = _account(item.userId);
+      final catalog = _CatalogAdapter(
+        (_, __) async =>
+            CatalogSnapshot(items: [server.item], phase: CatalogPhase.current),
+      );
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          shareBridge: shares,
+          catalogBridge: catalog,
+          notificationBridge: server,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final stone = find.byKey(ValueKey('pebble:server:${item.id}'));
+      server.editError = 'http_503';
+      await _dropOnArchive(tester, stone);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('The change could not be confirmed'),
+        findsOneWidget,
+      );
+      expect(stone, findsOneWidget);
+      expect(server.item.workflowStatus, WorkflowStatus.pending);
+      server.editError = null;
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
 
-    server.advanceVersion();
-    await tester.tap(find.text('Mark complete'));
-    await tester.pumpAndSettle();
-    expect(server.item.workflowStatus, WorkflowStatus.pending);
-    expect(find.textContaining('This item changed.'), findsOneWidget);
-    await tester.tap(find.text('Load latest version'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Mark complete'));
-    await tester.pumpAndSettle();
-    expect(server.patch!.toJson(), {
-      'expected_version': item.version + 1,
-      'workflow_status': 'completed',
-    });
-    expect(find.text('Move to archive'), findsOneWidget);
-    expect(server.item.analysisStatus, item.analysisStatus);
-    expect(server.item.notification.visibility, item.notification.visibility);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+      final acknowledgment = Completer<void>();
+      server.editGate = acknowledgment.future;
+      await _dropOnArchive(tester, stone);
+      await tester.pump();
+      expect(server.patch!.toJson(), {
+        'expected_version': item.version,
+        'workflow_status': 'archived',
+      });
+      expect(stone, findsOneWidget);
+      expect(find.text('Moved to archive.'), findsNothing);
+      expect(server.item.workflowStatus, WorkflowStatus.pending);
 
-    final acknowledgment = Completer<void>();
-    server.editGate = acknowledgment.future;
-    final drag = await tester.startGesture(tester.getCenter(stone));
-    await drag.moveBy(const Offset(0, -55));
-    await tester.pump(const Duration(milliseconds: 20));
-    await drag.moveTo(tester.getCenter(find.text('Archive')));
-    await tester.pump(const Duration(milliseconds: 20));
-    await drag.up();
-    await tester.pump();
-    expect(server.patch!.toJson(), {
-      'expected_version': item.version + 2,
-      'workflow_status': 'archived',
-    });
-    expect(stone, findsOneWidget);
-    expect(find.text('Moved to archive.'), findsNothing);
-    expect(server.item.workflowStatus, WorkflowStatus.completed);
+      acknowledgment.complete();
+      await tester.pumpAndSettle();
+      expect(stone, findsNothing);
+      expect(server.item.workflowStatus, WorkflowStatus.archived);
+      expect(server.item.version, item.version + 1);
+      expect(server.item.analysisStatus, item.analysisStatus);
+      expect(server.item.notification.visibility, item.notification.visibility);
+      expect(server.item.notification.generation, item.notification.generation);
+      expect(find.text('Moved to archive.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item.title!));
+      await tester.pumpAndSettle();
+      await _scrollTo(tester, 'Return to tray');
+      await tester.tap(find.text('Return to tray').hitTestable());
+      await tester.pumpAndSettle();
+      expect(server.patch!.toJson(), {
+        'expected_version': item.version + 1,
+        'workflow_status': 'pending',
+      });
+      expect(server.item.userNote, item.userNote);
+      expect(server.item.sourceUrl, item.sourceUrl);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing archived yet'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(stone, findsOneWidget);
+    },
+  );
 
-    acknowledgment.complete();
-    await tester.pumpAndSettle();
-    expect(stone, findsNothing);
-    expect(find.text('Moved to archive.'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Archive'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(item.title!));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Return to tray'));
-    await tester.pumpAndSettle();
-    expect(server.patch!.toJson(), {
-      'expected_version': item.version + 3,
-      'workflow_status': 'pending',
+  for (final initial in ['pending', 'completed']) {
+    testWidgets('detail archives $initial with a fresh version and one PATCH', (
+      tester,
+    ) async {
+      final server = _WorkflowAdapter({
+        ...(fixture['items'] as List).first as Map<String, dynamic>,
+        'workflow_status': initial,
+      });
+      final item = server.item;
+      shares
+        ..mode = UploadMode.mock
+        ..account = _account(item.userId);
+      final catalog = _CatalogAdapter(
+        (_, __) async =>
+            CatalogSnapshot(items: [server.item], phase: CatalogPhase.current),
+      );
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          shareBridge: shares,
+          catalogBridge: catalog,
+          notificationBridge: server,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final stone = find.byKey(ValueKey('pebble:server:${item.id}'));
+      await tester.tapAt(tester.getCenter(stone));
+      await tester.pumpAndSettle();
+      final archive = find.text('Archive');
+      server.advanceVersion();
+      await tester.tap(archive);
+      await tester.pumpAndSettle();
+      expect(server.item.workflowStatus.name, initial);
+      expect(find.textContaining('This item changed.'), findsOneWidget);
+      await tester.tap(find.text('Load latest version'));
+      await tester.pumpAndSettle();
+      final before = server.edits;
+      await tester.tap(archive);
+      await tester.pumpAndSettle();
+      expect(server.edits, before + 1);
+      expect(server.patch!.toJson(), {
+        'expected_version': item.version + 1,
+        'workflow_status': 'archived',
+      });
+      expect(server.item.workflowStatus, WorkflowStatus.archived);
+      expect(find.text('Return to tray'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(stone, findsNothing);
     });
-    expect(server.item.userNote, item.userNote);
-    expect(server.item.sourceUrl, item.sourceUrl);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(find.text('Nothing archived yet'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(stone, findsOneWidget);
-  });
+  }
 
   testWidgets(
       'signing out and signing in replaces the previous account catalog',
@@ -585,9 +736,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Signed out'), findsOneWidget);
     expect(find.text('a@example.test'), findsNothing);
+    expect(find.byType(TextFormField), findsNothing);
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
     await tester.enterText(find.byType(TextFormField).first, 'b@example.test');
     await tester.enterText(find.byType(TextFormField).last, 'synthetic');
-    await tester.tap(find.text('Sign in'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('b@example.test'), findsOneWidget);
     await tester.pageBack();
@@ -636,30 +791,36 @@ void main() {
   });
 
   testWidgets(
-      'shows a cached server-only item after offline launch without enabling edits',
-      (tester) async {
-    final item = example(title: 'Server-only saved item');
-    shares
-      ..mode = UploadMode.live
-      ..account = _account(item.userId);
-    final catalog = _CatalogAdapter((_, __) async =>
-        CatalogSnapshot(items: [item], phase: CatalogPhase.offline));
-    await tester.pumpWidget(ItdaApp(
-      initialLocale: const Locale('en'),
-      api: api,
-      shareBridge: shares,
-      catalogBridge: catalog,
-      notificationBridge: _DetailsAdapter(item, offline: true),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('Saved copies'), findsOneWidget);
-    await _tapPebble(tester, 'server:${item.id}');
-    await tester.pumpAndSettle();
-    expect(find.text('Showing the last loaded version.'), findsOneWidget);
-    expect(find.byTooltip('Edit'), findsNothing);
-    await _scrollTo(tester, 'Original source');
-    expect(find.text(item.sourceUrl!), findsOneWidget);
-  });
+    'shows a cached server-only item after offline launch without enabling edits',
+    (tester) async {
+      final item = example(title: 'Server-only saved item');
+      shares
+        ..mode = UploadMode.live
+        ..account = _account(item.userId);
+      final catalog = _CatalogAdapter(
+        (_, __) async =>
+            CatalogSnapshot(items: [item], phase: CatalogPhase.offline),
+      );
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          shareBridge: shares,
+          catalogBridge: catalog,
+          notificationBridge: _DetailsAdapter(item, offline: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Saved copies'), findsOneWidget);
+      await _tapPebble(tester, 'server:${item.id}');
+      await tester.pumpAndSettle();
+      expect(find.text('Showing the last loaded version.'), findsOneWidget);
+      expect(find.byTooltip('Edit'), findsNothing);
+      await _expandDetails(tester);
+      await _scrollTo(tester, 'Original source');
+      expect(find.text(item.sourceUrl!), findsOneWidget);
+    },
+  );
 
   test('tombstones hide acknowledged cards without changing pending originals',
       () async {
@@ -720,15 +881,27 @@ void main() {
     }
   });
 }
-
 Future<void> _tapPebble(WidgetTester tester, String id) =>
     tester.tapAt(tester.getCenter(find.byKey(ValueKey('pebble:$id'))));
 
+Future<void> _dropOnArchive(WidgetTester tester, Finder stone) async {
+  final drag = await tester.startGesture(tester.getCenter(stone));
+  await drag.moveBy(const Offset(0, -55));
+  await tester.pump(const Duration(milliseconds: 20));
+  await drag.moveTo(tester.getCenter(find.text('Archive')));
+  await tester.pump(const Duration(milliseconds: 20));
+  await drag.up();
+}
 Future<void> _scrollTo(WidgetTester tester, String text) async {
   await tester.scrollUntilVisible(find.text(text).hitTestable(), 200,
       scrollable: find.byType(Scrollable).first);
 }
 
+Future<void> _expandDetails(WidgetTester tester) async {
+  await _scrollTo(tester, 'Show details');
+  await tester.tap(find.text('Show details').hitTestable());
+  await tester.pumpAndSettle();
+}
 UploadAccount _account(String id) =>
     UploadAccount(id: id, email: '$id@example.test', realm: 'mock');
 
@@ -764,7 +937,6 @@ class _LanguageAdapter implements LanguagePreference {
   @override
   Future<void> write(Locale locale) async => selected = locale;
 }
-
 class _ShareAdapter implements ShareBridge {
   final events = StreamController<void>.broadcast();
   List<LocalShare> items = [];
@@ -772,6 +944,8 @@ class _ShareAdapter implements ShareBridge {
   String? stagingApiHost;
   UploadAccount? account;
   UploadAccount? nextAccount;
+  Future<void>? signInGate;
+  String? signInError;
   (String, String)? assigned;
   final opened = <String>[];
 
@@ -796,6 +970,8 @@ class _ShareAdapter implements ShareBridge {
 
   @override
   Future<void> signIn(String email, String password) async {
+    if (signInGate case final gate?) await gate;
+    if (signInError case final code?) throw PlatformException(code: code);
     account = nextAccount;
     events.add(null);
   }
@@ -811,7 +987,6 @@ class _ShareAdapter implements ShareBridge {
     assigned = (localId, accountId);
   }
 }
-
 class _CatalogAdapter implements CatalogBridge {
   _CatalogAdapter(this.load);
 
@@ -834,7 +1009,6 @@ class _CatalogAdapter implements CatalogBridge {
     syncRequests++;
   }
 }
-
 class _DetailsAdapter implements NotificationBridge {
   _DetailsAdapter(this.item, {this.offline = false, this.editedItem});
 
@@ -882,12 +1056,14 @@ class _DetailsAdapter implements NotificationBridge {
   @override
   Future<void> enable() async {}
 }
-
 class _WorkflowAdapter extends _DetailsAdapter {
   _WorkflowAdapter(this.record) : super(ContentItem.fromJson(record));
 
   final Map<String, dynamic> record;
   Future<void>? editGate;
+
+  String? editError;
+  int edits = 0;
 
   @override
   ContentItem get item => ContentItem.fromJson(record);
@@ -896,9 +1072,13 @@ class _WorkflowAdapter extends _DetailsAdapter {
 
   @override
   Future<RegisteredContent> edit(
-      NoticeTarget target, ContentPatch patch) async {
+    NoticeTarget target,
+    ContentPatch patch,
+  ) async {
     this.patch = patch;
+    edits++;
     if (editGate case final gate?) await gate;
+    if (editError case final code?) throw PlatformException(code: code);
     if (patch.expectedVersion != item.version) {
       throw PlatformException(code: 'version_conflict');
     }

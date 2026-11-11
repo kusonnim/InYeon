@@ -30,3 +30,28 @@ while the pebble respects the tray floor. The pebble leaves only after a verifie
 archive response. Returning from the archive sets workflow to pending. A stale
 version requires review and a fresh action. Notification and analysis states
 stay separate from the projection.
+
+## Phase A7.2 amendment
+
+The [mobile design draft](../DESIGN.md) defines a nearly circular rounded
+triangle. Each variant has a six-point convex hull and an outward rounding
+radius. Box2D applies that radius to the fixture. The painter draws the same
+offset edges and circular arcs. Diameter uses the tray's available area and
+capacity to accommodate the taller shapes. The identity hash and color
+assignment carry forward from A7.1.
+
+The versioned archive action accepts either pending or completed as its
+starting workflow value. The existing fixture backend and Android loopback
+mock already accept these PATCHes. Each drag or button action sends
+`workflow_status: archived` with the current version. An explicit restore
+sends `workflow_status: pending`. A successful response with the expected
+account, item, destination, and advanced version authorizes the UI update.
+
+## Phase A7.3 amendment
+
+Each pebble has three rounded corners and three gently convex circular sides.
+The five deterministic variants share a corner radius of 0.105 and a side bow
+of 0.028 in normalized coordinates. The painted side arcs meet the corner arcs
+tangentially. Box2D rounds a six-point convex hull with the same corner radius.
+The six samples are the three corner centers and the three midpoints of the
+side arcs before the outline offset.

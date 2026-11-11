@@ -1,6 +1,7 @@
 package com.itda.itda_mobile
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -104,6 +105,21 @@ class MainActivity : FlutterActivity() {
                                 parseUuid(requireNotNull(call.argument("local_id"))),
                             ))
                             "readNoticeOriginal" -> result.success(outbox.originals.readRegistered(call.noticeRef()))
+                            "openSavedDocument" -> {
+                                val localId = call.argument<String>("local_id")
+                                val pdf = if (localId != null) outbox.originals.pdf(parseUuid(localId))
+                                    else outbox.originals.registeredPdf(call.noticeRef())
+                                runOnUiThread {
+                                    try {
+                                        startActivity(SavedPdfProvider.viewIntent(this@MainActivity, pdf.localId))
+                                        result.success(null)
+                                    } catch (_: ActivityNotFoundException) {
+                                        result.error("document_viewer_unavailable", null, null)
+                                    } catch (_: SecurityException) {
+                                        result.error("document_unavailable", null, null)
+                                    }
+                                }
+                            }
                             "signIn" -> signIn(outbox, call, result)
                             "signOut" -> {
                                 outbox.signOut()
