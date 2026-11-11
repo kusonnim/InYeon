@@ -1,0 +1,227 @@
+[
+  {
+    "id": "TC-01",
+    "category": "ACTION",
+    "title": "성적우수 장학금 신청 공지",
+    "input": "2026-2학기 성적우수장학금 신청 안내. 마감: 11월 15일 18:00까지. 직전학기 12학점 이상 이수 및 평점 3.5 이상 대상. 포털 장학시스템에서 온라인 신청서 접수 필수.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["11월 15일", "12학점", "3.5"]
+  },
+  {
+    "id": "TC-02",
+    "category": "ACTION",
+    "title": "동아리 신입 부원 모집",
+    "input": "AI 학술동아리 인연 2기 모집 공고! 지원 마감은 11월 10일 자정까지입니다. 1차 서류 제출 후 12일 온라인 면접 진행 예정. 구글폼 링크로 지원서를 제출해주세요.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["11월 10일", "구글폼"]
+  },
+  {
+    "id": "TC-03",
+    "category": "ACTION",
+    "title": "해커톤 참가 신청",
+    "input": "2026 연합 해커톤 참가 등록 안내. 참가비 무료, 11월 8일 23:59 접수 마감. 3인 1팀 구성 필수. 깃허브 레포지토리 주소 사전 등록 필요.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["11월 8일", "3인 1팀"]
+  },
+  {
+    "id": "TC-04",
+    "category": "ACTION",
+    "title": "토익 시험 접수 안내",
+    "input": "제520회 정기 토익 시험 접수 마감 D-3. 특별추가접수 마감일은 11월 12일 낮 12시까지이며, 수험표는 14일부터 출력 가능합니다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["11월 12일", "수험표"]
+  },
+  {
+    "id": "TC-05",
+    "category": "ACTION",
+    "title": "도서관 희망도서 신청",
+    "input": "중앙도서관 11월 희망도서 신청 접수 중. 매월 20일까지 접수분만 당월 구매 진행. 1인당 최대 3권까지 신청 가능.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["20일", "3권"]
+  },
+  {
+    "id": "TC-06",
+    "category": "ACTION",
+    "title": "계절학기 수강신청 일정",
+    "input": "겨울 계절학기 수강신청: 11월 18일 오전 10시 오픈. 1인 최대 6학점까지 수강 가능하며, 수강료 납부 기간은 11월 25~27일입니다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["11월 18일", "6학점"]
+  },
+  {
+    "id": "TC-07",
+    "category": "ACTION",
+    "title": "원룸 월세 지원사업 공고",
+    "input": "청년 월세 한시 특별지원 안내. 지원금액 월 최대 20만원(12개월). 대상: 만 19~34세 무주택 청년. 복지로 온라인 신청 필수.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["20만원", "복지로"]
+  },
+  {
+    "id": "TC-08",
+    "category": "ACTION",
+    "title": "기숙사 퇴사 및 환불 절차",
+    "input": "기숙사 중도퇴사 신청 안내: 퇴사 7일 전 행정실 방문 서류 제출 필수. 보증금 환불은 열쇠 반납 확인 후 2주 이내 입금 처리됩니다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": true,
+    "must_include_keywords": ["7일 전", "열쇠 반납"]
+  },
+  {
+    "id": "TC-09",
+    "category": "INFO",
+    "title": "맥북 M3 16GB 선택 가이드",
+    "input": "컴공 신입생을 위한 맥북 구매 팁: 8GB 모델은 도커나 가상머신 돌릴 때 스왑이 심하게 발생하므로 최소 16GB 램을 강력 추천함. 저장공간은 외장 SSD로 대체 가능.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["16GB", "도커"]
+  },
+  {
+    "id": "TC-10",
+    "category": "INFO",
+    "title": "FastAPI vs Django 비교",
+    "input": "FastAPI는 비동기 처리(asyncio) 기반으로 가볍고 속도가 빠르며 Swagger 문서가 자동 생성되는 반면, Django는 관리자 페이지와 ORM이 강력해 대규모 서비스에 유리하다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["비동기", "Swagger"]
+  },
+  {
+    "id": "TC-11",
+    "category": "INFO",
+    "title": "청년도약계좌 가입 조건 요약",
+    "input": "청년도약계좌 핵심 조건: 만 19~34세, 개인소득 7,500만원 이하, 가구소득 중위 250% 이하. 5년 만기 시 최대 5,000만원 목돈 마련 가능.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["5년", "중위 250%"]
+  },
+  {
+    "id": "TC-12",
+    "category": "INFO",
+    "title": "깃허브 학생 개발자 팩 혜택",
+    "input": "GitHub Student Developer Pack은 ac.kr 이메일 인증 시 젯브레인 IDE 무료, 깃허브 코파일럿 무료, 도메인 1년 무료 등 다양한 개발자 혜택을 제공합니다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["ac.kr", "코파일럿"]
+  },
+  {
+    "id": "TC-13",
+    "category": "INFO",
+    "title": "카페인 반감기 상식",
+    "input": "체내 카페인 반감기는 평균 5~6시간입니다. 밤 12시에 취침하려면 늦어도 오후 2시 이후에는 커피 섭취를 중단하는 것이 숙면에 좋습니다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["5~6시간", "반감기"]
+  },
+  {
+    "id": "TC-14",
+    "category": "INFO",
+    "title": "수강신청 취소(드랍) 제도 안내",
+    "input": "학기 개시 후 4주 이내에 수강 포기를 할 수 있으나 포기 과목은 성적증명서에 W(Withdrawal)로 표기되지 않고 완전 삭제됩니다. 단, 최저 수강학점(12학점) 미만이 될 수 없습니다.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["4주 이내", "최저 수강학점"]
+  },
+  {
+    "id": "TC-15",
+    "category": "CASUAL",
+    "title": "캠퍼스 단풍 사진 캡션",
+    "input": "오늘 본관 앞 단풍 진짜 절정이다... 시험공부 때려치우고 돗자리 깔고 낮잠 자고 싶음 🍂",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["단풍"]
+  },
+  {
+    "id": "TC-16",
+    "category": "CASUAL",
+    "title": "학교 앞 맛집 추천 감상",
+    "input": "정문 앞 새로 생긴 타코집 존맛탱! 살사소스 매콤하고 분위기 좋아서 친구들이랑 술 한잔하기 딱 좋음 내돈내산 추천.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["타코"]
+  },
+  {
+    "id": "TC-17",
+    "category": "CASUAL",
+    "title": "과제 끝낸 후기 글",
+    "input": "3박 4일 밤샘 코딩 과제 드디어 제출 완료 ㅠㅠ 종강 제발 빨리 왔으면 좋겠다 다들 고생했어!",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["과제"]
+  },
+  {
+    "id": "TC-18",
+    "category": "CASUAL",
+    "title": "귀여운 고양이 릴스 글",
+    "input": "동아리방 길고양이 츄르 먹방 보고 가세요. 털 찌고 뱃살 뽈록 나온 거 진짜 심장 아픔 ㅋㅋ",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["고양이"]
+  },
+  {
+    "id": "TC-19",
+    "category": "CASUAL",
+    "title": "여행 사진 감상",
+    "input": "작년 겨울 제주도 바다 사진 보니까 훌쩍 떠나고 싶다. 파도 소리 들으면서 멍때리던 순간이 그립네.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["제주도"]
+  },
+  {
+    "id": "TC-20",
+    "category": "EXCEPTION",
+    "title": "단순 추임새 텍스트 (내용 부족)",
+    "input": "야 이거 진짜 대박이다 ㅋㅋㅋ 꼭 봐라",
+    "expected_status": "INSUFFICIENT_CONTENT",
+    "should_have_action": false,
+    "must_include_keywords": []
+  },
+  {
+    "id": "TC-21",
+    "category": "EXCEPTION",
+    "title": "로그인 요구 비공개 링크 텍스트",
+    "input": "로그인이 필요한 페이지입니다. 에브리타임 계정으로 로그인한 후 이용해 주세요.",
+    "expected_status": "INSUFFICIENT_CONTENT",
+    "should_have_action": false,
+    "must_include_keywords": []
+  },
+  {
+    "id": "TC-22",
+    "category": "EXCEPTION",
+    "title": "광고성 스팸 문구",
+    "input": "선착순 100명 한정! 클릭만 해도 100% 당첨되는 행운의 룰렛! 지금 바로 참여하세요!!",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["이벤트"]
+  },
+  {
+    "id": "TC-23",
+    "category": "EXCEPTION",
+    "title": "무의미한 자음 나열",
+    "input": "ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ",
+    "expected_status": "INSUFFICIENT_CONTENT",
+    "should_have_action": false,
+    "must_include_keywords": []
+  },
+  {
+    "id": "TC-24",
+    "category": "EXCEPTION",
+    "title": "삭제된 게시물 안내문",
+    "input": "작성자에 의해 삭제되었거나 존재하지 않는 게시글입니다.",
+    "expected_status": "INSUFFICIENT_CONTENT",
+    "should_have_action": false,
+    "must_include_keywords": []
+  },
+  {
+    "id": "TC-25",
+    "category": "EXCEPTION",
+    "title": "일정/가격 누락 전시회 글",
+    "input": "이번 주말 성수동 팝업스토어 오픈 예정! 특별 굿즈 증정 이벤트 진행.",
+    "expected_status": "SUCCESS",
+    "should_have_action": false,
+    "must_include_keywords": ["성수동"]
+  }
+]
