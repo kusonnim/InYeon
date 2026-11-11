@@ -25,6 +25,9 @@ final class LibraryEntry {
   }
 
   String? get serverId => remote?.id ?? local?.serverContentId;
+  String get pebbleId => local == null ? key : 'local:${local!.localId}';
+  DateTime get pebbleSavedAt => local?.receivedAt ?? savedAt;
+  bool get archived => remote?.workflowStatus == WorkflowStatus.archived;
 }
 
 class LibraryController extends ChangeNotifier {

@@ -129,7 +129,7 @@ class _AccountScreenState extends State<AccountScreen> {
           return PageList(
             children: [
               _identity(copy, inbox),
-              SectionCard(
+              ContentSection(
                 title: copy.language,
                 children: [
                   DropdownButton<Locale>(
@@ -156,6 +156,16 @@ class _AccountScreenState extends State<AccountScreen> {
                   label: Text(copy.sampleLibrary),
                 ),
               ),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: () => showLicensePage(
+                    context: context,
+                    applicationName: copy.appName,
+                  ),
+                  child: Text(copy.openSourceLicenses),
+                ),
+              ),
             ],
           );
         },
@@ -172,7 +182,7 @@ class _AccountScreenState extends State<AccountScreen> {
       null => null,
       _ => copy.accountProblem,
     };
-    return SectionCard(
+    return ContentSection(
       title: disabled
           ? copy.deviceOnly
           : (account == null ? copy.signedOut : copy.signedIn),
@@ -276,7 +286,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 })
             .length -
         unassigned;
-    return SectionCard(
+    return ContentSection(
       title: copy.uploadActivity,
       children: [
         if (waiting == 0 && failed == 0 && unassigned == 0)
@@ -302,7 +312,7 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _notifications(AppLocalizations copy, LocalInbox inbox) => SectionCard(
+  Widget _notifications(AppLocalizations copy, LocalInbox inbox) => ContentSection(
         title: copy.notificationPermission,
         children: [
           if (inbox.account == null)

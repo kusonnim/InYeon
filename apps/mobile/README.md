@@ -1,7 +1,7 @@
 # ITDA mobile — Developer A
 
-ITDA opens to a private library of saved items. On Android, the library combines
-originals on this device with a durable copy of the signed-in account's server
+ITDA opens to a private tray of saved items. On Android, the tray and lists read
+originals on this device and a durable copy of the signed-in account's server
 catalog. The native outbox delivers assigned shares, and Android notifications
 present acknowledged items. A separate sample library uses synthetic fixtures.
 Read the root [AGENTS.md](../../AGENTS.md), [product contract](../../docs/PRODUCT.md),
@@ -10,9 +10,10 @@ and [OpenAPI](../../contracts/openapi.yaml) before changing behavior.
 ## Run and verify
 
 Install Flutter stable and the Android SDK. Use the JDK bundled with Android
-Studio or a compatible JDK. Repository CI pins Flutter 3.47.9. The Android runner
-and app dependency lockfile are checked in. Run from `apps/mobile` with an
-Android emulator or device.
+Studio or a compatible JDK. Forge2D builds its bundled Box2D library using the
+Android NDK. Flutter host tests also require a C toolchain, such as Visual Studio
+C++ Build Tools on Windows or clang on Linux. Repository CI pins Flutter
+3.47.9. Run from `apps/mobile` with an Android emulator or device.
 
 ~~~sh
 flutter pub get --enforce-lockfile
@@ -36,19 +37,37 @@ file copying and hashing, interrupted receipt writes, the HTTP upload protocol,
 Android notification state and actions, authenticated retries, and SQLite
 synchronization recovery. Use a disposable installation for instrumentation.
 
-## Library and details
+## Tray, lists, and workflow
 
-The library reads the active account's local snapshot first. **Load more** reads
-more items from SQLite. A receipt and server item with the same acknowledged ID
-share one card. A server deletion removes the synchronized card while retaining
-the device original. Dismissed and archived items remain accessible. **Sample
-library** is available from **Account** and from an empty device-only library.
+The home tray shows the most recent eligible pending and completed items. Its
+capacity varies from four to ten pebbles with the available viewport. **All
+saved** opens the complete non-archived collection, including when the viewport
+is too small for a tray. **Load more** reveals additional cached pages.
+**Archive** opens an individual list of archived items.
+Repeated exact URLs can expand as a group in **All saved**. Each save keeps its
+own detail route and pebble identity. **Sample library** is available from
+**Account** and from an empty device-only tray.
 
-Cards show the source type, display title, up to two lines of labeled AI
-summary, and compact status badges. Recommendations are in details. The library
-groups loaded saves with the exact same source URL, including its query and
-fragment. Expand a group to see each save's own title, timestamp, state, and
-details. The group has no effect on ingestion or synchronization.
+The first nonempty tray releases pebbles into a Box2D scene once per app session.
+A new visible share enters on its own. Tap a pebble for details or drag it inside
+the tray. Reduced motion prepares the resting arrangement before displaying it.
+An acknowledged receipt keeps the same pebble as its server details arrive.
+The scene sleeps at rest and rebuilds its geometry for viewport or account
+changes. See the [tray decision](../../docs/decisions/0008-android-rigid-pebble-tray.md).
+
+**Mark complete** updates workflow in the registered detail. Move a completed
+item to **Archive** by dropping it on the destination or selecting **Move to
+archive** in its detail. **Return to tray** sets an archived item to pending.
+These actions require an owner-scoped, versioned server acknowledgment. A local
+share remains available until it can sync. A conflict asks for the latest
+version before another attempt. Analysis and notification visibility have
+separate controls and state.
+
+The UI bundles SUIT Regular and SemiBold from the official v2.0.5 release under
+the SIL Open Font License 1.1. **Open-source licenses** in **Account** shows
+the font license and the notice for the bundled Box2D library. [Official SUIT release](https://github.com/sun-typeface/SUIT/releases/tag/v2.0.5)
+
+## Source and details
 
 A saved title takes priority over an Android share subject or a title line
 shared alongside a URL. When these are absent, a localized label names the
@@ -172,8 +191,8 @@ provider's reported MIME type when available. The local limit for text is 100,00
 characters to match content creation. Source metadata can include subject, sender
 package, declared MIME type, provider authority and display filename.
 
-Open ITDA to see the new item in **Library**. The list refreshes on app resume
-and on native receipt or upload changes.
+Open ITDA to see the new pebble or find the item in **All saved**. Both views
+refresh on app resume and on native receipt or upload changes.
 
 ## Inbox and outbox
 
@@ -224,7 +243,7 @@ New shares are assigned to the active user and API destination when saved.
 For A1 shares and shares received while signed out, open the item and select
 **Choose account**. Confirm the displayed account for each item. Assigned
 receipts keep that user and destination across account changes. Another
-account sees a redacted card.
+account sees a redacted row in **All saved**.
 
 | State | Behavior |
 | --- | --- |
@@ -288,8 +307,8 @@ needed. WorkManager uses the A2 session, a connected network, unique per-content
 work and exponential backoff. The original account resumes its queued events
 after signing back in.
 
-Open an eligible item in **Library** and select
-**Restore notification** after dismissal has synchronized. A queued restore
+Open the details of an eligible item and select **Restore notification** after
+dismissal has synchronized. A queued restore
 leaves the card hidden until the server confirms the current state. A version
 conflict refreshes state. A dismissal may retry at the new revision of the same
 generation with a new key. A conflicting restoration requires a fresh tap.
@@ -396,4 +415,4 @@ its synthetic feed remains available.
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, durable content and sync persistence, private assets,
 and the future FCM delivery contract. See the
-[mobile verification results](../../docs/STATUS.md#phase-a61-android-checks).
+[mobile verification results](../../docs/STATUS.md#phase-a71-android-checks).

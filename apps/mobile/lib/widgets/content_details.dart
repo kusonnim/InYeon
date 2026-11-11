@@ -109,6 +109,7 @@ class ContentDetails extends StatelessWidget {
     this.openImage,
     this.onEditTitle,
     this.onEditNotes,
+    this.workflowAction,
   });
 
   final ContentItem content;
@@ -122,6 +123,7 @@ class ContentDetails extends StatelessWidget {
   final VoidCallback? openImage;
   final VoidCallback? onEditTitle;
   final VoidCallback? onEditNotes;
+  final Widget? workflowAction;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +151,7 @@ class ContentDetails extends StatelessWidget {
           ],
         ),
         ...header,
+        if (workflowAction case final action?) action,
         OriginalSource.fromContent(
           content,
           original: original,
@@ -163,7 +166,7 @@ class ContentDetails extends StatelessWidget {
         if (suggestions.isNotEmpty || content.recommendations.isEmpty)
           RecommendationSection(
               title: copy.recommendations, items: suggestions),
-        SectionCard(
+        ContentSection(
             title: copy.notes,
             action: editNotes == null
                 ? null
@@ -232,7 +235,7 @@ class OriginalSource extends StatelessWidget {
     final isImage = (inputType ?? original?.inputType) == InputType.image;
     final imagePath = original?.imagePath;
     final viewOriginal = isImage ? null : openOriginal;
-    return SectionCard(
+    return ContentSection(
       title: copy.originalSource,
       children: [
         if (link != null) _linkText(context, link),
@@ -360,7 +363,7 @@ class _AnalysisSection extends StatelessWidget {
     final waiting = content.analysisStatus == AnalysisStatus.pending ||
         content.analysisStatus == AnalysisStatus.processing;
     final summary = analysis?.summary?.trim();
-    return SectionCard(
+    return ContentSection(
       title: copy.aiSummary,
       children: [
         Wrap(
@@ -402,7 +405,7 @@ class RecommendationSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    return SectionCard(
+    return ContentSection(
       title: title,
       children: [
         if (items.isEmpty) Text(copy.noRecommendations),

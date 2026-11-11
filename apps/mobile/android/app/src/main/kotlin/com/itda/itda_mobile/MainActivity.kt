@@ -129,6 +129,11 @@ class MainActivity : FlutterActivity() {
                                 for (field in listOf("title", "user_note")) {
                                     if (call.hasArgument(field)) patch.put(field, call.argument<String>(field) ?: JSONObject.NULL)
                                 }
+                                if (call.hasArgument("workflow_status")) {
+                                    val workflow = call.argument<String>("workflow_status")
+                                    require(workflow == "pending" || workflow == "completed" || workflow == "archived")
+                                    patch.put("workflow_status", workflow)
+                                }
                                 val ref = call.noticeRef()
                                 val updated = outbox.notices.edit(ref, patch)
                                 outbox.library?.request(ref.owner)

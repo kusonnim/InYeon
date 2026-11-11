@@ -6,13 +6,6 @@ import '../models/content.dart';
 import '../native/share_bridge.dart';
 import 'library_components.dart';
 
-String entryTitle(AppLocalizations copy, LibraryEntry entry) {
-  final content = entry.remote;
-  return content == null
-      ? localTitle(copy, entry.local!)
-      : contentTitle(copy, content, local: entry.local);
-}
-
 class SavedContentCard extends StatelessWidget {
   const SavedContentCard({
     super.key,

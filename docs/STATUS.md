@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A6.1 Android UX and C web integration.**
+Last updated 2026-11-10 (Asia/Seoul). **Phase A7.1 Android pebble tray.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
@@ -8,10 +8,12 @@ and library checkpoints retain their account and realm scope. The checked-in
 backend and database evidence supports local mock verification. Authenticated
 staging, private storage, RLS, web consistency, and FCM remain integration work.
 
-The Android library and editor support Korean and English, compact cards, and
-expandable repeated-link groups. Details and editing show locally available
-original images. Android notifications show a localized source, title, and
-processing state with the existing dismissal and restoration rules.
+Android home presents saved items as rigid pebbles. **All saved** exposes the
+non-archived collection, including expandable repeated-link groups. The archive
+is a list. Completion, archiving, and return to pending use versioned workflow
+updates. The app supports Korean and English. Details and editing show locally
+available original images. Android notifications show a localized source,
+title, and processing state with the existing dismissal and restoration rules.
 
 Android details and editing open saved source and recommendation web links
 through Android's external app resolution. Titles and personal notes in
@@ -27,7 +29,7 @@ editable details can focus the corresponding field in the versioned editor.
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
 | Data | 12 owned tables, RLS, private bucket, notification/sync functions, both migrations and 33 pgTAP checks executed on isolated PostgreSQL 17.5 | Full Supabase CLI stack, hosted Auth/Storage integration, and B adapter wiring |
 | Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview | Two-account live API/RLS verification, server-only private image download, FCM delivery |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview, rigid pebble tray and versioned workflow | Two-account live API/RLS verification, server-only private image download, FCM delivery |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
@@ -240,6 +242,26 @@ Instagram and YouTube URLs were exercised through the Android intent tests.
 Emulator testing used Chrome for the actual external handoff. Physical device
 verification remains outstanding.
 
+### Phase A7.1 Android checks
+
+A7.1 starts from main at `2a99485`, which includes the merged A6.2 PR #8.
+The tray projects the existing library through a bounded Box2D scene.
+See the [tray decision](decisions/0008-android-rigid-pebble-tray.md).
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, fixture parity, static analysis, and all 46 tests passed. Tests cover staggered release, collision and sleep, drag, reduced motion, account switching, stable receipt identity, archive transitions and version conflicts |
+| Android instrumentation | All 46 tests passed against the final default APK on the disposable emulator. The suite covers Android receipt, external links, sync, notification lifecycle and transport, upload retries, and staging configuration |
+| Android builds and lint | The default arm64-v8a, armeabi-v7a, and x86_64 debug APK and the x86_64 loopback mock APK built successfully. Android lint reported zero errors and eight warnings. The APKs contain the SUIT weights and the SUIT and Box2D notices |
+| Host physics | With 500 candidate identities, the three viewport fixtures simulated 10, 6, and 4 bodies. They slept after 166, 133, and 186 steps, respectively. The mean step costs were 12.1, 8.2, and 5.2 microseconds on the Windows test host |
+| Emulator UI | Captured the empty tray, cascade, settled light and dark trays, archive, and detail on a disposable Android 15 / API 35 x86_64 emulator. Returning from details preserved all five settled positions. The tray was also captured at 760 px wide with Android font scale 1.8 |
+| Emulator workflow with the mock API | Completion, drag to archive, and return to pending each received a new version. The source, edits, analysis, and notification visibility and generation stayed intact. A new native share appeared alongside the five existing items and produced one acknowledged mock record |
+
+The host timings cover simulation steps. Mobile frame timing, physical-device
+testing, and live workflow verification remain open. Long titles can truncate
+sharply on narrow pebbles. The collection and details expose the individual
+items outside the tray.
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
@@ -250,6 +272,8 @@ verification remains outstanding.
 2. Agree with B on FCM device registration, revocation and dispatch. Connect
    delivery hints to the authoritative refresh path and exercise delayed,
    duplicate and cross-account delivery.
+3. Measure a full tray on lower-end Android devices and refine long labels and
+   the archive drop target using those device checks.
 
 ### Developer B — Backend and AI
 

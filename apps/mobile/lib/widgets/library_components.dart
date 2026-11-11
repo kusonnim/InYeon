@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/generated/app_localizations.dart';
+import '../library/library_controller.dart';
 import '../models/content.dart';
 import '../native/share_bridge.dart';
 
@@ -36,8 +37,8 @@ class PageList extends StatelessWidget {
       );
 }
 
-class SectionCard extends StatelessWidget {
-  const SectionCard({
+class ContentSection extends StatelessWidget {
+  const ContentSection({
     super.key,
     required this.title,
     required this.children,
@@ -58,7 +59,7 @@ class SectionCard extends StatelessWidget {
       child: Text(title, style: theme.textTheme.titleMedium),
     );
     final content = Padding(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -68,8 +69,11 @@ class SectionCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: heading),
-                Icon(Icons.edit_outlined,
-                    size: 18, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ],
             ),
           const SizedBox(height: 10),
@@ -78,21 +82,19 @@ class SectionCard extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        clipBehavior: tap == null ? null : Clip.antiAlias,
-        child: tap == null
-            ? content
-            : Semantics(
-                button: true,
-                label: tap.label,
-                child: Tooltip(
-                  message: tap.label,
-                  excludeFromSemantics: true,
-                  child: InkWell(onTap: tap.onTap, child: content),
-                ),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: tap == null
+          ? content
+          : Semantics(
+              container: true,
+              button: true,
+              label: tap.label,
+              child: Tooltip(
+                message: tap.label,
+                excludeFromSemantics: true,
+                child: InkWell(onTap: tap.onTap, child: content),
               ),
-      ),
+            ),
     );
   }
 }
@@ -116,23 +118,25 @@ class StatePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: theme.colorScheme.primary, size: 26),
-            const SizedBox(height: 10),
-            Text(title, style: theme.textTheme.titleMedium),
-            if (message != null) ...[
-              const SizedBox(height: 4),
-              Text(message!, style: theme.textTheme.bodyMedium),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: theme.colorScheme.onSurfaceVariant, size: 19),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
             ],
-            if (action != null && actionLabel != null)
-              TextButton(onPressed: action, child: Text(actionLabel!)),
+          ),
+          if (message != null) ...[
+            const SizedBox(height: 4),
+            Text(message!, style: theme.textTheme.bodyMedium),
           ],
-        ),
+          if (action != null && actionLabel != null)
+            TextButton(onPressed: action, child: Text(actionLabel!)),
+        ],
       ),
     );
   }
@@ -220,6 +224,13 @@ String uploadName(AppLocalizations copy, UploadMode mode, LocalShare share) {
           ? copy.uploadUnavailable
           : copy.failedUpload,
   };
+}
+
+String entryTitle(AppLocalizations copy, LibraryEntry entry) {
+  final content = entry.remote;
+  return content == null
+      ? localTitle(copy, entry.local!)
+      : contentTitle(copy, content, local: entry.local);
 }
 
 String contentTitle(AppLocalizations copy, ContentItem item,
