@@ -6,9 +6,10 @@ import 'itda_theme.dart';
 import 'library_components.dart';
 
 class DetailCard extends StatefulWidget {
-  const DetailCard({super.key, required this.children});
+  const DetailCard({super.key, required this.children, this.primaryAction});
 
   final List<Widget> Function(bool expanded) children;
+  final Widget? primaryAction;
 
   @override
   State<DetailCard> createState() => _DetailCardState();
@@ -20,46 +21,62 @@ class _DetailCardState extends State<DetailCard> {
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
-    final card = Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(ItdaSpace.large),
-      clipBehavior: Clip.antiAlias,
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: widget.children(_expanded),
+    );
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return PageWidth(
       child: Padding(
-        padding: const EdgeInsets.all(ItdaSpace.large),
+        padding: const EdgeInsets.fromLTRB(
+          ItdaSpace.page,
+          ItdaSpace.medium,
+          ItdaSpace.page,
+          ItdaSpace.tiny,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: widget.children(_expanded),
+          children: [
+            Expanded(
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(ItdaSpace.large),
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  primary: false,
+                  padding: const EdgeInsets.all(ItdaSpace.large),
+                  child: reduceMotion
+                      ? content
+                      : AnimatedSize(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeInOut,
+                          alignment: Alignment.topCenter,
+                          child: content,
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(height: ItdaSpace.tiny),
+            Semantics(
+              expanded: _expanded,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                iconAlignment: IconAlignment.end,
+                icon: Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18,
+                ),
+                label: Text(
+                  _expanded ? copy.hideDetails : copy.showDetails,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (widget.primaryAction case final action?) action,
+          ],
         ),
       ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (MediaQuery.disableAnimationsOf(context))
-          card
-        else
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeInOut,
-            alignment: Alignment.topCenter,
-            child: card,
-          ),
-        const SizedBox(height: ItdaSpace.tiny),
-        Center(
-          child: Semantics(
-            expanded: _expanded,
-            child: TextButton.icon(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              iconAlignment: IconAlignment.end,
-              icon: Icon(
-                _expanded ? Icons.expand_less : Icons.expand_more,
-                size: 18,
-              ),
-              label: Text(_expanded ? copy.hideDetails : copy.showDetails),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

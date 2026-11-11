@@ -101,6 +101,70 @@ void main() {
     expect(adapter.patch, isNull);
   });
 
+  testWidgets(
+    'the keyboard leaves the focused note and editor actions reachable',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 640);
+      const safeArea = FakeViewPadding(top: 24, bottom: 20);
+      tester.view.padding = safeArea;
+      tester.view.viewPadding = safeArea;
+      addTearDown(tester.view.reset);
+      adapter.navigation = NoticeNavigation(
+        adapter.target,
+        NoticeDestination.edit,
+      );
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          notificationBridge: adapter,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final note = find.byType(TextField).last;
+      await tester.ensureVisible(note);
+      await tester.showKeyboard(note);
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      tester.view.padding = const FakeViewPadding(top: 24);
+      await tester.pumpAndSettle();
+      tester.testTextInput.enterText('Bring the handout.');
+      await tester.pumpAndSettle();
+
+      final save = find.text('Save changes').hitTestable();
+      expect(save, findsOneWidget);
+      expect(find.text('Cancel').hitTestable(), findsOneWidget);
+      expect(tester.getBottomLeft(save).dy, lessThan(640 - 260));
+      _expectReachableNote(tester);
+
+      tester.view.physicalSize = const Size(640, 320);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 190);
+      await tester.pumpAndSettle();
+      final compactSave = find.byTooltip('Save changes').hitTestable();
+      expect(compactSave, findsOneWidget);
+      expect(find.byTooltip('Cancel').hitTestable(), findsOneWidget);
+      expect(tester.getBottomLeft(compactSave).dy, lessThan(320 - 190));
+      expect(tester.widget<TextField>(note).focusNode!.hasFocus, isTrue);
+      tester.testTextInput.enterText('Bring both handouts.');
+      await tester.pumpAndSettle();
+      _expectReachableNote(tester);
+
+      await tester.tap(compactSave);
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding();
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 20);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(adapter.patch!.userNote, 'Bring both handouts.');
+      expect(adapter.patch!.title, isNull);
+      expect(find.text('Content details'), findsOneWidget);
+      expect(find.text('Archive').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('a source-derived title hint does not become a field edit', (
     tester,
   ) async {
@@ -477,6 +541,15 @@ ContentItem _catalogItem(Map<String, dynamic> changes) {
     ...changes,
   });
 }
+
+void _expectReachableNote(WidgetTester tester) {
+  final viewport = tester.getRect(find.byType(ListView));
+  final note = find.byType(TextField).last;
+  final field = tester.getRect(note);
+  expect(viewport.overlaps(field), isTrue, reason: '$field in $viewport');
+  expect(tester.widget<TextField>(note).focusNode!.hasFocus, isTrue);
+}
+
 Future<void> _showControl(WidgetTester tester, String label,
     {double delta = 180}) async {
   final control = find.text(label).hitTestable();

@@ -114,87 +114,83 @@ class ContentDetails extends StatelessWidget {
     final notes = content.userNote;
     final editNotes = onEditNotes;
     final meta = Theme.of(context).textTheme.bodySmall;
-    return PageList(
-      children: [
+    return DetailCard(
+      primaryAction: primaryAction,
+      children: (expanded) => [
         ...header,
-        DetailCard(
-          children: (expanded) => [
-            ContentHeading(title: title, onEditTitle: onEditTitle),
-            if (image)
-              OriginalImagePreview(
-                original: original,
-                loading: loadingOriginal,
-                onExpand: openImage,
-              )
-            else if (primary != null && primary.trim() != title.trim())
-              Padding(
-                padding: const EdgeInsets.only(bottom: ItdaSpace.large),
-                child: DetailText(text: primary, expanded: expanded),
+        ContentHeading(title: title, onEditTitle: onEditTitle),
+        if (image)
+          OriginalImagePreview(
+            original: original,
+            loading: loadingOriginal,
+            onExpand: openImage,
+          )
+        else if (primary != null && primary.trim() != title.trim())
+          Padding(
+            padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+            child: DetailText(text: primary, expanded: expanded),
+          ),
+        if (statusText != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+            child: Text(statusText, style: meta),
+          ),
+        if (recommendations.isNotEmpty)
+          RecommendationSection(
+            title: copy.recommendations,
+            items: recommendations.take(1),
+            expanded: expanded,
+          ),
+        if (expanded) ...[
+          const Divider(height: ItdaSpace.bottom),
+          DetailMetadata(
+            type: type,
+            savedAt: content.createdAt,
+            sourceUrl: sourceUrl,
+            contextLabel: contextLabel,
+          ),
+          OriginalSource.fromContent(
+            content,
+            original: original,
+            loadingOriginal: loadingOriginal,
+            openDocument: openDocument,
+            displayedTitle: title,
+            showText:
+                originalText?.trim() != primary?.trim() &&
+                originalText?.trim() != title.trim(),
+            showImage: false,
+          ),
+          _AnalysisDetails(
+            analysis: content.analysis,
+            showSummary:
+                generated != null &&
+                generated != primary &&
+                generated != title.trim() &&
+                generated != originalText?.trim(),
+          ),
+          if (recommendations.length > 1)
+            RecommendationSection(
+              title: copy.moreRecommendations,
+              items: recommendations.skip(1),
+            ),
+          if (notes?.trim().isNotEmpty == true)
+            ContentSection(
+              title: copy.notes,
+              action: editNotes == null
+                  ? null
+                  : (onTap: editNotes, label: copy.editNotes),
+              children: [Text(notes!)],
+            )
+          else if (editNotes != null)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: editNotes,
+                child: Text(copy.editNotes),
               ),
-            if (statusText != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: ItdaSpace.large),
-                child: Text(statusText, style: meta),
-              ),
-            if (recommendations.isNotEmpty)
-              RecommendationSection(
-                title: copy.recommendations,
-                items: recommendations.take(1),
-                expanded: expanded,
-              ),
-            if (primaryAction != null) primaryAction!,
-            if (expanded) ...[
-              const Divider(height: ItdaSpace.bottom),
-              DetailMetadata(
-                type: type,
-                savedAt: content.createdAt,
-                sourceUrl: sourceUrl,
-                contextLabel: contextLabel,
-              ),
-              OriginalSource.fromContent(
-                content,
-                original: original,
-                loadingOriginal: loadingOriginal,
-                openDocument: openDocument,
-                displayedTitle: title,
-                showText:
-                    originalText?.trim() != primary?.trim() &&
-                    originalText?.trim() != title.trim(),
-                showImage: false,
-              ),
-              _AnalysisDetails(
-                analysis: content.analysis,
-                showSummary:
-                    generated != null &&
-                    generated != primary &&
-                    generated != title.trim() &&
-                    generated != originalText?.trim(),
-              ),
-              if (recommendations.length > 1)
-                RecommendationSection(
-                  title: copy.moreRecommendations,
-                  items: recommendations.skip(1),
-                ),
-              if (notes?.trim().isNotEmpty == true)
-                ContentSection(
-                  title: copy.notes,
-                  action: editNotes == null
-                      ? null
-                      : (onTap: editNotes, label: copy.editNotes),
-                  children: [Text(notes!)],
-                )
-              else if (editNotes != null)
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: TextButton(
-                    onPressed: editNotes,
-                    child: Text(copy.editNotes),
-                  ),
-                ),
-              ...footer,
-            ],
-          ],
-        ),
+            ),
+          ...footer,
+        ],
       ],
     );
   }

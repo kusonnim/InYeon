@@ -142,87 +142,75 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
     final url = original?.url ?? share.sourceUrl;
     final text = readableSourceText(original?.text, url);
     final theme = Theme.of(context);
-    return PageList(
-      children: [
-        DetailCard(
-          children: (expanded) => [
-            ContentHeading(title: title),
-            if (snapshot.hasError)
-              StatePanel(
-                icon: Icons.info_outline_rounded,
-                title: copy.sourceUnavailable,
-                action: () => setState(() => _source = _read()),
-                actionLabel: copy.retry,
-              )
-            else if (image)
-              OriginalImagePreview(
-                original: original,
-                loading: !snapshot.hasData,
-                onExpand: () => setState(() => _viewingImage = true),
-              )
-            else if (!snapshot.hasData)
-              LinearProgressIndicator(semanticsLabel: copy.loadingContent)
-            else if (text != null && text.trim() != title.trim())
-              Padding(
-                padding: const EdgeInsets.only(bottom: ItdaSpace.large),
-                child: DetailText(text: text, expanded: expanded),
-              ),
-            if (mode != UploadMode.disabled &&
-                share.uploadState != LocalUploadState.synchronized)
-              ContentSection(
-                title: uploadName(copy, mode, share),
-                children: [
-                  if (failed)
-                    Text(
-                      copy.uploadFailureInfo,
-                      style: theme.textTheme.bodySmall,
-                    )
-                  else if (share.uploadState == LocalUploadState.retryWaiting)
-                    Text(
-                      copy.uploadRetryInfo,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  if (share.canAssign && account != null)
-                    OutlinedButton(
-                      onPressed: _assigning ? null : () => _assign(account),
-                      child: Text(copy.assignAction),
-                    ),
-                ],
-              ),
-            if (share.serverContentId == null)
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: TextButton(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(copy.workflowNeedsSync)),
-                  ),
-                  child: Text(copy.archiveAction),
-                ),
-              ),
-            if (expanded) ...[
-              const Divider(height: ItdaSpace.bottom),
-              DetailMetadata(
-                type: share.inputType,
-                savedAt: share.receivedAt,
-                sourceUrl: url,
-                contextLabel: uploadEnvironmentLabel(copy, mode),
-              ),
-              if (original != null)
-                OriginalSource(
-                  inputType: share.inputType,
-                  original: original,
-                  displayedTitle: title,
-                  showImage: false,
-                  showText: image,
-                  openDocument: share.inputType == InputType.document
-                      ? () => openSavedDocument(context, {
-                          'local_id': share.localId,
-                        })
-                      : null,
+    return DetailCard(
+      primaryAction: share.serverContentId == null
+          ? FilledButton.icon(
+              onPressed: () => ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(copy.workflowNeedsSync))),
+              icon: const Icon(Icons.archive_outlined, size: 19),
+              label: Text(copy.archiveAction),
+            )
+          : null,
+      children: (expanded) => [
+        ContentHeading(title: title),
+        if (snapshot.hasError)
+          StatePanel(
+            icon: Icons.info_outline_rounded,
+            title: copy.sourceUnavailable,
+            action: () => setState(() => _source = _read()),
+            actionLabel: copy.retry,
+          )
+        else if (image)
+          OriginalImagePreview(
+            original: original,
+            loading: !snapshot.hasData,
+            onExpand: () => setState(() => _viewingImage = true),
+          )
+        else if (!snapshot.hasData)
+          LinearProgressIndicator(semanticsLabel: copy.loadingContent)
+        else if (text != null && text.trim() != title.trim())
+          Padding(
+            padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+            child: DetailText(text: text, expanded: expanded),
+          ),
+        if (mode != UploadMode.disabled &&
+            share.uploadState != LocalUploadState.synchronized)
+          ContentSection(
+            title: uploadName(copy, mode, share),
+            children: [
+              if (failed)
+                Text(copy.uploadFailureInfo, style: theme.textTheme.bodySmall)
+              else if (share.uploadState == LocalUploadState.retryWaiting)
+                Text(copy.uploadRetryInfo, style: theme.textTheme.bodySmall),
+              if (share.canAssign && account != null)
+                OutlinedButton(
+                  onPressed: _assigning ? null : () => _assign(account),
+                  child: Text(copy.assignAction),
                 ),
             ],
-          ],
-        ),
+          ),
+        if (expanded) ...[
+          const Divider(height: ItdaSpace.bottom),
+          DetailMetadata(
+            type: share.inputType,
+            savedAt: share.receivedAt,
+            sourceUrl: url,
+            contextLabel: uploadEnvironmentLabel(copy, mode),
+          ),
+          if (original != null)
+            OriginalSource(
+              inputType: share.inputType,
+              original: original,
+              displayedTitle: title,
+              showImage: false,
+              showText: image,
+              openDocument: share.inputType == InputType.document
+                  ? () =>
+                        openSavedDocument(context, {'local_id': share.localId})
+                  : null,
+            ),
+        ],
       ],
     );
   }

@@ -1,6 +1,6 @@
 # ITDA — Mobile Design System
 
-- **Status** Draft 0.2 for Phase A7.3 visual review
+- **Status** Draft 0.3 for Phase A7.3 visual review
 - **Target** Android mobile app (Flutter + Kotlin)
 - **Baseline** Phase A7.2 versioned archive, original access, and mobile palette
 
@@ -98,14 +98,17 @@ Account and language controls live in Account settings. The signed-out home open
 
 ### Detail content hierarchy
 
+Use three regions in order. The app bar sits above one full-height content card, followed by a fixed action area on the page background. The card fills the available space, and its content starts at the top. Only the content inside the card scrolls.
+
 The collapsed card emphasizes these elements in order.
 
 1. **Title**, with direct editing for authorized items.
 2. **Primary content**, using a real image, original writing, or a grounded summary. Use the original excerpt when a link has no summary and an excerpt is available. A pending, partial, or failed analysis has a concise state label.
 3. **One useful recommendation** when available, in the existing order.
-4. **One discoverable primary action**, generally “보관하기” for a non-archived, server-confirmed item.
 
-Place **Show details / 상세히 보기** below the card. It expands the same card in place and changes to **Hide details / 상세 접기**. Keep the title, primary content, first recommendation, and archive or restore action in the card. The expanded area adds the following information when available.
+Place **Show details / 상세히 보기** directly above **Archive / 보관하기** in the fixed action area. Pin Archive above the Android bottom inset and keep the same position for the restore action on archived items. Use page margins and safe-area padding.
+
+The disclosure changes to **Show less / 접기** and reveals the following information inside the card. Its position and height stay the same.
 
 - Content type, source, and saved date.
 - The original link or local PDF action and source-copy controls.
@@ -141,12 +144,12 @@ Do not use generated stock imagery as a substitute for unavailable originals. Do
 
 ### Pebble shape
 
-Use a **triangle with rounded corners** for every pebble.
+Use a **softly curved triangle** for every pebble.
 
-- Three recognizable straight sides joined by three rounded corners.
+- Three recognizable corners with smooth rounding. Each side bows slightly outward.
 - Five deterministic variants with mild asymmetry and a modest rounding radius.
 - Solid, rigid, matte, and visually flat: no squash/stretch or jelly wobble.
-- Build the Flutter outline and Box2D fixture from the same three vertices and outward rounding radius.
+- Draw tangent side and corner arcs. Use the three corners and three side midpoints for the convex Box2D hull with the same outward rounding radius.
 - Stable color and shape for each content identity, including across local receipt → server acknowledgment.
 - Upright, readable title labels even while the objects rotate; long labels use intelligent clipping or abbreviation without corrupting stored titles.
 
@@ -196,8 +199,8 @@ Preserve the Forge2D interaction, tray dimensions and position, capacity, and ar
 
 ### Detail
 
-- Use one large, low-contrast card with a clear title, natural body flow, and a primary archive or restore action.
-- Keep the disclosure control below the card in the same scroll view. Expanded source information uses a single quiet divider and restrained headings.
+- Use one large, low-contrast card with a clear title and top-aligned content.
+- Keep the disclosure and archive or restore controls below the card, outside its scroll view. Expanded source information uses a single quiet divider and restrained headings.
 - Keep source URL opening/copying, private local image preview/zoom, recommendation source actions, and user notes functional.
 - Original source, AI summary, and user edits remain distinguishable even when labels are visually quiet.
 - Respect the existing analysis coverage/limitations and avoid invented claims.
@@ -205,6 +208,7 @@ Preserve the Forge2D interaction, tray dimensions and position, capacity, and ar
 ### Editing
 
 - Tap on a title or notes area to focus the corresponding field in the existing editor.
+- Keep the form scrollable above the Android keyboard. Pin Save and Cancel above the keyboard, using app bar actions when vertical space is limited.
 - Preserve prefilled saved values, field-level PATCH, version conflict handling, and unsaved-draft protection.
 - Use minimal input boundaries with clear focus and error indicators.
 - Never autosave every keystroke or send an edit when nothing changed.
@@ -221,12 +225,12 @@ Preserve the Forge2D interaction, tray dimensions and position, capacity, and ar
 ## 8. Motion, Interaction, and Accessibility
 
 - Outside the U-tray, use restrained, fast transitions (typically about 150–250 ms).
-- The detail card expands and collapses over 180 ms. With reduced motion it updates immediately.
+- Animate content height inside the detail card over 180 ms. Update the contents immediately with reduced motion. Keep the current scroll offset when possible and clamp it to the available range when collapsing.
 - No bouncing cards, idle pulsing, ornamental spinners, or continuous motion.
 - Minimum practical Android touch target: 48 dp.
 - Support screen readers with full titles and meaningful button labels, including for visually truncated pebble text.
 - Keyboard/accessibility alternatives exist for actions performed by dragging.
-- Support light/dark theme, Android text scaling, small viewport widths, and reduced motion.
+- Support light/dark theme, Android text scaling, small viewport widths, landscape, gesture navigation insets, and reduced motion.
 - Preserve scroll and editor state when temporarily opening another application and returning.
 - Show concise, contextual error messages with an actionable recovery path when possible.
 
@@ -245,7 +249,7 @@ Preferred Korean labels (illustrative):
 | Recommendations | 추천 |
 | Notes | 내 메모 |
 | Show details | 상세히 보기 |
-| Hide details | 상세 접기 |
+| Show less | 접기 |
 | Edit | 수정 |
 | Processing | 처리 중 |
 
@@ -278,7 +282,7 @@ Recommended iteration:
 5. Apply consistent typography, spacing, and settings affordances.
 6. Verify on emulator, then on a real Android phone before declaring visual acceptance.
 
-Review the collapsed and expanded detail card, image detail, personal note, dedicated sign-in, dark detail, and dark tray. Check both app languages and large Android text on a narrow viewport.
+Capture the full collapsed and expanded detail layout. Verify fixed card bounds and actions while scrolling, short and long content, light and dark themes, both app languages, narrow and landscape viewports, large text, and keyboard and system insets. Review the image detail, personal note, dedicated sign-in, and dark tray.
 
 **Acceptance questions:**
 

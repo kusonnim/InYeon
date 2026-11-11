@@ -46,7 +46,7 @@ void main() {
       final card = find.byType(DetailCard);
       final title = find.text(item.title!);
       final summary = find.text(item.analysis!.summary!);
-      final archive = find.text('Archive item');
+      final archive = find.text('Archive');
       final second = find.text(item.recommendations.last.text);
       expect(card, findsOneWidget);
       expect(
@@ -77,12 +77,109 @@ void main() {
       expect(find.text('More recommendations'), findsOneWidget);
       expect(second, findsOneWidget);
       expect(find.textContaining('Saved '), findsOneWidget);
-      await _tap(tester, 'Hide details');
+      await _tap(tester, 'Show less');
       expect(summary, findsOneWidget);
       expect(second, findsNothing);
       expect(find.text('Open original'), findsNothing);
     },
   );
+
+  for (final dark in [false, true]) {
+    testWidgets(
+      'short content fills the detail viewport in ${dark ? 'dark' : 'light'} mode',
+      (tester) async {
+        _setViewport(
+          tester,
+          const Size(360, 640),
+          safeArea: const FakeViewPadding(top: 24, bottom: 20),
+        );
+        final item = ContentItem.fromJson({
+          ...examples[2],
+          'title': 'Short note',
+          'source_text': 'Remember the handout.',
+        });
+        await tester.pumpWidget(_page(item, dark: dark));
+        await tester.pumpAndSettle();
+
+        final layout = _detailLayout(tester);
+        _expectFixedLayout(tester, layout, bottomInset: 20);
+        expect(layout.card.height, greaterThan(400));
+        expect(_cardScroll(tester).maxScrollExtent, 0);
+        expect(
+          tester.getTopLeft(find.text('Short note')).dy,
+          layout.card.top + ItdaSpace.large,
+        );
+        final cardColor = itdaTheme(
+          dark ? Brightness.dark : Brightness.light,
+        ).colorScheme.surfaceContainerLow;
+        final surface = find.byWidgetPredicate(
+          (widget) => widget is Material && widget.color == cardColor,
+        );
+        expect(surface, findsOneWidget);
+        expect(tester.getRect(surface), layout.card);
+        expect(
+          find.descendant(of: surface, matching: find.text('Archive')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: surface, matching: find.text('Show details')),
+          findsNothing,
+        );
+
+        await tester.tap(find.text('Show details'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 90));
+        expect(_detailLayout(tester, toggle: 'Show less'), layout);
+        await tester.pumpAndSettle();
+        expect(_detailLayout(tester, toggle: 'Show less'), layout);
+        await _tap(tester, 'Show less');
+        expect(_detailLayout(tester), layout);
+      },
+    );
+  }
+
+  testWidgets('landscape detail respects side and gesture navigation insets', (
+    tester,
+  ) async {
+    _setViewport(
+      tester,
+      const Size(640, 320),
+      safeArea: const FakeViewPadding(top: 24, left: 22, right: 18, bottom: 16),
+    );
+    final item = ContentItem.fromJson(examples.first);
+    await tester.pumpWidget(_page(item));
+    await tester.pumpAndSettle();
+
+    final layout = _detailLayout(tester);
+    _expectFixedLayout(tester, layout, bottomInset: 16);
+    expect(layout.card.left, 22 + ItdaSpace.page);
+    expect(layout.card.right, 640 - 18 - ItdaSpace.page);
+    await _tap(tester, 'Show details');
+    expect(_detailLayout(tester, toggle: 'Show less'), layout);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('detail actions stay above an active portrait keyboard', (
+    tester,
+  ) async {
+    _setViewport(
+      tester,
+      const Size(360, 640),
+      safeArea: const FakeViewPadding(top: 24, bottom: 20),
+    );
+    final item = ContentItem.fromJson(examples.first);
+    await tester.pumpWidget(_page(item));
+    await tester.pumpAndSettle();
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    tester.view.padding = const FakeViewPadding(top: 24);
+    await tester.pumpAndSettle();
+    final layout = _detailLayout(tester);
+    _expectFixedLayout(tester, layout, bottomInset: 260);
+    await _tap(tester, 'Show details');
+    expect(_detailLayout(tester, toggle: 'Show less'), layout);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final (status, label) in [
     ('pending', 'Analysis pending'),
@@ -111,7 +208,7 @@ void main() {
     });
   }
 
-  testWidgets('reduced motion expands the card immediately', (tester) async {
+  testWidgets('reduced motion reveals details immediately', (tester) async {
     final item = ContentItem.fromJson(examples.first);
     await tester.pumpWidget(_page(item, reduceMotion: true));
     await tester.pumpAndSettle();
@@ -121,15 +218,16 @@ void main() {
   });
 
   testWidgets(
-    'a long Korean article keeps its full summary and coverage accessible',
+    'long Korean content scrolls inside a fixed card at 200% text size',
     (tester) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
+      _setViewport(
+        tester,
+        const Size(320, 520),
+        safeArea: const FakeViewPadding(top: 24, bottom: 24),
+      );
       tester.platformDispatcher.textScaleFactorTestValue = 2;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      final title = List.filled(3, '동네 기록을 모으는 워크숍 안내').join(' ');
+      final title = List.filled(5, '동네 기록을 모으는 워크숍 안내').join(' ');
       final summary = List.filled(
         10,
         '공개된 안내문에는 참가 신청이 필요하다고 적혀 있어요.',
@@ -154,16 +252,96 @@ void main() {
       expect(find.text('원문의 일부를 확인했어요'), findsNothing);
       expect(find.text('AI 요약'), findsNothing);
       expect(tester.widget<Text>(find.text(summary)).maxLines, 6);
+
+      final layout = _detailLayout(tester, toggle: '상세히 보기', archive: '보관하기');
+      _expectFixedLayout(tester, layout, bottomInset: 24);
+      final scroll = _cardScroll(tester);
+      await tester.dragFrom(layout.card.center, const Offset(0, -100));
+      await tester.pumpAndSettle();
+      final offset = scroll.pixels;
+      expect(offset, greaterThan(0));
+      expect(_detailLayout(tester, toggle: '상세히 보기', archive: '보관하기'), layout);
+
       await _tap(tester, '상세히 보기');
+      expect(_detailLayout(tester, toggle: '접기', archive: '보관하기'), layout);
+      expect(scroll.pixels, offset);
       final expandedSummary = tester.widget<EditableText>(find.text(summary));
       expect(expandedSummary.readOnly, isTrue);
       expect(expandedSummary.maxLines, isNull);
       expect(find.text(limitation), findsOneWidget);
       expect(find.text('원문의 일부를 확인했어요'), findsOneWidget);
+
+      scroll.jumpTo(scroll.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(_detailLayout(tester, toggle: '접기', archive: '보관하기'), layout);
+      final expandedEnd = scroll.pixels;
+      await _tap(tester, '접기');
+      expect(_detailLayout(tester, toggle: '상세히 보기', archive: '보관하기'), layout);
+      expect(scroll.pixels, inInclusiveRange(0, scroll.maxScrollExtent));
+      expect(scroll.pixels, lessThan(expandedEnd));
+      expect(find.text(limitation), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
 }
+
+void _setViewport(
+  WidgetTester tester,
+  Size size, {
+  required FakeViewPadding safeArea,
+}) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = size;
+  tester.view.padding = safeArea;
+  tester.view.viewPadding = safeArea;
+  addTearDown(tester.view.reset);
+}
+
+typedef _DetailLayout = ({Rect card, Rect disclosure, Rect archive});
+
+_DetailLayout _detailLayout(
+  WidgetTester tester, {
+  String toggle = 'Show details',
+  String archive = 'Archive',
+}) {
+  Rect button(String label) => tester.getRect(
+    find
+        .ancestor(
+          of: find.text(label),
+          matching: find.bySubtype<ButtonStyleButton>(),
+        )
+        .first,
+  );
+  return (
+    card: tester.getRect(find.byType(SingleChildScrollView)),
+    disclosure: button(toggle),
+    archive: button(archive),
+  );
+}
+
+void _expectFixedLayout(
+  WidgetTester tester,
+  _DetailLayout layout, {
+  required double bottomInset,
+}) {
+  final appBar = tester.getRect(find.byType(AppBar));
+  final screenBottom = tester.view.physicalSize.height;
+  expect(layout.card.top, appBar.bottom + ItdaSpace.medium);
+  expect(layout.disclosure.top, layout.card.bottom + ItdaSpace.tiny);
+  expect(layout.disclosure.bottom, layout.archive.top);
+  expect(layout.archive.bottom, screenBottom - bottomInset - ItdaSpace.tiny);
+}
+
+ScrollPosition _cardScroll(WidgetTester tester) => tester
+    .state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byType(SingleChildScrollView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    )
+    .position;
 
 Future<void> _tap(WidgetTester tester, String label) async {
   final target = find.text(label);
@@ -187,13 +365,20 @@ Widget _page(
     data: MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
     child: child!,
   ),
-  home: Scaffold(
-    body: ContentDetails(
-      content: item,
-      primaryAction: FilledButton(
-        onPressed: () {},
-        child: const Text('Archive item'),
-      ),
-    ),
+  home: Builder(
+    builder: (context) {
+      final copy = AppLocalizations.of(context);
+      return Scaffold(
+        appBar: AppBar(title: Text(copy.detailsTitle)),
+        body: ContentDetails(
+          content: item,
+          primaryAction: FilledButton.icon(
+            onPressed: () {},
+            icon: const Icon(Icons.archive_outlined, size: 19),
+            label: Text(copy.archiveAction),
+          ),
+        ),
+      );
+    },
   ),
 );

@@ -550,8 +550,7 @@ void main() {
       await tester.pumpAndSettle();
       await _tapPebble(tester, 'local:unsynced');
       await tester.pumpAndSettle();
-      await _scrollTo(tester, 'Archive item');
-      await tester.tap(find.text('Archive item'));
+      await tester.tap(find.text('Archive').hitTestable());
       await tester.pumpAndSettle();
       expect(
         find.text('Sync this item before changing its status.'),
@@ -675,9 +674,8 @@ void main() {
       final stone = find.byKey(ValueKey('pebble:server:${item.id}'));
       await tester.tapAt(tester.getCenter(stone));
       await tester.pumpAndSettle();
-      final archive = find.text('Archive item');
+      final archive = find.text('Archive');
       server.advanceVersion();
-      await _scrollTo(tester, 'Archive item');
       await tester.tap(archive);
       await tester.pumpAndSettle();
       expect(server.item.workflowStatus.name, initial);
@@ -685,7 +683,6 @@ void main() {
       await tester.tap(find.text('Load latest version'));
       await tester.pumpAndSettle();
       final before = server.edits;
-      await _scrollTo(tester, 'Archive item');
       await tester.tap(archive);
       await tester.pumpAndSettle();
       expect(server.edits, before + 1);

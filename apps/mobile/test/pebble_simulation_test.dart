@@ -22,14 +22,14 @@ void main() {
     }
   });
 
-  test('each silhouette has three straight sides and matches Box2D', () {
+  test('three bowed sides stay close to the rounded Box2D fixture', () {
     final world = World(gravity: Vector2.zero());
     addTearDown(world.destroy);
     final variants = <int>{};
     for (var index = 0; index < 32; index++) {
       final design = PebbleDesign.forId('local:receipt-$index');
       if (!variants.add(design.variant)) continue;
-      expect(design.vertices, hasLength(3));
+      expect(design.vertices, hasLength(6));
       final body = world.createBody();
       final fixture = body.createShape(
         Polygon([
@@ -37,38 +37,42 @@ void main() {
         ], radius: PebbleDesign.radius),
       );
       final path = design.silhouette;
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 6; i += 2) {
         final start = design.vertices[i];
-        final edge = design.vertices[(i + 1) % 3] - start;
+        final edge = design.vertices[(i + 2) % 6] - start;
         final normal = Offset(edge.dy, -edge.dx) / edge.distance;
         expect(edge.distance, greaterThan(.65));
-        for (final fraction in [.15, .5, .85]) {
-          final side = start + edge * fraction;
-          expect(
-            path.contains(side + normal * (PebbleDesign.radius - .001)),
-            isTrue,
-          );
-          expect(
-            path.contains(side + normal * (PebbleDesign.radius + .001)),
-            isFalse,
-          );
-        }
+        final bows = [
+          for (final fraction in [.25, .5, .75])
+            _boundary(
+              (distance) =>
+                  path.contains(start + edge * fraction + normal * distance),
+            ),
+        ];
+        expect(bows[0], greaterThan(.12));
+        expect(bows[2], greaterThan(.12));
+        expect(bows[1], greaterThan(math.max(bows[0], bows[2]) + .004));
+        expect(bows[1], lessThan(.14));
       }
+      final radii = <double>[];
       for (var angle = 0; angle < 360; angle += 3) {
         final direction = angle * math.pi / 180;
         expect(path.contains(Offset.fromDirection(direction, .26)), isTrue);
         expect(path.contains(Offset.fromDirection(direction, .55)), isFalse);
         final visibleRadius = _edgeRadius(direction, path.contains);
+        radii.add(visibleRadius);
         final fixtureRadius = _edgeRadius(
           direction,
           (p) => fixture.testPoint(Vector2(p.dx, p.dy)),
         );
         expect(
           visibleRadius,
-          closeTo(fixtureRadius, .0015),
+          closeTo(fixtureRadius, .009),
           reason: 'Variant ${design.variant} at $angle°',
         );
       }
+      radii.sort();
+      expect(radii.last / radii.first, greaterThan(1.5));
       body.destroy();
     }
     expect(variants, hasLength(5));
@@ -169,12 +173,15 @@ void main() {
   });
 }
 
-double _edgeRadius(double direction, bool Function(Offset) contains) {
-  var inside = .26;
+double _edgeRadius(double direction, bool Function(Offset) contains) =>
+    _boundary((radius) => contains(Offset.fromDirection(direction, radius)));
+
+double _boundary(bool Function(double) contains) {
+  var inside = 0.0;
   var outside = .55;
   while (outside - inside > .00002) {
     final radius = (inside + outside) / 2;
-    if (contains(Offset.fromDirection(direction, radius))) {
+    if (contains(radius)) {
       inside = radius;
     } else {
       outside = radius;

@@ -24,13 +24,14 @@ class PageWidth extends StatelessWidget {
   );
 }
 class PageList extends StatelessWidget {
-  const PageList({super.key, required this.children});
+  const PageList({super.key, required this.children, this.bottomActions});
 
   final List<Widget> children;
+  final Widget? bottomActions;
 
   @override
-  Widget build(BuildContext context) => PageWidth(
-    child: ListView(
+  Widget build(BuildContext context) {
+    final list = ListView(
       padding: const EdgeInsets.fromLTRB(
         ItdaSpace.page,
         ItdaSpace.medium,
@@ -38,8 +39,17 @@ class PageList extends StatelessWidget {
         ItdaSpace.bottom,
       ),
       children: children,
-    ),
-  );
+    );
+    final actions = bottomActions;
+    return PageWidth(
+      child: actions == null
+          ? list
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [Expanded(child: list), actions],
+            ),
+    );
+  }
 }
 class ContentSection extends StatelessWidget {
   const ContentSection({

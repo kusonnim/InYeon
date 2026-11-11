@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated 2026-11-11 (Asia/Seoul). **Phase A7.3 Android detail card review.**
+Last updated 2026-11-11 (Asia/Seoul). **Phase A7.3 Android detail layout and pebble review.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
@@ -297,6 +297,8 @@ the main merge. A7.3 carries A7.2 commit `a326981` as cherry-pick
 `d8b73a0`. The mobile and documentation trees matched A7.2 before the A7.3
 edits.
 
+#### Initial review
+
 | Check | Result |
 | --- | --- |
 | Flutter | Locked dependencies, fixture parity, both localizations, and static analysis passed. All 57 tests passed. The checks cover the single card and its disclosure, hidden provenance and extra recommendations, pending and failed analysis, direct edits and drafts, archive and restore, offline originals, reduced motion, and dedicated sign-in from both entry points |
@@ -304,6 +306,16 @@ edits.
 | Android | All 47 instrumentation tests passed on a disposable Android 15 / API 35 x86_64 emulator. Debug lint reported zero errors and eight warnings. Built the default multi-ABI and loopback mock x86_64 debug APKs |
 | Emulator UI | Captured 11 screens from the mock build, including collapsed and expanded details, image and personal note, dedicated sign-in, dark detail, and the dark tray. A dark English detail was also checked at 320 dp wide and Android font scale 1.8. The card could still expand and the archive action remained reachable by scrolling |
 | Emulator flows | The PNG and PDF shared through Android opened after the sender copies were removed. The image preview remained accessible with the network disabled. A pending item archived from the expanded card, an archived item returned to pending, and a completed triangular pebble archived by drag. Each move advanced the version once. Mock sign-in returned to Home or Account settings according to the entry point. Account B could not see account A's content |
+
+#### Full-height detail and curved pebble follow-up
+
+| Check | Result |
+| --- | --- |
+| Flutter | Fixture parity, localization generation, and static analysis passed. All 62 tests passed. The layout checks cover short and long content, fixed card and action bounds across disclosure and scrolling, a 320 dp viewport at 200% text size, light and dark themes, landscape, gesture navigation, and keyboard insets. The editor test retains focus and saves a note after rotation with the keyboard open |
+| Geometry | All five variants show three bowed sides. Each rendered outline matched its convex Box2D fixture within 0.009 normalized units across 120 radial samples. The three host physics cases retained their 10, 6, and 4 body limits and slept after 148, 155, and 166 steps |
+| Android | All 47 instrumentation tests passed on Android 15 / API 35 x86_64. Debug lint reported zero errors and eight warnings. Built the default multi-ABI and loopback mock x86_64 debug APKs |
+| Emulator UI | Captured collapsed and expanded detail, internal scrolling, the light and dark trays, 320 dp dark detail at font scale 1.8, landscape detail, and landscape editing with the keyboard open. Both footer actions retained the same Android accessibility bounds during disclosure and scrolling |
+| Emulator flows | The loopback mock confirmed archive, return to tray, and saving an edited title using the app bar while the landscape keyboard was open. Each action advanced the version once |
 
 Physical-device review and live service checks remain open. Server-only
 private image and PDF originals require an authenticated download path.

@@ -243,6 +243,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
 
   Future<void> _closeEditor() async {
     if (_busy) return;
+    FocusScope.of(context).unfocus();
     final copy = AppLocalizations.of(context);
     if (_dirty) {
       final discard = await showDialog<bool>(
@@ -342,6 +343,17 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     final copy = AppLocalizations.of(context);
     final image = _original?.imagePath;
     final viewingImage = _viewingImage && image != null;
+    final item = _item;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final availableBodyHeight =
+        MediaQuery.sizeOf(context).height -
+        MediaQuery.paddingOf(context).vertical -
+        keyboard -
+        kToolbarHeight;
+    final shortKeyboardViewport =
+        keyboard > 0 && availableBodyHeight < ItdaSpace.touchTarget * 3;
+    final compactEditor =
+        _editing && item != null && !viewingImage && shortKeyboardViewport;
     return PopScope(
       canPop: !_editing && !viewingImage,
       onPopInvokedWithResult: (didPop, _) {
@@ -353,8 +365,18 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         }
       },
       child: Scaffold(
+        // A read-only screen can reappear while the landscape IME closes.
+        resizeToAvoidBottomInset: _editing || !shortKeyboardViewport,
         appBar: AppBar(
-          leading: viewingImage ? BackButton(onPressed: _closeImage) : null,
+          leading: viewingImage
+              ? BackButton(onPressed: _closeImage)
+              : compactEditor
+              ? IconButton(
+                  tooltip: copy.cancel,
+                  onPressed: _busy ? null : _closeEditor,
+                  icon: const Icon(Icons.close),
+                )
+              : null,
           title: Text(
             viewingImage
                 ? copy.imageViewer
@@ -364,6 +386,12 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
                 : Theme.of(context).textTheme.labelLarge,
           ),
           actions: [
+            if (compactEditor)
+              IconButton(
+                tooltip: copy.saveChanges,
+                onPressed: _saveAction(item.content),
+                icon: const Icon(Icons.check),
+              ),
             if (!_locked && !_editing && !viewingImage)
               IconButton(
                 tooltip: copy.refreshContent,
@@ -380,19 +408,13 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         ),
         body: OriginalImageOverlay(
           path: viewingImage ? image : null,
-          child: Column(
-            children: [
-              if (_busy)
-                LinearProgressIndicator(semanticsLabel: copy.loadingContent),
-              Expanded(child: _body(copy)),
-            ],
-          ),
+          child: _body(copy, compactEditor: compactEditor),
         ),
       ),
     );
   }
 
-  Widget _body(AppLocalizations copy) {
+  Widget _body(AppLocalizations copy, {required bool compactEditor}) {
     if (_locked) {
       return PageList(
         children: [
@@ -402,24 +424,36 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     }
     final item = _item;
     final banner = _problem(copy);
+    final header = [
+      if (_busy)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ItdaSpace.small),
+          child: LinearProgressIndicator(semanticsLabel: copy.loadingContent),
+        ),
+      if (banner != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
+          child: banner,
+        ),
+    ];
     if (item == null) {
+      if (_original case final original?) {
+        return _originalDetails(copy, original, header);
+      }
       return PageList(
         children: [
-          if (banner != null) banner,
-          if (_original case final original?)
-            _originalDetails(copy, original)
-          else ...[
-            if (widget.openOriginal != null)
-              TextButton(
-                onPressed: widget.openOriginal,
-                child: Text(copy.readOriginal),
-              ),
-            if (!_editing) ..._notificationControls(copy),
-          ],
+          ...header,
+          if (widget.openOriginal != null)
+            TextButton(
+              onPressed: widget.openOriginal,
+              child: Text(copy.readOriginal),
+            ),
+          if (!_editing) ..._notificationControls(copy),
         ],
       );
     }
-    if (_editing) return _editor(copy, item, banner);
+    if (_editing)
+      return _editor(copy, item, header, compactEditor: compactEditor);
     return ContentDetails(
       content: item.content,
       contextLabel: _environmentBadge(copy, item.mode),
@@ -431,6 +465,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       onEditNotes: _canEdit ? () => _beginEdit(_noteFocus) : null,
       primaryAction: _workflowAction(copy, item.content),
       header: [
+        ...header,
         if (!_verified && banner == null)
           Padding(
             padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
@@ -439,23 +474,23 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-        if (banner != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
-            child: banner,
-          ),
       ],
       footer: _notificationControls(copy),
     );
   }
 
-  Widget _originalDetails(AppLocalizations copy, LocalSource original) {
+  Widget _originalDetails(
+    AppLocalizations copy,
+    LocalSource original,
+    List<Widget> header,
+  ) {
     final image = original.inputType == InputType.image;
     final source = sourceCue(copy, original.inputType, original.url);
     final title = original.filename ?? original.subject ?? source;
     final text = readableSourceText(original.text, original.url);
     return DetailCard(
       children: (expanded) => [
+        ...header,
         ContentHeading(title: title),
         if (image)
           OriginalImagePreview(
@@ -560,8 +595,33 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   Widget _editor(
     AppLocalizations copy,
     RegisteredContent item,
-    Widget? banner,
-  ) => PageList(
+    List<Widget> header, {
+    required bool compactEditor,
+  }) => PageList(
+    bottomActions: compactEditor
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(
+              ItdaSpace.page,
+              ItdaSpace.small,
+              ItdaSpace.page,
+              ItdaSpace.tiny,
+            ),
+            child: Wrap(
+              spacing: ItdaSpace.medium,
+              runSpacing: ItdaSpace.tiny,
+              children: [
+                FilledButton(
+                  onPressed: _saveAction(item.content),
+                  child: Text(copy.saveChanges),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : _closeEditor,
+                  child: Text(copy.cancel),
+                ),
+              ],
+            ),
+          ),
     children: [
       if (_environmentBadge(copy, item.mode) case final label?)
         Align(
@@ -569,8 +629,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
           child: Text(label, style: Theme.of(context).textTheme.bodySmall),
         ),
       const SizedBox(height: ItdaSpace.medium),
-      if (banner != null)
-        Padding(padding: const EdgeInsets.only(bottom: 12), child: banner),
+      ...header,
       if (_reviewDraft && _dirty)
         ContentSection(
           title: copy.latestSavedValues,
@@ -628,25 +687,6 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
           ),
         ],
       ),
-      Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 4,
-          children: [
-            FilledButton(
-              onPressed: !_busy && _verified && !_conflict && _dirty
-                  ? () => _save(item.content)
-                  : null,
-              child: Text(copy.saveChanges),
-            ),
-            TextButton(
-              onPressed: _busy ? null : _closeEditor,
-              child: Text(copy.cancel),
-            ),
-          ],
-        ),
-      ),
       OriginalSource.fromContent(
         item.content,
         original: _original,
@@ -660,6 +700,9 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       ),
     ],
   );
+
+  VoidCallback? _saveAction(ContentItem content) =>
+      _canEdit && !_conflict && _dirty ? () => _save(content) : null;
 
   Widget? _fieldCounter(
     BuildContext context, {

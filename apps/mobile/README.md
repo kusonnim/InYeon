@@ -50,16 +50,17 @@ Repeated exact URLs can expand as a group in **All saved**. Each save keeps its
 own detail route and pebble identity. **Sample library** is available from
 **Account** and from an empty device-only tray.
 
-The first nonempty tray releases matte, three-sided pebbles into a Box2D scene
-once per app session. The painter and collision fixture share three vertices
-and the same rounding radius. Dark mode uses an earthy pebble palette.
+The first nonempty tray releases matte, softly curved triangular pebbles into a
+Box2D scene once per app session. The painter draws smooth side and corner arcs.
+The collision fixture uses a rounded hull sampled at the three corners and
+three side midpoints. Dark mode uses an earthy pebble palette.
 A new visible share enters on its own. Tap a pebble for details or drag it inside
 the tray. Reduced motion prepares the resting arrangement before displaying it.
 An acknowledged receipt keeps the same pebble as its server details arrive.
 The scene sleeps at rest and rebuilds its geometry for viewport or account
 changes. See the [tray decision](../../docs/decisions/0008-android-rigid-pebble-tray.md).
 
-Drop a pending or completed item on **Archive**, or select **Archive item** in
+Drop a pending or completed item on **Archive**, or select **Archive** in
 its details. Both send one owner-scoped PATCH with the observed version and
 `workflow_status: archived`. The tray changes after the server confirms the
 move. **Return to tray** explicitly sets an archived item to pending. A local
@@ -80,12 +81,18 @@ requests to obtain a title. Android share subjects are local receipt metadata.
 Preserving their provenance across devices requires a contract review with
 Developer B.
 
-The detail card contains the title, saved image, original writing or grounded
-summary, the first recommendation when available, and the archive or restore
-action. **Show details** expands the same card to reveal the full text, original
-access, saved date, analysis coverage and provenance, and remaining
-recommendations. The first recommendation follows API order. A note with zero
-recommendations has no recommendation section.
+The detail card fills the viewport between the app bar and the fixed action
+area. It starts with the title, saved image, original writing or grounded
+summary, and the first recommendation when available. **Show details** reveals
+the full text, original access, saved date, analysis coverage and provenance, and
+remaining recommendations within the same card bounds. **Show less** collapses
+that content. Only the card interior scrolls. The disclosure stays directly
+above **Archive** or **Return to tray** in the safe-area footer. The first
+recommendation follows API order. A note with zero recommendations has no
+recommendation section.
+
+The editor scrolls above the Android keyboard. Save and Cancel remain in a
+fixed footer or move to the app bar when the keyboard leaves little height.
 
 In expanded details, tap a web URL or **Open original** to use Android's
 app-link and browser resolution. Recommendation references offer **Open

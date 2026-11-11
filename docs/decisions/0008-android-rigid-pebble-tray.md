@@ -49,7 +49,9 @@ account, item, destination, and advanced version authorizes the UI update.
 
 ## Phase A7.3 amendment
 
-Each pebble uses a three-vertex hull and a rounding radius of 0.105 times its
-normalized width. The sides stay straight between the three corner arcs.
-The painter and Box2D use those same vertices and radius. The home layout,
-simulation bounds, and identity hash carry forward from A7.2.
+Each pebble has three rounded corners and three gently convex circular sides.
+The five deterministic variants share a corner radius of 0.105 and a side bow
+of 0.028 in normalized coordinates. The painted side arcs meet the corner arcs
+tangentially. Box2D rounds a six-point convex hull with the same corner radius.
+The six samples are the three corner centers and the three midpoints of the
+side arcs before the outline offset.
