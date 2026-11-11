@@ -72,8 +72,9 @@ void main() {
     expect(await ExternalLink(_source).open(), isFalse);
   });
 
-  testWidgets('a pending item can open and copy the original and a resource',
-      (tester) async {
+  testWidgets('a pending item can open and copy the original and a resource', (
+    tester,
+  ) async {
     final fixture =
         jsonDecode(File('assets/fixtures/catalog.json').readAsStringSync())
             as Map<String, dynamic>;
@@ -100,33 +101,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(launches, isEmpty);
     expect(find.text('Analysis pending'), findsOneWidget);
+    expect(find.text(_source), findsNothing);
+    await _tap(tester, 'Open original');
+    await _tap(tester, 'Open resource');
+    await _tap(tester, 'Copy link');
+    await _tap(tester, 'Original source');
     final sourceSemantics = tester.getSemantics(find.text(_source));
     expect(sourceSemantics.label, _source);
     expect(sourceSemantics.rect.height, 48);
     await _tap(tester, _source);
-    await _tap(tester, 'Open original');
-    await _tap(tester, 'Copy link');
-    await _tap(tester, 'Open resource');
-    expect(find.text('Open resource'), findsOneWidget);
-    final copyResource = find
-        .ancestor(
-          of: find.text(_resource),
-          matching: find.byType(Column),
-        )
-        .first;
-    await tester.tap(find
-        .descendant(
-          of: copyResource,
-          matching: find.text('Copy link'),
-        )
-        .hitTestable());
+    final sourceDisclosure = find.widgetWithText(
+      ExpansionTile,
+      'Original source',
+    );
+    await tester.tap(
+      find
+          .descendant(of: sourceDisclosure, matching: find.text('Copy link'))
+          .hitTestable(),
+    );
     await tester.pumpAndSettle();
-    expect(
-        launches.map((call) => call.arguments), [_source, _source, _resource]);
-    expect(clipboard, [
-      {'text': _source},
-      {'text': _resource},
+    expect(launches.map((call) => call.arguments), [
+      _source,
+      _resource,
+      _source,
     ]);
+    expect(clipboard, [
+      {'text': _resource},
+      {'text': _source},
+    ]);
+    expect(find.text('No resource URL'), findsNothing);
+    await _tap(tester, 'More recommendations');
+    expect(find.text('No resource URL'), findsOneWidget);
   });
 
   testWidgets('a missing handler gives Korean feedback on the same screen',

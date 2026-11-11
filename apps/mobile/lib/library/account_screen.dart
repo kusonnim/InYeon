@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../native/notification_bridge.dart';
 import '../native/share_bridge.dart';
+import '../widgets/itda_theme.dart';
 import '../widgets/library_components.dart';
 import 'library_controller.dart';
 
@@ -26,7 +27,6 @@ class AccountScreen extends StatefulWidget {
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
-
 class _AccountScreenState extends State<AccountScreen> {
   final _form = GlobalKey<FormState>();
   final _email = TextEditingController();
@@ -114,17 +114,21 @@ class _AccountScreenState extends State<AccountScreen> {
           final inbox = widget.controller.inbox;
           if (inbox == null) {
             return widget.controller.localError
-                ? PageList(children: [
-                    StatePanel(
-                      icon: Icons.info_outline_rounded,
-                      title: copy.localLoadError,
-                      action: widget.controller.reload,
-                      actionLabel: copy.retry,
-                    ),
-                  ])
+                ? PageList(
+                    children: [
+                      StatePanel(
+                        icon: Icons.info_outline_rounded,
+                        title: copy.localLoadError,
+                        action: widget.controller.reload,
+                        actionLabel: copy.retry,
+                      ),
+                    ],
+                  )
                 : Center(
                     child: CircularProgressIndicator(
-                        semanticsLabel: copy.loadingLibrary));
+                      semanticsLabel: copy.loadingLibrary,
+                    ),
+                  );
           }
           return PageList(
             children: [
@@ -138,16 +142,19 @@ class _AccountScreenState extends State<AccountScreen> {
                     items: const [
                       DropdownMenuItem(value: Locale('ko'), child: Text('한국어')),
                       DropdownMenuItem(
-                          value: Locale('en'), child: Text('English')),
+                        value: Locale('en'),
+                        child: Text('English'),
+                      ),
                     ],
                     onChanged: _changingLanguage ? null : _selectLanguage,
                   ),
                 ],
               ),
-              if (inbox.mode != UploadMode.disabled) _uploads(copy, inbox),
               if (widget.notifications != null &&
-                  inbox.mode != UploadMode.disabled)
+                  inbox.mode != UploadMode.disabled &&
+                  inbox.account != null)
                 _notifications(copy, inbox),
+              if (inbox.mode != UploadMode.disabled) _uploads(copy, inbox),
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton.icon(
@@ -176,6 +183,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget _identity(AppLocalizations copy, LocalInbox inbox) {
     final account = inbox.account;
     final disabled = inbox.mode == UploadMode.disabled;
+    final theme = Theme.of(context);
     final issue = switch (_error) {
       'authentication_required' || 'invalid_sign_in' => copy.signInProblem,
       'auth_unavailable' || 'network_unavailable' => copy.signInUnavailable,
@@ -188,36 +196,37 @@ class _AccountScreenState extends State<AccountScreen> {
           : (account == null ? copy.signedOut : copy.signedIn),
       children: [
         if (uploadEnvironmentLabel(copy, inbox.mode) case final label?) ...[
-          StatusPill(label),
-          const SizedBox(height: 8),
-          Text(inbox.mode == UploadMode.staging
-              ? copy.stagingAccountBody
-              : copy.mockAccountBody),
+          Text(label, style: theme.textTheme.bodySmall),
           if (inbox.stagingApiHost case final host?)
-            Text(copy.stagingApiHost(host)),
-          const SizedBox(height: 10),
+            Text(copy.stagingApiHost(host), style: theme.textTheme.bodySmall),
+          Text(
+            inbox.mode == UploadMode.staging
+                ? copy.stagingAccountBody
+                : copy.mockAccountBody,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: ItdaSpace.medium),
         ],
         if (disabled)
           Text(copy.localOnlyBody)
         else if (account != null) ...[
           SelectableText(account.email),
-          const SizedBox(height: 6),
-          OutlinedButton(
-              onPressed: _busy ? null : () => _submit(signOut: true),
-              child: Text(copy.signOut)),
-        ] else ...[
-          Text(copy.signInBody),
-          const SizedBox(height: 16),
+          TextButton(
+            onPressed: _busy ? null : () => _submit(signOut: true),
+            child: Text(copy.signOut),
+          ),
+        ] else
           _signInForm(copy),
-        ],
         if (_busy) const LinearProgressIndicator(),
         if (issue != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: ItdaSpace.small),
             child: Semantics(
               liveRegion: true,
-              child: Text(issue,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: Text(
+                issue,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           ),
       ],
@@ -225,46 +234,46 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _signInForm(AppLocalizations copy) => AutofillGroup(
-        onDisposeAction: AutofillContextAction.cancel,
-        child: Form(
-          key: _form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _email,
-                enabled: !_busy,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.email],
-                autocorrect: false,
-                validator: (value) => value?.trim().isNotEmpty == true
-                    ? null
-                    : copy.signInProblem,
-                decoration: InputDecoration(labelText: copy.email),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _password,
-                enabled: !_busy,
-                obscureText: true,
-                autofillHints: const [AutofillHints.password],
-                textInputAction: TextInputAction.done,
-                autocorrect: false,
-                enableSuggestions: false,
-                validator: (value) =>
-                    value?.isNotEmpty == true ? null : copy.signInProblem,
-                onFieldSubmitted: (_) => _submit(signOut: false),
-                decoration: InputDecoration(labelText: copy.password),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                  onPressed: _busy ? null : () => _submit(signOut: false),
-                  child: Text(copy.signIn)),
-            ],
+    onDisposeAction: AutofillContextAction.cancel,
+    child: Form(
+      key: _form,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: _email,
+            enabled: !_busy,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+            autocorrect: false,
+            validator: (value) =>
+                value?.trim().isNotEmpty == true ? null : copy.signInProblem,
+            decoration: InputDecoration(labelText: copy.email),
           ),
-        ),
-      );
+          const SizedBox(height: ItdaSpace.medium),
+          TextFormField(
+            controller: _password,
+            enabled: !_busy,
+            obscureText: true,
+            autofillHints: const [AutofillHints.password],
+            textInputAction: TextInputAction.done,
+            autocorrect: false,
+            enableSuggestions: false,
+            validator: (value) =>
+                value?.isNotEmpty == true ? null : copy.signInProblem,
+            onFieldSubmitted: (_) => _submit(signOut: false),
+            decoration: InputDecoration(labelText: copy.password),
+          ),
+          const SizedBox(height: ItdaSpace.medium),
+          FilledButton(
+            onPressed: _busy ? null : () => _submit(signOut: false),
+            child: Text(copy.signIn),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _uploads(AppLocalizations copy, LocalInbox inbox) {
     final visible = inbox.shares.where((item) => item.inputType != null);
@@ -272,64 +281,66 @@ class _AccountScreenState extends State<AccountScreen> {
         .where((item) => item.uploadState == LocalUploadState.permanentFailure)
         .length;
     final unassigned = visible
-        .where((item) =>
-            item.canAssign ||
-            (inbox.account == null &&
-                item.uploadState == LocalUploadState.authenticationRequired))
+        .where(
+          (item) =>
+              item.canAssign ||
+              (inbox.account == null &&
+                  item.uploadState == LocalUploadState.authenticationRequired),
+        )
         .length;
-    final waiting = visible
-            .where((item) => switch (item.uploadState) {
-                  LocalUploadState.synchronized ||
-                  LocalUploadState.permanentFailure =>
-                    false,
-                  _ => true,
-                })
+    final waiting =
+        visible
+            .where(
+              (item) => switch (item.uploadState) {
+                LocalUploadState.synchronized ||
+                LocalUploadState.permanentFailure => false,
+                _ => true,
+              },
+            )
             .length -
         unassigned;
+    if (waiting == 0 && failed == 0 && unassigned == 0) {
+      return const SizedBox.shrink();
+    }
     return ContentSection(
       title: copy.uploadActivity,
       children: [
-        if (waiting == 0 && failed == 0 && unassigned == 0)
-          Text(copy.noPendingUploads),
         if (waiting > 0) ...[
-          StatusPill(copy.queuedUploads(waiting), highlight: true),
-          const SizedBox(height: 6),
+          Text(copy.queuedUploads(waiting)),
           Text(copy.uploadRetryInfo),
         ],
         if (failed > 0) ...[
-          if (waiting > 0) const SizedBox(height: 12),
-          StatusPill(copy.failedUploads(failed), error: true),
-          const SizedBox(height: 6),
+          if (waiting > 0) const SizedBox(height: ItdaSpace.medium),
+          Text(
+            copy.failedUploads(failed),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
           Text(copy.uploadFailureInfo),
         ],
         if (unassigned > 0) ...[
-          if (waiting > 0 || failed > 0) const SizedBox(height: 12),
-          StatusPill(copy.unassignedCount(unassigned)),
-          const SizedBox(height: 6),
+          if (waiting > 0 || failed > 0)
+            const SizedBox(height: ItdaSpace.medium),
+          Text(copy.unassignedCount(unassigned)),
           Text(inbox.account == null ? copy.signInBody : copy.unassignedHelp),
         ],
       ],
     );
   }
 
-  Widget _notifications(AppLocalizations copy, LocalInbox inbox) => ContentSection(
+  Widget _notifications(AppLocalizations copy, LocalInbox inbox) =>
+      ContentSection(
         title: copy.notificationPermission,
         children: [
-          if (inbox.account == null)
-            Text(copy.notificationsSignIn)
-          else ...[
-            StatusPill(
-              inbox.notificationsEnabled
-                  ? copy.notificationsOn
-                  : copy.notificationsOff,
-              highlight: inbox.notificationsEnabled,
+          Text(
+            inbox.notificationsEnabled
+                ? copy.notificationsOn
+                : copy.notificationsOff,
+          ),
+          if (!inbox.notificationsEnabled)
+            TextButton(
+              onPressed: _enable,
+              child: Text(copy.enableNotifications),
             ),
-            const SizedBox(height: 8),
-            Text(copy.notificationsHelp),
-            if (!inbox.notificationsEnabled)
-              TextButton(
-                  onPressed: _enable, child: Text(copy.enableNotifications)),
-          ],
         ],
       );
 }
