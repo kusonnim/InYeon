@@ -1,12 +1,13 @@
 # Implementation status
 
-Last updated 2026-11-11 (Asia/Seoul). **Phase A7.3 Android detail layout and pebble review.**
+Last updated 2026-11-12 (Asia/Seoul). **Integration I1 Windows verification and staging handoff.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
-and library checkpoints retain their account and realm scope. The checked-in
-backend and database evidence supports local mock verification. Authenticated
-staging, private storage, RLS, web consistency, and FCM remain integration work.
+and library checkpoints retain their account and realm scope. I1 ran the fixture
+HTTP smoke and checked both migrations on a disposable local Supabase stack.
+Authenticated staging, real-identity RLS and private object transfers, Web/Android
+consistency against the same live API, and FCM remain integration work.
 
 Android home presents saved items as rigid rounded triangular pebbles.
 **All saved** and **Archive** use plain, searchable rows with pagination.
@@ -32,21 +33,45 @@ details can focus the corresponding field in the versioned editor.
 | Onboarding | Root AGENTS, product/architecture/development/ownership/integration docs, ADRs | Evolving decisions require future updates |
 | API contract | Versioned OpenAPI, UUID/UTC/bearer conventions, errors, version conflicts, idempotency, cursor sync, private asset lifecycle | Real HTTP authentication, storage and persistence adapters |
 | Backend | FastAPI health/router/model/config structure, fail-closed production mode, explicit in-memory fixture adapter | Persistent ingestion, Supabase JWT, uploads, real worker operations |
-| Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
-| Data | 12 owned tables, RLS, private bucket, notification/sync functions, both migrations and 33 pgTAP checks executed on isolated PostgreSQL 17.5 | Full Supabase CLI stack, hosted Auth/Storage integration, and B adapter wiring |
+| Worker | Separate extraction/summarization/recommendation/persistence interfaces; standalone supplied-text provider helper from PR #11 | Runnable PostgreSQL claim/lease/retry consumer, bounded source fetching, provider/contract mapping, guarded result transactions |
+| Data | 12 owned tables, RLS, private bucket and notification/sync functions. Both migrations, 33 pgTAP checks and schema lint ran on disposable local Supabase PostgreSQL 17.6 | Two real staging identities, private object byte transfer and B adapter wiring |
 | Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
 | Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview, rigid pebble tray and versioned workflow | Two-account live API/RLS verification, server-only private image download, FCM delivery |
+| Integration | Windows runbook, redacted preflight, two-account API smoke with optional operator-managed restart, deterministic analysis and Web rendering tests | Execution against the approved staging tuple with two disposable accounts |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
 
 ## Verification evidence
 
-| Check | Current evidence / limitation |
+### I1 Windows verification
+
+Reviewed `main` at `cb8338a52c4b`. Windows checks used Python 3.12.14, Node
+24.15.0, npm 11.12.1, Flutter 3.47.8, Dart 3.13.7, Android Studio's JDK,
+and a fresh Android 15 / API 35 x86_64 emulator. See
+[reproduction commands](INTEGRATION_READINESS.md#reproduce-the-checks) and the
+[Windows runbook](INTEGRATION.md#windows-integration-setup).
+
+| Check | I1 outcome |
+| --- | --- |
+| Backend and contracts | **PASS.** 13 existing Python tests, OpenAPI runtime parity and 11 example payloads, and the SQL mapping check for nine models and 12 tables. One existing Starlette/AnyIO deprecation warning. |
+| Web | **PASS.** Locked `npm ci`, typecheck, seven tests, and production Webpack build. Rendered the synthetic recommendation, partial and zero-recommendation details over loopback HTTP. A disposable catalog copy exercised the Web failed-detail branch. |
+| Flutter | **PASS.** Locked dependencies, canonical fixture check, analysis and 62 tests. Detail cases include failed analysis retaining the original and an empty recommendation list. |
+| Android build and lint | **PASS.** Default debug and test APKs assembled. Debug lint reported zero errors and eight warnings after correcting the ignored Windows SDK properties and refreshing the stale lint report. |
+| Android instrumentation | **PASS.** All 47 tests passed on the full rerun on the warmed, unlocked emulator. The first run passed 45 of 47. The receiver commit/recreation and delete-intent notification tests also passed on a focused rerun. |
+| Disposable Supabase | **PASS.** CLI 2.118.0 started a fresh local project with isolated ports and volumes. PostgreSQL 17.6 reported migrations `202611090001` and `202611090002`, and `content-assets` was private. All 33 pgTAP assertions passed, local schema lint found no errors, and local Auth health returned 200. pgTAP exercised synthetic database identities and metadata policies. The optional Windows `psql` preflight probe was **NOT TESTED**. |
+| Integration preflight and HTTP smoke | **PASS** in fixture mode. Loopback API health, bearer rejection, catalog, Web startup, 201 readback, exact replay and one matching item, changed-body conflict, versioned edit/readback, stale edit, sync replay, 404 foreign read and 400 foreign cursor. Receipt state was volatile. |
+| I1 analysis and harness regression | **PASS.** Six harness guards, four fixture result round-trips, and four Web rendering cases with the disposable preview. A failed result keeps the source and a prior dismissal, and a generated recommendation remains unaccepted. |
+| Staging preflight and smoke | **BLOCKED** with exit 2. The approved HTTPS API/Auth/Web settings and two staging accounts were unavailable. Production bearer requests on the reviewed checkout still return 501 and the worker entry point exits at the scaffold. Staging restart, real data/Storage tests, and live cross-client sync are **NOT TESTED**. |
+| Hosted analysis and FCM | **NOT TESTED.** I1 used deterministic results. Hosted evaluation for B's 25 cases and authenticated delivery are separate milestones. |
+
+### Earlier evidence
+
+| Check | Evidence and limitation at that phase |
 | --- | --- |
 | SQL parsing | Passed with temporary pglast 8.7: both migrations (27 and 14 statements), test script (60 statements), all four PL/pgSQL functions |
 | API/SQL consistency | Passed: 9 HTTP model mappings and enums against 12 explicitly owned tables |
-| pgTAP | All 33 passed in isolated PostgreSQL 17.5 using PGlite and compatibility Auth/Storage tables. Full Supabase stack, CLI lint, and Auth/Storage transport remain pending. See [data setup](../supabase/README.md#local-verification). |
+| pgTAP | All 33 passed in isolated PostgreSQL 17.5 using PGlite and compatibility Auth/Storage tables. I1 reran the same suite with the Supabase CLI. See [data setup](../supabase/README.md#local-verification). |
 | Backend tests | Passed: 13 tests, including mock idempotency/concurrency, owner isolation, version conflict, independent states, source/edit preservation, and worker stage validation |
 | OpenAPI and examples | Passed: specification validation, runtime schema parity, 11 example payload checks |
 | Web tests/typecheck/build | Passed: 7 tests for HTTP, edit/rebase and sync semantics, `next typegen && tsc --noEmit`, and production `next build --webpack` under Node 24.21 |
@@ -348,12 +373,20 @@ private image and PDF originals require an authenticated download path.
 
 ### Developer C — Web and Data
 
-1. Repeat reset, pgTAP and lint on the disposable Supabase stack with Docker.
+1. Provide the approved disposable staging project and record its applied
+   migrations. Run pgTAP and lint there as appropriate and verify real Auth
+   identities, RLS, and private object transfer.
 2. Connect the web client to B's persistent Supabase/FastAPI adapter and test
    two real identities, private objects, and simultaneous Android/web edits.
 3. Validate cursor expiry and full resync with B's retention policy. Review
    cross-library search with A and B before adding a shared API operation.
 4. Configure Vercel after the real adapters and integration checks are ready.
+
+### Integration Lead — I1 acceptance
+
+Coordinate the [two-account staging text-share milestone](INTEGRATION_READINESS.md#owner-handoff-and-acceptance)
+with A, B and C. Run preflight, the authenticated smoke with API restart, and the
+Android/Web sync round trip against the pinned API revision and migrations.
 
 ## Decisions still required
 
