@@ -42,6 +42,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(adapter.opened, [adapter.target]);
     expect(find.text('Content details'), findsOneWidget);
+    expect(find.text('Open original'), findsNothing);
+    await _expandDetails(tester);
     expect(find.text('Mock content'), findsOneWidget);
     expect(find.text('Open original'), findsOneWidget);
   });
@@ -117,6 +119,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _expandDetails(tester);
     await _showControl(tester, 'Edit notes');
     await tester.tap(find.text('Edit notes').hitTestable());
     await tester.pumpAndSettle();
@@ -158,6 +161,7 @@ void main() {
       );
       await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
       await tester.pumpAndSettle();
+      await _expandDetails(tester, '상세히 보기');
       await _showControl(tester, 'A saved note');
       expect(find.byTooltip('메모 수정'), findsOneWidget);
       await tester.tap(find.text('A saved note').hitTestable());
@@ -173,6 +177,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(adapter.patch, isNull);
 
+      await _expandDetails(tester, '상세히 보기');
       await _showControl(tester, 'A saved note');
       await tester.tap(find.text('A saved note').hitTestable());
       await tester.pumpAndSettle();
@@ -190,6 +195,7 @@ void main() {
         'expected_version': item.version,
         'user_note': null,
       });
+      await _expandDetails(tester, '상세히 보기');
       await _showControl(tester, '메모 수정');
       expect(find.text('메모 수정'), findsOneWidget);
     },
@@ -284,6 +290,7 @@ void main() {
         api: api,
         notificationBridge: adapter));
     await tester.pumpAndSettle();
+    await _expandDetails(tester);
     final restore = find.text('Restore notification');
     await tester.scrollUntilVisible(
       restore.hitTestable(),
@@ -314,6 +321,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _expandDetails(tester);
     expect(find.text('Open original'), findsOneWidget);
     adapter.authorized = false;
     adapter.events.add(null);
@@ -449,7 +457,10 @@ void main() {
     expect(find.text('Field notes.pdf'), findsOneWidget);
     expect(find.text('Shared attachment'), findsNothing);
     expect(find.text('Recommendations'), findsNothing);
-    await tester.tap(find.text('Open original'));
+    expect(find.text('Open original'), findsNothing);
+    await _expandDetails(tester);
+    await _showControl(tester, 'Open original');
+    await tester.tap(find.text('Open original').hitTestable());
     await tester.pumpAndSettle();
     expect(calls.single.method, 'openSavedDocument');
     expect(calls.single.arguments, adapter.target.toMessage());
@@ -472,6 +483,12 @@ Future<void> _showControl(WidgetTester tester, String label,
   if (control.evaluate().isNotEmpty) return;
   await tester.scrollUntilVisible(control, delta,
       scrollable: find.byType(Scrollable).first);
+}
+
+Future<void> _expandDetails(WidgetTester tester, [String label = 'Show details']) async {
+  await _showControl(tester, label);
+  await tester.tap(find.text(label).hitTestable());
+  await tester.pumpAndSettle();
 }
 class _NotificationAdapter implements NotificationBridge {
   _NotificationAdapter(this.content);

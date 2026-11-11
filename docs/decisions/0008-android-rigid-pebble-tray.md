@@ -46,3 +46,10 @@ mock already accept these PATCHes. Each drag or button action sends
 `workflow_status: archived` with the current version. An explicit restore
 sends `workflow_status: pending`. A successful response with the expected
 account, item, destination, and advanced version authorizes the UI update.
+
+## Phase A7.3 amendment
+
+Each pebble uses a three-vertex hull and a rounding radius of 0.105 times its
+normalized width. The sides stay straight between the three corner arcs.
+The painter and Box2D use those same vertices and radius. The home layout,
+simulation bounds, and identity hash carry forward from A7.2.

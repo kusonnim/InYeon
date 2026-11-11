@@ -1,9 +1,8 @@
 # ITDA — Mobile Design System
 
-**Status:** Draft 0.1 — for visual review and iteration  
-**Target:** Android mobile app (Flutter + Kotlin)  
-**Intended repository location:** `docs/DESIGN.md`  
-**Baseline:** Phase A7.1 pebble tray; later UI refinement must preserve existing behavior
+- **Status** Draft 0.2 for Phase A7.3 visual review
+- **Target** Android mobile app (Flutter + Kotlin)
+- **Baseline** Phase A7.2 versioned archive, original access, and mobile palette
 
 > This document governs presentation and interaction, not authoritative product, API, or persistence semantics. If it conflicts with `docs/PRODUCT.md`, `contracts/openapi.yaml`, privacy rules, or established account boundaries, resolve the conflict explicitly rather than silently changing data behavior.
 
@@ -16,7 +15,7 @@ The interface should be **warm without being cute, tactile without being decorat
 ### Core principles
 
 1. **One memorable object, quiet surrounding UI.** The tray and pebbles carry the visual identity. Detail, list, editing, and account screens are understated.
-2. **Do not put everything in boxes.** Separate content primarily through hierarchy, spacing, and alignment. Use surfaces or borders only when they communicate a real interactive boundary.
+2. **Use surfaces deliberately.** The detail screen groups the saved content and its actions in one large card. Other screens separate content through hierarchy, spacing, and alignment.
 3. **Prioritize, then disclose.** Show the most useful information first. Keep secondary material available without presenting every field at once.
 4. **Do not manufacture significance.** No invented summaries, actions, resources, preview images, source facts, dates, or task obligations.
 5. **Keep ordinary actions ordinary.** Opening a link, reading a note, editing a title, or managing an account should require familiar mobile interactions.
@@ -33,6 +32,7 @@ Start from the existing Phase A7.1 warm neutrals; treat these as initial design 
 | Role | Light | Dark | Usage |
 | --- | --- | --- | --- |
 | Canvas | `#F8F6F0` | `#232220` | Main screen and reading surfaces |
+| Detail card | `#F2EEE5` | `#2B2926` | Single content surface with subtle contrast against the canvas |
 | Primary ink | `#25231F` | `#F0EBE1` | Titles, body text, primary controls |
 | Secondary ink | `#605B52` | `#C5BEB2` | Metadata and subordinate labels |
 | Hairline | `#DDD6CA` | `#4E4942` | Optional, subtle separators only |
@@ -40,7 +40,8 @@ Start from the existing Phase A7.1 warm neutrals; treat these as initial design 
 | Soft accent | `#E1E7D8` | `#394338` | Selected/pressed states where necessary |
 | Feedback surface | `#EEE9DF` | `#3C3934` | Real interaction feedback, not decorative cards |
 
-- Pebbles are the principal colorful elements: matte sage, clay, sand, dusty blue, lavender, and similar low-saturation tones.
+- Light pebbles retain the matte sage, clay, sand, dusty blue, lavender, and slate palette.
+- Dark pebbles use deep olive (`#494F35`), dark umber (`#574235`), warm stone (`#62594C`), muted moss (`#465743`), desaturated brown (`#59483D`), and dusty slate (`#455360`). The identity hash keeps the color assignment stable.
 - Do not make the rest of the app a patchwork of pastel panels.
 - Avoid gradients, gloss, neon, glassmorphism, glow, ornamental shadows, and decorative illustrations.
 - Functional error, warning, and success indicators may depart from the muted palette as needed for accessibility.
@@ -72,7 +73,7 @@ Start from the existing Phase A7.1 warm neutrals; treat these as initial design 
 - Prefer whitespace over dividers, and dividers over cards, when separating unrelated content.
 - Do not wrap each summary, recommendation, note, and source field in its own rounded panel.
 - Do not add containers just to fill empty space.
-- Use a visually distinct surface only for a meaningful drop target, input field, modal, selection, or critical feedback.
+- Reserve distinct surfaces for the detail card and functional controls such as a drop target, input, selection, or critical feedback.
 - The archive is a plain list, not a stack of rounded cards.
 
 ## 3. Information Architecture and Progressive Disclosure
@@ -84,7 +85,7 @@ The app has four main experiences:
 3. **Archive:** plain, searchable list of archived content.
 4. **Detail:** understand and act on a saved item, then edit, open its source, or archive it.
 
-Account and language controls live in a small, discoverable settings/account destination.
+Account and language controls live in Account settings. The signed-out home opens the dedicated Sign in screen. That screen offers an Account settings entry for language and other settings.
 
 ### Screen information budget
 
@@ -97,33 +98,33 @@ Account and language controls live in a small, discoverable settings/account des
 
 ### Detail content hierarchy
 
-The initial view should emphasize:
+The collapsed card emphasizes these elements in order.
 
-1. **Title** and a short, truthful source cue.
-2. **Primary content**: a real image for an image save, original writing for a personal note, or a grounded short summary for a supported article/link.
-3. **One useful recommendation**, if one exists and is relevant; do not force action recommendations to the top or create a recommendation merely to occupy space.
+1. **Title**, with direct editing for authorized items.
+2. **Primary content**, using a real image, original writing, or a grounded summary. Use the original excerpt when a link has no summary and an excerpt is available. A pending, partial, or failed analysis has a concise state label.
+3. **One useful recommendation** when available, in the existing order.
 4. **One discoverable primary action**, generally “보관하기” for a non-archived, server-confirmed item.
 
-Secondary content can be disclosed below or through a clear control:
+Place **Show details / 상세히 보기** below the card. It expands the same card in place and changes to **Hide details / 상세 접기**. Keep the title, primary content, first recommendation, and archive or restore action in the card. The expanded area adds the following information when available.
 
-- Full summary and limitations/coverage when applicable.
-- Additional recommendations (action, information, or resource), in their existing order unless product logic explicitly provides a ranking.
-- Original link, source text, or document reference.
-- User notes and editing.
-- Dates, sync details, and other metadata when useful.
+- Content type, source, and saved date.
+- The original link or local PDF action and source-copy controls.
+- Source coverage, limitations, and plain-language provenance for generated summaries.
+- Additional recommendations under **More recommendations / 추천 더 보기**.
+- User notes and applicable notification or environment information.
 
-A direct **“원본 열기”** action should remain easily discoverable for valid web URLs. Notes and titles remain directly tappable to edit when authorized. Long summaries must never hide relevant limitations or falsely imply complete access to a source.
+Present the primary summary immediately after the title. Its provenance belongs in the expanded coverage section. Expand long excerpts in the same position and avoid repeating primary text or previews in the secondary sections.
 
-When analysis is pending, show a small, neutral processing indication and keep the original accessible. When analysis fails, state that clearly without removing the original. If there are no recommendations, omit that section rather than displaying filler.
+Keep the original accessible during analysis or failure. Omit the recommendation area when the list is empty.
 
 ### Content-specific emphasis
 
 | Content type | Leading content | Secondary content |
 | --- | --- | --- |
 | Image | Actual private original preview, when available | Short summary, notes, recommendations |
-| Link/article | Title, grounded summary, clear source action | Full source reference, more recommendations, notes |
+| Link/article | Title and grounded summary or saved excerpt | Open original, coverage, more recommendations, notes |
 | Personal text | Original text or a readable excerpt | Optional summary and recommendations, notes |
-| Document/PDF | Real filename/title and source access | Grounded summary, limitations, relevant notes |
+| Document/PDF | Real filename/title and a grounded summary when available | Local PDF opening, limitations, relevant notes |
 
 Do not use generated stock imagery as a substitute for unavailable originals. Do not claim a server-only private image is visible until an authenticated download implementation exists.
 
@@ -140,19 +141,18 @@ Do not use generated stock imagery as a substitute for unavailable originals. Do
 
 ### Pebble shape
 
-Replace the A7.1 irregular oval silhouettes with **nearly circular rounded triangles**:
+Use a **triangle with rounded corners** for every pebble.
 
-- Three subtly perceptible rounded lobes/corners, approximately spaced around the form.
-- Almost circular at a glance; not a sharp triangle or a standard rounded-rectangle triangle icon.
-- Several distinct, deterministic variants with mild asymmetry.
+- Three recognizable straight sides joined by three rounded corners.
+- Five deterministic variants with mild asymmetry and a modest rounding radius.
 - Solid, rigid, matte, and visually flat: no squash/stretch or jelly wobble.
-- The rendered outline and the Box2D collision fixture must correspond, with a valid convex collision polygon.
+- Build the Flutter outline and Box2D fixture from the same three vertices and outward rounding radius.
 - Stable color and shape for each content identity, including across local receipt → server acknowledgment.
 - Upright, readable title labels even while the objects rotate; long labels use intelligent clipping or abbreviation without corrupting stored titles.
 
 ### Physics and touch
 
-Preserve the A7.1 Forge2D interaction:
+Preserve the Forge2D interaction, tray dimensions and position, capacity, and archive destination.
 
 - On the first home entry of an app session, existing items fall from above in a short cascade, collide, roll, and settle in the U-tray.
 - Stop stepping/rendering when bodies sleep.
@@ -196,9 +196,8 @@ Preserve the A7.1 Forge2D interaction:
 
 ### Detail
 
-- Read like a small, well-typeset document, not a dashboard assembled from cards.
-- Use one clear title, short source metadata, natural body flow, restrained section headings, and occasional separators.
-- Surface the most helpful real content rather than listing all metadata and recommendations.
+- Use one large, low-contrast card with a clear title, natural body flow, and a primary archive or restore action.
+- Keep the disclosure control below the card in the same scroll view. Expanded source information uses a single quiet divider and restrained headings.
 - Keep source URL opening/copying, private local image preview/zoom, recommendation source actions, and user notes functional.
 - Original source, AI summary, and user edits remain distinguishable even when labels are visually quiet.
 - Respect the existing analysis coverage/limitations and avoid invented claims.
@@ -213,13 +212,16 @@ Preserve the A7.1 Forge2D interaction:
 ### Account and settings
 
 - Ordinary native-feeling list layout with plain headings and controls.
-- Account/sign-in, language choice (Korean default; English optional), notification permission, and applicable environment/debug information remain accessible.
+- Show the active account identity and sign-out, or a short entry to the dedicated sign-in page.
+- The dedicated page has a title, email and password fields, a primary button, and localized progress and errors. Android Back returns to the previous screen. Successful sign-in returns to the previous context with the refreshed account scope.
+- Keep language choice (Korean default and English optional), notification permission, licenses, and applicable environment information in Account settings.
 - Hide testing-only technical detail from production-facing screens.
 - Do not bury essential sign-in or recovery behind undiscoverable icons.
 
 ## 8. Motion, Interaction, and Accessibility
 
 - Outside the U-tray, use restrained, fast transitions (typically about 150–250 ms).
+- The detail card expands and collapses over 180 ms. With reduced motion it updates immediately.
 - No bouncing cards, idle pulsing, ornamental spinners, or continuous motion.
 - Minimum practical Android touch target: 48 dp.
 - Support screen readers with full titles and meaningful button labels, including for visually truncated pebble text.
@@ -242,6 +244,8 @@ Preferred Korean labels (illustrative):
 | Summary | 요약 |
 | Recommendations | 추천 |
 | Notes | 내 메모 |
+| Show details | 상세히 보기 |
+| Hide details | 상세 접기 |
 | Edit | 수정 |
 | Processing | 처리 중 |
 
@@ -274,7 +278,7 @@ Recommended iteration:
 5. Apply consistent typography, spacing, and settings affordances.
 6. Verify on emulator, then on a real Android phone before declaring visual acceptance.
 
-Review screenshots in Korean and English, light and dark themes, and with large system text. Include: empty tray, mid-cascade, settled tray, large library, image detail, link/article detail, a personal text note, a note with no recommendation, editor, archive, and signed-out settings.
+Review the collapsed and expanded detail card, image detail, personal note, dedicated sign-in, dark detail, and dark tray. Check both app languages and large Android text on a narrow viewport.
 
 **Acceptance questions:**
 

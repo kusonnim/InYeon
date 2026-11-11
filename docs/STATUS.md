@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated 2026-11-11 (Asia/Seoul). **Phase A7.2 Android mobile design review.**
+Last updated 2026-11-11 (Asia/Seoul). **Phase A7.3 Android detail card review.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
@@ -13,8 +13,10 @@ Android home presents saved items as rigid rounded triangular pebbles.
 Repeated links in **All saved** can expand to their individual saves.
 Pending and completed items can move directly to the archive through a
 versioned workflow update. Explicit restoration returns them to pending.
-The [mobile design draft](DESIGN.md) guides the Korean and English interfaces,
-including reading layouts for images, links, text, and PDFs.
+The [mobile design draft](DESIGN.md) guides the Korean and English interfaces.
+One detail card presents primary content and expands in place to reveal source
+information and additional recommendations. A dedicated sign-in screen opens
+from home or Account settings and returns to the previous screen on success.
 Android notifications show a localized source, title, and processing state
 with the existing dismissal and restoration rules.
 
@@ -268,8 +270,9 @@ items outside the tray.
 
 ### Phase A7.2 Android checks
 
-A7.2 is stacked on [PR #10](https://github.com/kusonnim/InYeon/pull/10) at
-`3dacfb7`. Checks used Flutter 3.47.8, Dart 3.13.7, the Android Studio JDK,
+A7.2 was reviewed in [PR #12](https://github.com/kusonnim/InYeon/pull/12)
+against the A7.1 branch at `3dacfb7`. Checks used Flutter 3.47.8, Dart
+3.13.7, the Android Studio JDK,
 and a disposable Android 15 / API 35 x86_64 emulator.
 
 | Check | Result |
@@ -285,6 +288,25 @@ and a disposable Android 15 / API 35 x86_64 emulator.
 
 Live workflow, server-only private image and PDF download, and physical-device
 visual and frame timing checks remain open.
+
+### Phase A7.3 Android checks
+
+A7.3 starts at `main` commit `5f13010`, which includes PR #10 and the
+AI extraction work from PR #11. PR #12 landed A7.2 on the A7.1 branch after
+the main merge. A7.3 carries A7.2 commit `a326981` as cherry-pick
+`d8b73a0`. The mobile and documentation trees matched A7.2 before the A7.3
+edits.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependencies, fixture parity, both localizations, and static analysis passed. All 57 tests passed. The checks cover the single card and its disclosure, hidden provenance and extra recommendations, pending and failed analysis, direct edits and drafts, archive and restore, offline originals, reduced motion, and dedicated sign-in from both entry points |
+| Geometry | All five variants expose three straight sides and match their Box2D fixtures within 0.0015 normalized width across 120 radial samples per variant. The host physics fixtures capped 500 candidate items at 10, 6, and 4 bodies, with sleep after 167, 143, and 99 steps. Contrast between warm ink and the six dark pebble colors ranges from 5.79:1 to 7.91:1 |
+| Android | All 47 instrumentation tests passed on a disposable Android 15 / API 35 x86_64 emulator. Debug lint reported zero errors and eight warnings. Built the default multi-ABI and loopback mock x86_64 debug APKs |
+| Emulator UI | Captured 11 screens from the mock build, including collapsed and expanded details, image and personal note, dedicated sign-in, dark detail, and the dark tray. A dark English detail was also checked at 320 dp wide and Android font scale 1.8. The card could still expand and the archive action remained reachable by scrolling |
+| Emulator flows | The PNG and PDF shared through Android opened after the sender copies were removed. The image preview remained accessible with the network disabled. A pending item archived from the expanded card, an archived item returned to pending, and a completed triangular pebble archived by drag. Each move advanced the version once. Mock sign-in returned to Home or Account settings according to the entry point. Account B could not see account A's content |
+
+Physical-device review and live service checks remain open. Server-only
+private image and PDF originals require an authenticated download path.
 
 ## Next concrete tasks
 

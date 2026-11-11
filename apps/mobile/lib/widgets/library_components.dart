@@ -7,18 +7,15 @@ import '../native/share_bridge.dart';
 import 'itda_theme.dart';
 
 class PageWidth extends StatelessWidget {
-  const PageWidth({super.key, required this.child, this.shrinkWrap = false});
+  const PageWidth({super.key, required this.child});
 
   final Widget child;
-
-  final bool shrinkWrap;
 
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
     child: Align(
       alignment: Alignment.topCenter,
-      heightFactor: shrinkWrap ? 1 : null,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: child,
@@ -155,28 +152,6 @@ class StatePanel extends StatelessWidget {
     );
   }
 }
-class ContentDisclosure extends StatelessWidget {
-  const ContentDisclosure({
-    super.key,
-    required this.title,
-    required this.children,
-  });
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) => ExpansionTile(
-    title: Text(title, style: Theme.of(context).textTheme.titleMedium),
-    tilePadding: EdgeInsets.zero,
-    childrenPadding: const EdgeInsets.only(bottom: ItdaSpace.large),
-    expandedAlignment: AlignmentDirectional.centerStart,
-    expandedCrossAxisAlignment: CrossAxisAlignment.start,
-    shape: const Border(),
-    children: children,
-  );
-}
-
 IconData sourceIcon(InputType? type) => switch (type) {
       InputType.text => Icons.notes_rounded,
       InputType.url => Icons.link_rounded,

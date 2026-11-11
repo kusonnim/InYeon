@@ -6,14 +6,18 @@ import '../models/content.dart';
 import '../native/saved_document.dart';
 import '../native/share_bridge.dart';
 import '../widgets/content_details.dart';
+import '../widgets/detail_card.dart';
 import '../widgets/itda_theme.dart';
 import '../widgets/library_components.dart';
 import '../widgets/original_image.dart';
 import 'library_controller.dart';
 
 class LocalContentScreen extends StatefulWidget {
-  const LocalContentScreen(
-      {super.key, required this.controller, required this.localId});
+  const LocalContentScreen({
+    super.key,
+    required this.controller,
+    required this.localId,
+  });
 
   final LibraryController controller;
   final String localId;
@@ -21,6 +25,7 @@ class LocalContentScreen extends StatefulWidget {
   @override
   State<LocalContentScreen> createState() => _LocalContentScreenState();
 }
+
 class _LocalContentScreenState extends State<LocalContentScreen> {
   late Future<LocalSource> _source = _read();
   bool _assigning = false;
@@ -38,11 +43,13 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
         content: Text(copy.assignBody(account.email)),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(copy.cancel)),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(copy.cancel),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(copy.assignConfirm)),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(copy.assignConfirm),
+          ),
         ],
       ),
     );
@@ -53,8 +60,9 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
       await widget.controller.reload();
     } on PlatformException {
       if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(copy.assignProblem)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(copy.assignProblem)));
     } finally {
       if (mounted) setState(() => _assigning = false);
     }
@@ -131,80 +139,89 @@ class _LocalContentScreenState extends State<LocalContentScreen> {
     final original = snapshot.data;
     final image = share.inputType == InputType.image;
     final title = localTitle(copy, share);
+    final url = original?.url ?? share.sourceUrl;
+    final text = readableSourceText(original?.text, url);
     final theme = Theme.of(context);
     return PageList(
       children: [
-        if (image && !snapshot.hasError)
-          OriginalImagePreview(
-            original: original,
-            loading: !snapshot.hasData,
-            onExpand: () => setState(() => _viewingImage = true),
-          ),
-        ContentHeading(
-          title: title,
-          source: sourceCue(
-            copy,
-            share.inputType,
-            original?.url ?? share.sourceUrl,
-          ),
-          contextLabel: uploadEnvironmentLabel(copy, mode),
-        ),
-        if (original != null)
-          OriginalSource(
-            inputType: share.inputType,
-            original: original,
-            displayedTitle: title,
-            disclose: image,
-            openDocument: share.inputType == InputType.document
-                ? () => openSavedDocument(context, {'local_id': share.localId})
-                : null,
-          )
-        else if (!image && !snapshot.hasError)
-          LinearProgressIndicator(semanticsLabel: copy.loadingContent)
-        else if (snapshot.hasError)
-          StatePanel(
-            icon: Icons.info_outline_rounded,
-            title: copy.sourceUnavailable,
-            action: () => setState(() => _source = _read()),
-            actionLabel: copy.retry,
-          ),
-        if (mode != UploadMode.disabled &&
-            share.uploadState != LocalUploadState.synchronized)
-          ContentSection(
-            title: uploadName(copy, mode, share),
-            children: [
-              if (failed)
-                Text(copy.uploadFailureInfo, style: theme.textTheme.bodySmall)
-              else if (share.uploadState == LocalUploadState.retryWaiting)
-                Text(copy.uploadRetryInfo, style: theme.textTheme.bodySmall),
-              if (share.canAssign && account != null) ...[
-                OutlinedButton(
-                  onPressed: _assigning ? null : () => _assign(account),
-                  child: Text(copy.assignAction),
+        DetailCard(
+          children: (expanded) => [
+            ContentHeading(title: title),
+            if (snapshot.hasError)
+              StatePanel(
+                icon: Icons.info_outline_rounded,
+                title: copy.sourceUnavailable,
+                action: () => setState(() => _source = _read()),
+                actionLabel: copy.retry,
+              )
+            else if (image)
+              OriginalImagePreview(
+                original: original,
+                loading: !snapshot.hasData,
+                onExpand: () => setState(() => _viewingImage = true),
+              )
+            else if (!snapshot.hasData)
+              LinearProgressIndicator(semanticsLabel: copy.loadingContent)
+            else if (text != null && text.trim() != title.trim())
+              Padding(
+                padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+                child: DetailText(text: text, expanded: expanded),
+              ),
+            if (mode != UploadMode.disabled &&
+                share.uploadState != LocalUploadState.synchronized)
+              ContentSection(
+                title: uploadName(copy, mode, share),
+                children: [
+                  if (failed)
+                    Text(
+                      copy.uploadFailureInfo,
+                      style: theme.textTheme.bodySmall,
+                    )
+                  else if (share.uploadState == LocalUploadState.retryWaiting)
+                    Text(
+                      copy.uploadRetryInfo,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  if (share.canAssign && account != null)
+                    OutlinedButton(
+                      onPressed: _assigning ? null : () => _assign(account),
+                      child: Text(copy.assignAction),
+                    ),
+                ],
+              ),
+            if (share.serverContentId == null)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(copy.workflowNeedsSync)),
+                  ),
+                  child: Text(copy.archiveAction),
                 ),
-              ],
+              ),
+            if (expanded) ...[
+              const Divider(height: ItdaSpace.bottom),
+              DetailMetadata(
+                type: share.inputType,
+                savedAt: share.receivedAt,
+                sourceUrl: url,
+                contextLabel: uploadEnvironmentLabel(copy, mode),
+              ),
+              if (original != null)
+                OriginalSource(
+                  inputType: share.inputType,
+                  original: original,
+                  displayedTitle: title,
+                  showImage: false,
+                  showText: image,
+                  openDocument: share.inputType == InputType.document
+                      ? () => openSavedDocument(context, {
+                          'local_id': share.localId,
+                        })
+                      : null,
+                ),
             ],
-          ),
-        if (share.serverContentId == null)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton(
-              onPressed: () => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(copy.workflowNeedsSync))),
-              child: Text(copy.archiveAction),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(top: ItdaSpace.medium),
-          child: Text(
-            copy.savedOn(
-              MaterialLocalizations.of(
-                context,
-              ).formatMediumDate(share.receivedAt.toLocal()),
-            ),
-            style: theme.textTheme.bodySmall,
-          ),
+          ],
         ),
       ],
     );

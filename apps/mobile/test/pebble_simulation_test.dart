@@ -22,13 +22,14 @@ void main() {
     }
   });
 
-  test('each matte silhouette follows the rounded Box2D boundary', () {
+  test('each silhouette has three straight sides and matches Box2D', () {
     final world = World(gravity: Vector2.zero());
     addTearDown(world.destroy);
     final variants = <int>{};
     for (var index = 0; index < 32; index++) {
       final design = PebbleDesign.forId('local:receipt-$index');
       if (!variants.add(design.variant)) continue;
+      expect(design.vertices, hasLength(3));
       final body = world.createBody();
       final fixture = body.createShape(
         Polygon([
@@ -36,13 +37,31 @@ void main() {
         ], radius: PebbleDesign.radius),
       );
       final path = design.silhouette;
+      for (var i = 0; i < 3; i++) {
+        final start = design.vertices[i];
+        final edge = design.vertices[(i + 1) % 3] - start;
+        final normal = Offset(edge.dy, -edge.dx) / edge.distance;
+        expect(edge.distance, greaterThan(.65));
+        for (final fraction in [.15, .5, .85]) {
+          final side = start + edge * fraction;
+          expect(
+            path.contains(side + normal * (PebbleDesign.radius - .001)),
+            isTrue,
+          );
+          expect(
+            path.contains(side + normal * (PebbleDesign.radius + .001)),
+            isFalse,
+          );
+        }
+      }
       for (var angle = 0; angle < 360; angle += 3) {
         final direction = angle * math.pi / 180;
-        expect(path.contains(Offset.fromDirection(direction, .42)), isTrue);
-        expect(path.contains(Offset.fromDirection(direction, .51)), isFalse);
+        expect(path.contains(Offset.fromDirection(direction, .26)), isTrue);
+        expect(path.contains(Offset.fromDirection(direction, .55)), isFalse);
         final visibleRadius = _edgeRadius(direction, path.contains);
         final fixtureRadius = _edgeRadius(
-          direction, (p) => fixture.testPoint(Vector2(p.dx, p.dy)),
+          direction,
+          (p) => fixture.testPoint(Vector2(p.dx, p.dy)),
         );
         expect(
           visibleRadius,
@@ -151,8 +170,8 @@ void main() {
 }
 
 double _edgeRadius(double direction, bool Function(Offset) contains) {
-  var inside = .42;
-  var outside = .52;
+  var inside = .26;
+  var outside = .55;
   while (outside - inside > .00002) {
     final radius = (inside + outside) / 2;
     if (contains(Offset.fromDirection(direction, radius))) {

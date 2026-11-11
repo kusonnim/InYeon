@@ -18,6 +18,7 @@ import 'library_collection.dart';
 import 'library_controller.dart';
 import 'local_content_screen.dart';
 import 'sample_library_screen.dart';
+import 'sign_in_screen.dart';
 import 'workflow_edit.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -65,14 +66,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  void _openAccount() {
+  void _openAccount({bool replace = false}) {
+    final route = MaterialPageRoute<void>(
+      builder: (_) => AccountScreen(
+        controller: controller,
+        notifications: widget.notifications,
+        changeLanguage: widget.changeLanguage,
+        openSamples: _openSamples,
+      ),
+    );
+    final navigator = Navigator.of(context);
+    if (replace) {
+      navigator.pushReplacement<void, void>(route);
+    } else {
+      navigator.push<void>(route);
+    }
+  }
+
+  void _openSignIn() {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => AccountScreen(
+        builder: (_) => SignInScreen(
           controller: controller,
-          notifications: widget.notifications,
-          changeLanguage: widget.changeLanguage,
-          openSamples: _openSamples,
+          openAccountSettings: () => _openAccount(replace: true),
         ),
       ),
     );
@@ -238,7 +254,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: screenWidth * .32),
                   child: TextButton(
-                    onPressed: _openAccount,
+                    onPressed: _openSignIn,
                     child: Text(copy.signIn, textAlign: TextAlign.center),
                   ),
                 )

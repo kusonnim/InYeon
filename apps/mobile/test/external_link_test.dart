@@ -8,6 +8,7 @@ import 'package:itda_mobile/l10n/generated/app_localizations.dart';
 import 'package:itda_mobile/models/content.dart';
 import 'package:itda_mobile/native/external_link.dart';
 import 'package:itda_mobile/widgets/content_details.dart';
+import 'package:itda_mobile/widgets/library_components.dart';
 
 const _channel = MethodChannel('com.itda.itda_mobile/local_shares');
 const _source = 'http://events.example.test/calendar?view=full%2Fwide#dates';
@@ -102,36 +103,36 @@ void main() {
     expect(launches, isEmpty);
     expect(find.text('Analysis pending'), findsOneWidget);
     expect(find.text(_source), findsNothing);
-    await _tap(tester, 'Open original');
+    expect(find.text('Open original'), findsNothing);
+    expect(find.text('More recommendations'), findsNothing);
+    expect(find.text('No resource URL'), findsNothing);
     await _tap(tester, 'Open resource');
-    await _tap(tester, 'Copy link');
-    await _tap(tester, 'Original source');
+    await _tap(tester, 'Show details');
+    expect(find.text('More recommendations'), findsOneWidget);
+    expect(find.text('No resource URL'), findsOneWidget);
+    await _tap(tester, 'Open original');
     final sourceSemantics = tester.getSemantics(find.text(_source));
     expect(sourceSemantics.label, _source);
     expect(sourceSemantics.rect.height, 48);
     await _tap(tester, _source);
-    final sourceDisclosure = find.widgetWithText(
-      ExpansionTile,
-      'Original source',
-    );
-    await tester.tap(
-      find
-          .descendant(of: sourceDisclosure, matching: find.text('Copy link'))
-          .hitTestable(),
-    );
-    await tester.pumpAndSettle();
+    for (final section in ['Recommendations', 'Original source']) {
+      final copy = find.descendant(
+        of: find.widgetWithText(ContentSection, section),
+        matching: find.text('Copy link'),
+      );
+      await tester.ensureVisible(copy);
+      await tester.tap(copy);
+      await tester.pumpAndSettle();
+    }
     expect(launches.map((call) => call.arguments), [
-      _source,
       _resource,
+      _source,
       _source,
     ]);
     expect(clipboard, [
       {'text': _resource},
       {'text': _source},
     ]);
-    expect(find.text('No resource URL'), findsNothing);
-    await _tap(tester, 'More recommendations');
-    expect(find.text('No resource URL'), findsOneWidget);
   });
 
   testWidgets('a missing handler gives Korean feedback on the same screen',
@@ -170,11 +171,8 @@ Widget _page(Widget body, {Locale locale = const Locale('en')}) => MaterialApp(
     );
 
 Future<void> _tap(WidgetTester tester, String label) async {
-  final target = find.text(label).hitTestable();
-  if (target.evaluate().isEmpty) {
-    await tester.scrollUntilVisible(target, 160,
-        scrollable: find.byType(Scrollable).first);
-  }
+  final target = find.text(label);
+  await tester.ensureVisible(target);
   await tester.tap(target);
   await tester.pumpAndSettle();
 }

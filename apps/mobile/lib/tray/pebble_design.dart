@@ -16,25 +16,18 @@ final class PebbleDesign {
   final int variant;
   final int color;
 
-  static const radius = .272;
+  static const radius = .105;
   List<Offset> get vertices => _hulls[variant];
   Path get silhouette => _silhouettes[variant];
 
-  // Alternate the three lobes with shallower points along the sides.
-  static final _hulls = [
-    _hull(-.52, [.229, .187, .218, .194, .232, .185]),
-    _hull(-.19, [.221, .197, .228, .184, .217, .189]),
-    _hull(-.78, [.233, .191, .216, .198, .225, .185]),
-    _hull(.12, [.218, .181, .233, .191, .222, .198]),
-    _hull(-.38, [.225, .194, .234, .190, .215, .184]),
+  static const _hulls = [
+    [Offset(-.028, -.405), Offset(.365, .183), Offset(-.333, .224)],
+    [Offset(.018, -.420), Offset(.347, .221), Offset(-.356, .183)],
+    [Offset(-.043, -.398), Offset(.378, .164), Offset(-.324, .244)],
+    [Offset(.045, -.404), Offset(.322, .247), Offset(-.367, .176)],
+    [Offset(-.011, -.415), Offset(.360, .200), Offset(-.346, .212)],
   ];
   static final _silhouettes = _hulls.map(_roundedHull).toList(growable: false);
-
-  static List<Offset> _hull(double phase, List<double> radii) =>
-      List.unmodifiable([
-        for (final (index, distance) in radii.indexed)
-          Offset.fromDirection(phase + index * math.pi / 3, distance),
-      ]);
 
   static Path _roundedHull(List<Offset> points) {
     // Box2D expands each hull edge by the radius and joins them with arcs

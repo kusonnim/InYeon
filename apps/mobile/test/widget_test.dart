@@ -137,6 +137,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(shares.opened, ['a']);
       expect(find.text('Winter workshop'), findsOneWidget);
+    await _expandDetails(tester);
       expect(find.text(first), findsOneWidget);
     },
   );
@@ -155,9 +156,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text(first.title!));
       await tester.pumpAndSettle();
-      expect(find.text('Samples'), findsOneWidget);
-      await _scrollTo(tester, 'AI summary');
+      expect(find.text('Samples'), findsNothing);
       expect(find.text(first.analysis!.summary!), findsOneWidget);
+      expect(find.text('AI summary'), findsNothing);
+      await _expandDetails(tester);
+      expect(find.text('Samples'), findsOneWidget);
       await _scrollTo(tester, 'Original source');
       expect(find.text('Original source'), findsOneWidget);
     },
@@ -182,11 +185,60 @@ void main() {
     expect(find.text('Mock mode'), findsNothing);
     await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(find.text('App language'), findsNothing);
+    await tester.tap(find.text('Account settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNothing);
     expect(find.text('API host api.staging.example.test'), findsOneWidget);
     expect(
       find.text('Use an approved staging account and synthetic content.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('signed-out home opens sign-in directly and Back returns to home',
+      (tester) async {
+    final response = Completer<void>();
+    shares
+      ..mode = UploadMode.mock
+      ..signInGate = response.future
+      ..signInError = 'invalid_sign_in';
+    await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
+      api: api,
+      shareBridge: shares,
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    expect(find.text('App language'), findsNothing);
+    await tester.enterText(find.byType(TextFormField).first, 'a@example.test');
+    await tester.enterText(find.byType(TextFormField).last, 'synthetic');
+    final submit = find.widgetWithText(FilledButton, 'Sign in');
+    await tester.tap(submit);
+    await tester.pump();
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    expect(find.bySemanticsLabel('Signing in'), findsOneWidget);
+    response.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Could not verify your email and password.'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNothing);
+    shares
+      ..signInError = null
+      ..nextAccount = _account('a');
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'a@example.test');
+    await tester.enterText(find.byType(TextFormField).last, 'synthetic');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.byTooltip('Account'), findsOneWidget);
   });
 
   testWidgets(
@@ -218,9 +270,12 @@ void main() {
     await _tapPebble(tester, 'local:new-item');
     await tester.pumpAndSettle();
     expect(find.text('Waiting to sync'), findsOneWidget);
+    expect(find.text('Open original'), findsNothing);
+    await _expandDetails(tester);
     expect(find.text('Original source'), findsOneWidget);
     expect(find.text('https://example.org/shared'), findsOneWidget);
-    await tester.tap(find.text('Open original'));
+    await _scrollTo(tester, 'Open original');
+    await tester.tap(find.text('Open original').hitTestable());
     await tester.pumpAndSettle();
     expect(launched.single.method, 'openExternalLink');
     expect(launched.single.arguments, 'https://example.org/shared');
@@ -290,6 +345,7 @@ void main() {
     expect(find.text('Content details'), findsOneWidget);
     expect(find.text('Revised title'), findsOneWidget);
 
+    await _expandDetails(tester);
     await _scrollTo(tester, 'Saved personal note');
     await tester.tap(find.text('Saved personal note').hitTestable());
     await tester.pumpAndSettle();
@@ -382,6 +438,7 @@ void main() {
       await tester.tap(find.text(item.title!));
       await tester.pumpAndSettle();
       expect(find.text('Content details'), findsOneWidget);
+      await _expandDetails(tester);
       await _scrollTo(tester, 'Notification dismissed');
       expect(find.text('Notification dismissed'), findsOneWidget);
       expect(find.text('Restore notification'), findsNothing);
@@ -571,7 +628,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text(item.title!));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Return to tray'));
+      await _scrollTo(tester, 'Return to tray');
+      await tester.tap(find.text('Return to tray').hitTestable());
       await tester.pumpAndSettle();
       expect(server.patch!.toJson(), {
         'expected_version': item.version + 1,
@@ -619,6 +677,7 @@ void main() {
       await tester.pumpAndSettle();
       final archive = find.text('Archive item');
       server.advanceVersion();
+      await _scrollTo(tester, 'Archive item');
       await tester.tap(archive);
       await tester.pumpAndSettle();
       expect(server.item.workflowStatus.name, initial);
@@ -626,6 +685,7 @@ void main() {
       await tester.tap(find.text('Load latest version'));
       await tester.pumpAndSettle();
       final before = server.edits;
+      await _scrollTo(tester, 'Archive item');
       await tester.tap(archive);
       await tester.pumpAndSettle();
       expect(server.edits, before + 1);
@@ -679,9 +739,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Signed out'), findsOneWidget);
     expect(find.text('a@example.test'), findsNothing);
+    expect(find.byType(TextFormField), findsNothing);
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(2));
     await tester.enterText(find.byType(TextFormField).first, 'b@example.test');
     await tester.enterText(find.byType(TextFormField).last, 'synthetic');
-    await tester.tap(find.text('Sign in'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('b@example.test'), findsOneWidget);
     await tester.pageBack();
@@ -755,9 +819,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Showing the last loaded version.'), findsOneWidget);
       expect(find.byTooltip('Edit'), findsNothing);
+      await _expandDetails(tester);
       await _scrollTo(tester, 'Original source');
-      await tester.tap(find.text('Original source').hitTestable());
-      await tester.pumpAndSettle();
       expect(find.text(item.sourceUrl!), findsOneWidget);
     },
   );
@@ -836,6 +899,12 @@ Future<void> _scrollTo(WidgetTester tester, String text) async {
   await tester.scrollUntilVisible(find.text(text).hitTestable(), 200,
       scrollable: find.byType(Scrollable).first);
 }
+
+Future<void> _expandDetails(WidgetTester tester) async {
+  await _scrollTo(tester, 'Show details');
+  await tester.tap(find.text('Show details').hitTestable());
+  await tester.pumpAndSettle();
+}
 UploadAccount _account(String id) =>
     UploadAccount(id: id, email: '$id@example.test', realm: 'mock');
 
@@ -878,6 +947,8 @@ class _ShareAdapter implements ShareBridge {
   String? stagingApiHost;
   UploadAccount? account;
   UploadAccount? nextAccount;
+  Future<void>? signInGate;
+  String? signInError;
   (String, String)? assigned;
   final opened = <String>[];
 
@@ -902,6 +973,8 @@ class _ShareAdapter implements ShareBridge {
 
   @override
   Future<void> signIn(String email, String password) async {
+    if (signInGate case final gate?) await gate;
+    if (signInError case final code?) throw PlatformException(code: code);
     account = nextAccount;
     events.add(null);
   }

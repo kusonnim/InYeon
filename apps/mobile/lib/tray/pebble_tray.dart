@@ -249,12 +249,12 @@ class _StoneState extends State<_Stone> {
     Color(0xffb8becb),
   ];
   static const _dark = [
-    Color(0xff515b45),
-    Color(0xff664c3f),
-    Color(0xff605438),
-    Color(0xff435b58),
-    Color(0xff5b4c5b),
-    Color(0xff4b556a),
+    Color(0xff494f35),
+    Color(0xff574235),
+    Color(0xff62594c),
+    Color(0xff465743),
+    Color(0xff59483d),
+    Color(0xff455360),
   ];
   bool _focused = false;
 
@@ -305,11 +305,11 @@ class _StoneState extends State<_Stone> {
               child: IgnorePointer(
                 child: Center(
                   child: SizedBox(
-                    width: width * .66,
+                    width: width * .51,
                     child: ExcludeSemantics(
                       child: Text(
                         widget.title,
-                        maxLines: 2,
+                        maxLines: width < 80 ? 1 : 2,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         textScaler: MediaQuery.textScalerOf(

@@ -50,9 +50,9 @@ Repeated exact URLs can expand as a group in **All saved**. Each save keeps its
 own detail route and pebble identity. **Sample library** is available from
 **Account** and from an empty device-only tray.
 
-The first nonempty tray releases matte rounded triangular pebbles into a Box2D
-scene once per app session. The painter and collision fixture share the same
-convex hull and rounding radius.
+The first nonempty tray releases matte, three-sided pebbles into a Box2D scene
+once per app session. The painter and collision fixture share three vertices
+and the same rounding radius. Dark mode uses an earthy pebble palette.
 A new visible share enters on its own. Tap a pebble for details or drag it inside
 the tray. Reduced motion prepares the resting arrangement before displaying it.
 An acknowledged receipt keeps the same pebble as its server details arrive.
@@ -80,14 +80,17 @@ requests to obtain a title. Android share subjects are local receipt metadata.
 Preserving their provenance across devices requires a contract review with
 Developer B.
 
-Details lead with the saved image, original writing, grounded link summary,
-or document title and original access. The source coverage, longer passages,
-and additional recommendations are available through disclosure controls.
-The first recommendation follows the API order. A note with zero
-recommendations has no recommendation section. Tap a web URL or **Open
-original** to use Android's app-link and browser resolution. Recommendation
-references offer **Open resource** and **Copy link**. These controls also work
-in the editor. Use Android Back to return to the same ITDA screen.
+The detail card contains the title, saved image, original writing or grounded
+summary, the first recommendation when available, and the archive or restore
+action. **Show details** expands the same card to reveal the full text, original
+access, saved date, analysis coverage and provenance, and remaining
+recommendations. The first recommendation follows API order. A note with zero
+recommendations has no recommendation section.
+
+In expanded details, tap a web URL or **Open original** to use Android's
+app-link and browser resolution. Recommendation references offer **Open
+resource** and **Copy link**. These controls also work in the editor. Use
+Android Back to return to the same ITDA screen.
 
 External launch requires an absolute HTTP or HTTPS URL. The app rejects
 credentials and known private storage links and passes only the web URL to
@@ -118,7 +121,7 @@ the source and saved fields offline. Editing requires a current authenticated
 detail response. Sign-out clears the visible account projection. A different
 account or API destination has a separate snapshot.
 
-Tap the title or personal note in editable details to focus that field in the
+Tap the title or the note in expanded details to focus that field in the
 existing editor. **Edit notes** opens the field when the note is empty. App-bar
 **Edit** and the notification action also open this editor. It pre-fills the
 saved title and personal notes and shows the original in a read-only section.
@@ -240,8 +243,10 @@ acknowledgment checks.
 
 ## Upload account and state
 
-Open **Account** and use **Sign in** with a pre-existing Supabase email/password
-account. The native client stores the access and refresh tokens in an Android Keystore
+Use **Sign in** from the signed-out home or Account settings to open the
+dedicated sign-in page. Enter the email and password for a pre-existing Supabase
+account. A successful sign-in returns to the previous screen. The native
+client stores the access and refresh tokens in an Android Keystore
 encrypted vault. It refreshes the session when the token is about to expire
 or when an API request returns 401. Account sign-out clears the device session.
 Tokens stay in native code and the app only exposes account labels to Flutter.
@@ -423,4 +428,4 @@ its synthetic feed remains available.
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, durable content and sync persistence, private assets,
 and the future FCM delivery contract. See the
-[mobile verification results](../../docs/STATUS.md#phase-a71-android-checks).
+[mobile verification results](../../docs/STATUS.md#phase-a73-android-checks).

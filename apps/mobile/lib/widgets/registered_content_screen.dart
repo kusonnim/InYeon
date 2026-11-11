@@ -10,6 +10,7 @@ import '../native/notification_bridge.dart';
 import '../native/saved_document.dart';
 import '../native/share_bridge.dart';
 import 'content_details.dart';
+import 'detail_card.dart';
 import 'itda_theme.dart';
 import 'library_components.dart';
 import 'original_image.dart';
@@ -341,7 +342,6 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     final copy = AppLocalizations.of(context);
     final image = _original?.imagePath;
     final viewingImage = _viewingImage && image != null;
-    final content = _item?.content;
     return PopScope(
       canPop: !_editing && !viewingImage,
       onPopInvokedWithResult: (didPop, _) {
@@ -388,9 +388,6 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             ],
           ),
         ),
-        bottomNavigationBar: !_editing && !viewingImage && content != null
-            ? _workflowAction(copy, content)
-            : null,
       ),
     );
   }
@@ -409,19 +406,16 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       return PageList(
         children: [
           if (banner != null) banner,
-          if (_original != null)
-            OriginalSource(
-              original: _original,
-              openSavedCopy: _openDocument == null ? widget.openOriginal : null,
-              openImage: _expandImage,
-              openDocument: _openDocument,
-            )
-          else if (widget.openOriginal != null)
-            TextButton(
-              onPressed: widget.openOriginal,
-              child: Text(copy.readOriginal),
-            ),
-          if (!_editing) ..._notificationControls(copy),
+          if (_original case final original?)
+            _originalDetails(copy, original)
+          else ...[
+            if (widget.openOriginal != null)
+              TextButton(
+                onPressed: widget.openOriginal,
+                child: Text(copy.readOriginal),
+              ),
+            if (!_editing) ..._notificationControls(copy),
+          ],
         ],
       );
     }
@@ -435,6 +429,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       openDocument: _openDocument,
       onEditTitle: _canEdit ? () => _beginEdit(_titleFocus) : null,
       onEditNotes: _canEdit ? () => _beginEdit(_noteFocus) : null,
+      primaryAction: _workflowAction(copy, item.content),
       header: [
         if (!_verified && banner == null)
           Padding(
@@ -454,6 +449,43 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     );
   }
 
+  Widget _originalDetails(AppLocalizations copy, LocalSource original) {
+    final image = original.inputType == InputType.image;
+    final source = sourceCue(copy, original.inputType, original.url);
+    final title = original.filename ?? original.subject ?? source;
+    final text = readableSourceText(original.text, original.url);
+    return DetailCard(
+      children: (expanded) => [
+        ContentHeading(title: title),
+        if (image)
+          OriginalImagePreview(
+            original: original,
+            loading: _readingOriginal,
+            onExpand: _expandImage,
+          )
+        else if (text != null && text.trim() != title.trim())
+          DetailText(text: text, expanded: expanded),
+        if (expanded) ...[
+          const Divider(height: ItdaSpace.bottom),
+          if (source != title)
+            Padding(
+              padding: const EdgeInsets.only(bottom: ItdaSpace.small),
+              child: Text(source, style: Theme.of(context).textTheme.bodySmall),
+            ),
+          OriginalSource(
+            original: original,
+            displayedTitle: title,
+            showImage: false,
+            showText: image,
+            openSavedCopy: _openDocument == null ? widget.openOriginal : null,
+            openDocument: _openDocument,
+          ),
+          if (!_editing) ..._notificationControls(copy),
+        ],
+      ],
+    );
+  }
+
   String? _environmentBadge(AppLocalizations copy, UploadMode mode) =>
       mode == UploadMode.mock
           ? copy.mockContent
@@ -462,27 +494,13 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   Widget _workflowAction(AppLocalizations copy, ContentItem content) {
     final destination = nextWorkflow(content.workflowStatus);
     final restoring = destination == WorkflowStatus.pending;
-    return PageWidth(
-      shrinkWrap: true,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          ItdaSpace.page,
-          ItdaSpace.small,
-          ItdaSpace.page,
-          ItdaSpace.medium,
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _canEdit ? () => _move(content, destination) : null,
-            icon: Icon(
-              restoring ? Icons.unarchive_outlined : Icons.archive_outlined,
-              size: 19,
-            ),
-            label: Text(restoring ? copy.returnToTray : copy.archiveAction),
-          ),
-        ),
+    return FilledButton.icon(
+      onPressed: _canEdit ? () => _move(content, destination) : null,
+      icon: Icon(
+        restoring ? Icons.unarchive_outlined : Icons.archive_outlined,
+        size: 19,
       ),
+      label: Text(restoring ? copy.returnToTray : copy.archiveAction),
     );
   }
 
