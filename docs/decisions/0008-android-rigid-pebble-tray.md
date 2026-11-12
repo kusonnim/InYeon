@@ -55,3 +55,18 @@ of 0.028 in normalized coordinates. The painted side arcs meet the corner arcs
 tangentially. Box2D rounds a six-point convex hull with the same corner radius.
 The six samples are the three corner centers and the three midpoints of the
 side arcs before the outline offset.
+
+## Phase A7.4 amendment
+
+Three of ten buckets from the high bits of the existing identity hash select a
+circle. The other buckets select a curved triangle. The original hash inputs,
+triangle variant and color rules carry forward. Circle paint and its native
+Box2D `Circle` use half the existing pebble width as their radius. The tray
+uses slightly higher body damping and lower restitution with the existing
+gravity, release schedule, four substeps, and sleep behavior. Contact damping
+reduces compression between packed circular fixtures.
+
+The detail entry uses a short scale and fade, and reduced motion skips the
+transition. The analysis indicator has its own controller and draws only in the
+card. Its lifetime follows visible `processing` content independently of the
+tray ticker.

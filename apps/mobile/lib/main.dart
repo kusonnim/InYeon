@@ -114,6 +114,7 @@ class _ItdaAppState extends State<ItdaApp> {
         builder: (_) => RegisteredContentScreen(
           bridge: bridge,
           target: target,
+          library: _library,
           openEditor: navigation.destination == NoticeDestination.edit,
           initialContent: entry?.remote,
           initialMode: _library.inbox?.mode ?? UploadMode.disabled,

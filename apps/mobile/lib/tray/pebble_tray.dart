@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'pebble_design.dart';
 import 'pebble_simulation.dart';
 
 typedef TrayItem = ({String id, String title, bool canArchive});
@@ -35,6 +36,7 @@ class PebbleTray extends StatelessWidget {
     ),
   );
 }
+
 class _Scene extends StatefulWidget {
   const _Scene({
     required this.size,
@@ -49,6 +51,7 @@ class _Scene extends StatefulWidget {
   @override
   State<_Scene> createState() => _SceneState();
 }
+
 class _SceneState extends State<_Scene> with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   PebbleSimulation? _simulation;
@@ -214,6 +217,7 @@ class _SceneState extends State<_Scene> with SingleTickerProviderStateMixin {
     );
   }
 }
+
 class _Stone extends StatefulWidget {
   const _Stone({
     super.key,
@@ -239,23 +243,8 @@ class _Stone extends StatefulWidget {
   @override
   State<_Stone> createState() => _StoneState();
 }
+
 class _StoneState extends State<_Stone> {
-  static const _light = [
-    Color(0xffc2c8ad),
-    Color(0xffd5b7a4),
-    Color(0xffd8c79e),
-    Color(0xffadbfbc),
-    Color(0xffc6b8c5),
-    Color(0xffb8becb),
-  ];
-  static const _dark = [
-    Color(0xff494f35),
-    Color(0xff574235),
-    Color(0xff62594c),
-    Color(0xff465743),
-    Color(0xff59483d),
-    Color(0xff455360),
-  ];
   bool _focused = false;
 
   @override
@@ -263,12 +252,11 @@ class _StoneState extends State<_Stone> {
     final pose = widget.pose;
     final width = widget.width;
     final half = width * .55;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = Theme.of(context).colorScheme.onSurface;
-    final transform = Matrix4.identity()
-      ..translateByDouble(half, half, 0, 1)
-      ..rotateZ(pose.angle)
-      ..scaleByDouble(width, width, 1, 1);
+    final theme = Theme.of(context);
+    final textColor = theme.colorScheme.onSurface;
+    final transform = Matrix4.identity()..translateByDouble(half, half, 0, 1);
+    if (!pose.design.isCircle) transform.rotateZ(pose.angle);
+    transform.scaleByDouble(width, width, 1, 1);
     final outline = pose.design.silhouette.transform(transform.storage);
     return Positioned(
       left: pose.center.dx - half,
@@ -299,7 +287,7 @@ class _StoneState extends State<_Stone> {
             child: CustomPaint(
               painter: _StoneOutline(
                 outline,
-                (dark ? _dark : _light)[pose.design.color],
+                PebbleDesign.matteColor(theme.brightness, pose.design.color),
                 _focused ? textColor : null,
               ),
               child: IgnorePointer(
@@ -333,6 +321,7 @@ class _StoneState extends State<_Stone> {
     );
   }
 }
+
 class _StoneOutline extends CustomPainter {
   const _StoneOutline(this.path, this.fill, this.focus);
 
@@ -363,6 +352,7 @@ class _StoneOutline extends CustomPainter {
       fill != oldDelegate.fill ||
       focus != oldDelegate.focus;
 }
+
 class _TrayOutline extends CustomPainter {
   const _TrayOutline(this.tray, this.color);
 

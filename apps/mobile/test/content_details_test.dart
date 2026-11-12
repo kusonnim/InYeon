@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:itda_mobile/l10n/generated/app_localizations.dart';
 import 'package:itda_mobile/models/content.dart';
+import 'package:itda_mobile/widgets/connecting_pebbles.dart';
 import 'package:itda_mobile/widgets/content_details.dart';
 import 'package:itda_mobile/widgets/detail_card.dart';
 import 'package:itda_mobile/widgets/itda_theme.dart';
@@ -199,6 +200,7 @@ void main() {
       await tester.pumpWidget(_page(item));
       await tester.pumpAndSettle();
       expect(find.text(label), findsOneWidget);
+      expect(find.byType(ConnectingPebbles), findsNothing);
       expect(find.text(source), findsOneWidget);
       expect(find.text('Recommendations'), findsNothing);
       expect(find.text('Open original'), findsNothing);
@@ -207,6 +209,78 @@ void main() {
       expect(find.text('Open original'), findsOneWidget);
     });
   }
+
+  for (final dark in [false, true]) {
+    testWidgets(
+      'processing and result keep card and footer fixed in ${dark ? 'dark' : 'light'} mode',
+      (tester) async {
+        _setViewport(
+          tester,
+          const Size(320, 640),
+          safeArea: const FakeViewPadding(top: 24, bottom: 20),
+        );
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        const source = 'The original notice remains accessible.';
+        ContentItem waiting(String status) => ContentItem.fromJson({
+          ...examples.first,
+          'analysis': null,
+          'analysis_status': status,
+          'recommendations': <Object>[],
+          'source_text': source,
+        });
+        await tester.pumpWidget(_page(waiting('pending'), dark: dark));
+        await tester.pumpAndSettle();
+        final layout = _detailLayout(tester);
+        expect(find.text('Analysis pending'), findsOneWidget);
+        expect(find.byType(ConnectingPebbles), findsNothing);
+
+        await tester.pumpWidget(_page(waiting('processing'), dark: dark));
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.byType(ConnectingPebbles), findsOneWidget);
+        expect(find.text('Organizing'), findsOneWidget);
+        expect(find.text(source), findsOneWidget);
+        expect(_detailLayout(tester), layout);
+
+        // Elapsed animation time does not change the authoritative state.
+        await tester.pump(const Duration(seconds: 4));
+        expect(find.text('Organizing'), findsOneWidget);
+        expect(find.text('Recommendations'), findsNothing);
+
+        final completed = ContentItem.fromJson(examples.first);
+        await tester.pumpWidget(_page(completed, dark: dark));
+        await tester.pumpAndSettle();
+        expect(find.byType(ConnectingPebbles), findsNothing);
+        expect(find.text(completed.analysis!.summary!), findsOneWidget);
+        expect(find.text(completed.recommendations.first.text), findsOneWidget);
+        expect(_detailLayout(tester), layout);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('reduced motion keeps a static accessible processing status', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final item = ContentItem.fromJson({
+        ...examples.first,
+        'analysis': null,
+        'analysis_status': 'processing',
+        'recommendations': <Object>[],
+      });
+      await tester.pumpWidget(
+        _page(item, locale: const Locale('ko'), reduceMotion: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ConnectingPebbles), findsOneWidget);
+      expect(find.bySemanticsLabel('정리 중'), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    } finally {
+      semantics.dispose();
+    }
+  });
 
   testWidgets('reduced motion reveals details immediately', (tester) async {
     final item = ContentItem.fromJson(examples.first);
@@ -248,6 +322,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text(title), findsOneWidget);
+      expect(find.byType(ConnectingPebbles), findsNothing);
       expect(find.text('추천'), findsNothing);
       expect(find.text('원문의 일부를 확인했어요'), findsNothing);
       expect(find.text('AI 요약'), findsNothing);

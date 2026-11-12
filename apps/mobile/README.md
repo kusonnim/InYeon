@@ -50,10 +50,11 @@ Repeated exact URLs can expand as a group in **All saved**. Each save keeps its
 own detail route and pebble identity. **Sample library** is available from
 **Account** and from an empty device-only tray.
 
-The first nonempty tray releases matte, softly curved triangular pebbles into a
-Box2D scene once per app session. The painter draws smooth side and corner arcs.
-The collision fixture uses a rounded hull sampled at the three corners and
-three side midpoints. Dark mode uses an earthy pebble palette.
+The first nonempty tray releases matte pebbles into a Box2D scene once per app
+session. A stable identity hash selects roughly 70% softly curved triangles and
+30% circles. Triangles use smooth side and corner arcs with a rounded six-point
+hull. Circles use a native circular fixture with the painted radius. Both forms
+share the pebble palette and available width. The home app bar carries **잇다**.
 A new visible share enters on its own. Tap a pebble for details or drag it inside
 the tray. Reduced motion prepares the resting arrangement before displaying it.
 An acknowledged receipt keeps the same pebble as its server details arrive.
@@ -90,6 +91,14 @@ that content. Only the card interior scrolls. The disclosure stays directly
 above **Archive** or **Return to tray** in the safe-area footer. The first
 recommendation follows API order. A note with zero recommendations has no
 recommendation section.
+
+After acknowledgment, a pending item shows a waiting label. Processing shows
+**정리 중 / Organizing** beside a small circle and triangle that connect and
+separate. The loop pauses while the drawing is out of view or the app is in the
+background. Reduced motion presents the same status with a static pair. An
+open registered detail adopts newer analysis results from the current account's
+sync snapshot. Editing retains its observed version until the user saves or
+reviews the draft.
 
 The editor scrolls above the Android keyboard. Save and Cancel remain in a
 fixed footer or move to the app bar when the keyboard leaves little height.

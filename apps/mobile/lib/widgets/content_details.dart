@@ -5,6 +5,7 @@ import '../l10n/generated/app_localizations.dart';
 import '../models/content.dart';
 import '../native/external_link.dart';
 import '../native/share_bridge.dart';
+import 'connecting_pebbles.dart';
 import 'detail_card.dart';
 import 'itda_theme.dart';
 import 'library_components.dart';
@@ -133,7 +134,9 @@ class ContentDetails extends StatelessWidget {
         if (statusText != null)
           Padding(
             padding: const EdgeInsets.only(bottom: ItdaSpace.large),
-            child: Text(statusText, style: meta),
+            child: status == AnalysisStatus.processing
+                ? ConnectingPebbles(label: copy.analysisOrganizing)
+                : Text(statusText, style: meta),
           ),
         if (recommendations.isNotEmpty)
           RecommendationSection(

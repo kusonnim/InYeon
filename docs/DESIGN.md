@@ -1,14 +1,14 @@
 # ITDA — Mobile Design System
 
-- **Status** Draft 0.3 for Phase A7.3 visual review
+- **Status** Draft 0.4 for Phase A7.4 motion and visual review
 - **Target** Android mobile app (Flutter + Kotlin)
-- **Baseline** Phase A7.2 versioned archive, original access, and mobile palette
+- **Baseline** Phase A7.3 curved triangular pebbles and full-height detail card
 
 > This document governs presentation and interaction, not authoritative product, API, or persistence semantics. If it conflicts with `docs/PRODUCT.md`, `contracts/openapi.yaml`, privacy rules, or established account boundaries, resolve the conflict explicitly rather than silently changing data behavior.
 
 ## 1. Design Intent
 
-ITDA is a quiet place for things people save and may want to revisit. Its character comes from one unusual interaction: rigid, rounded triangular objects falling into an angular open tray. Everything beyond that scene should feel like an ordinary, carefully made mobile app.
+ITDA is a quiet place for things people save and may want to revisit. Its character comes from rigid, matte circles and rounded triangles falling into an angular open tray. The reading, editing, and account screens use the same understated typography and surfaces.
 
 The interface should be **warm without being cute, tactile without being decorative, and simple without hiding useful functionality**.
 
@@ -131,7 +131,11 @@ Keep the original accessible during analysis or failure. Omit the recommendation
 
 Do not use generated stock imagery as a substitute for unavailable originals. Do not claim a server-only private image is visible until an authenticated download implementation exists.
 
-## 4. Home: Angular U-Tray and Rounded Triangular Pebbles
+## 4. Home tray and wordmark
+
+Set **잇다** in SUIT SemiBold in the home app bar. Keep the wordmark on one
+line beside the existing library and account controls. Its text can scale down
+to fit the available toolbar space on narrow layouts with large system text.
 
 ### Tray
 
@@ -144,13 +148,17 @@ Do not use generated stock imagery as a substitute for unavailable originals. Do
 
 ### Pebble shape
 
-Use a **softly curved triangle** for every pebble.
+Assign roughly **70% softly rounded triangles and 30% circles** by stable
+content identity. Small trays reflect the mix of the items they contain.
 
-- Three recognizable corners with smooth rounding. Each side bows slightly outward.
-- Five deterministic variants with mild asymmetry and a modest rounding radius.
-- Solid, rigid, matte, and visually flat: no squash/stretch or jelly wobble.
-- Draw tangent side and corner arcs. Use the three corners and three side midpoints for the convex Box2D hull with the same outward rounding radius.
-- Stable color and shape for each content identity, including across local receipt → server acknowledgment.
+- Triangles retain the five A7.3 variants, three recognizable rounded corners,
+  and three outward-bowing sides. Draw tangent side and corner arcs, and use the
+  same corner radius around the three corners and three side midpoints in Box2D.
+- Circles use a constant radius of half the pebble width in the painter and a
+  native Box2D circle fixture with the same center and radius.
+- Both forms share the rigid matte palette and the same viewport-based width.
+- Shape, variant, and color stay stable across navigation and sync. A local
+  receipt keeps its identity when the matching server acknowledgment arrives.
 - Upright, readable title labels even while the objects rotate; long labels use intelligent clipping or abbreviation without corrupting stored titles.
 
 ### Physics and touch
@@ -158,6 +166,7 @@ Use a **softly curved triangle** for every pebble.
 Preserve the Forge2D interaction, tray dimensions and position, capacity, and archive destination.
 
 - On the first home entry of an app session, existing items fall from above in a short cascade, collide, roll, and settle in the U-tray.
+- Modest damping and low restitution soften collisions as the scene settles.
 - Stop stepping/rendering when bodies sleep.
 - Returning from detail does not replay the cascade or randomly reposition settled objects.
 - Newly shared items enter individually.
@@ -224,15 +233,37 @@ Preserve the Forge2D interaction, tray dimensions and position, capacity, and ar
 
 ## 8. Motion, Interaction, and Accessibility
 
-- Outside the U-tray, use restrained, fast transitions (typically about 150–250 ms).
+- Use gentle acceleration and deceleration. A pebble opens details with a small scale and fade over 200 ms and returns over 160 ms. Reduced motion opens and closes the route immediately.
 - Animate content height inside the detail card over 180 ms. Update the contents immediately with reduced motion. Keep the current scroll offset when possible and clamp it to the available range when collapsing.
-- No bouncing cards, idle pulsing, ornamental spinners, or continuous motion.
+- Let the tray sleep at rest and confine the analysis loop to the visible processing indicator.
 - Minimum practical Android touch target: 48 dp.
 - Support screen readers with full titles and meaningful button labels, including for visually truncated pebble text.
 - Keyboard/accessibility alternatives exist for actions performed by dragging.
 - Support light/dark theme, Android text scaling, small viewport widths, landscape, gesture navigation insets, and reduced motion.
 - Preserve scroll and editor state when temporarily opening another application and returning.
 - Show concise, contextual error messages with an actionable recovery path when possible.
+
+### Connecting Pebbles analysis indicator
+
+A small matte circle and rounded triangle approach over a few points, pause
+with a thin line between them, and return to their starting positions after the
+line fades. The 2.6-second Flutter loop repaints the drawing inside the main
+card. A static connected pair accompanies the same status label with reduced
+motion. The loop pauses offscreen, on a covered route, and in the background.
+
+| State | Detail presentation |
+| --- | --- |
+| Local receipt awaiting upload | Existing save and upload status alongside the original |
+| Acknowledged and pending | Quiet analysis waiting label |
+| Processing | Connecting Pebbles and **정리 중 / Organizing**, with the original and ordinary actions available |
+| Completed | Available summary and recommendations in their existing places |
+| Partial | Available result and a partial status, with actual coverage and limitations in the disclosure |
+| Failed | Existing analysis failure label and access to the original |
+
+The visible state follows the received content version, including when an
+open detail receives a newer account-scoped sync snapshot. The card and
+footer keep their bounds as the inner content changes. The animation cycle
+only drives the drawing.
 
 ## 9. Copy and Content Policy
 
@@ -251,7 +282,7 @@ Preferred Korean labels (illustrative):
 | Show details | 상세히 보기 |
 | Show less | 접기 |
 | Edit | 수정 |
-| Processing | 처리 중 |
+| Processing in details | 정리 중 |
 
 - Avoid “Welcome back,” “Your journey,” “AI magic,” “Your personal assistant has found…,” or other promotional filler in operational screens.
 - Avoid unnecessary counts, duplicate badges, and redundant confirmation copy.
@@ -286,7 +317,7 @@ Capture the full collapsed and expanded detail layout. Verify fixed card bounds 
 
 **Acceptance questions:**
 
-- Does the home screen look like solid rounded-triangle stones within three straight tray lines?
+- Do matte circles and rounded triangles look solid within the three straight tray lines?
 - Can a user recognize and act on an item without a wall of text?
 - Is any surface boxed for decoration rather than function?
 - Do image, link, and personal-note details emphasize the right content?

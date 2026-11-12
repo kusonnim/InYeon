@@ -88,6 +88,7 @@
   "localSaved": "이 기기에 저장됨",
   "analysisPending": "분석 대기",
   "analysisProcessing": "분석 중",
+  "analysisOrganizing": "정리 중",
   "analysisCompleted": "분석 완료",
   "analysisPartial": "부분 분석",
   "analysisFailed": "분석 실패",

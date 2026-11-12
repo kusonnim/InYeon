@@ -9,7 +9,8 @@ HTTP smoke and checked both migrations on a disposable local Supabase stack.
 Authenticated staging, real-identity RLS and private object transfers, Web/Android
 consistency against the same live API, and FCM remain integration work.
 
-Android home presents saved items as rigid rounded triangular pebbles.
+Android home presents saved items as rigid matte triangles and circles with
+stable identity assignment. The home app bar shows the **잇다** wordmark.
 **All saved** and **Archive** use plain, searchable rows with pagination.
 Repeated links in **All saved** can expand to their individual saves.
 Pending and completed items can move directly to the archive through a
@@ -18,6 +19,8 @@ The [mobile design draft](DESIGN.md) guides the Korean and English interfaces.
 One detail card presents primary content and expands in place to reveal source
 information and additional recommendations. A dedicated sign-in screen opens
 from home or Account settings and returns to the previous screen on success.
+The card shows a Connecting Pebbles indicator during acknowledged processing
+and reflects newer analysis results delivered by account-scoped sync.
 Android notifications show a localized source, title, and processing state
 with the existing dismissal and restoration rules.
 
@@ -344,6 +347,27 @@ edits.
 
 Physical-device review and live service checks remain open. Server-only
 private image and PDF originals require an authenticated download path.
+
+### Phase A7.4 Android checks
+
+A7.4 starts from `main` at `bcddd1a` on 2026-11-12 (Asia/Seoul). Verification
+used Flutter 3.47.8, Dart 3.13.7, and a disposable Android 15 / API 35 x86_64
+emulator. The visual preview used the loopback mock, five synthetic catalog
+items with short Korean titles, and explicit changes to the mock analysis state.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependencies, generated localizations, fixture parity, static analysis, and all 71 tests passed. The tests cover the mixed geometry, circular drag, stable receipt identity, newer scoped analysis snapshots, paused and disposed animations, reduced motion, and fixed detail actions. |
+| Shape and settling | Of 10,000 synthetic IDs per scope, 3,006 local and 3,001 server identities selected circles. Circle and triangle outlines were compared with their native fixtures along 120 rays. The 10-, 6-, and 4-body host scenarios slept after 175, 186, and 176 steps, with respective mean host step times of 10.5, 10.3, and 5.1 microseconds. |
+| Android builds and lint | The loopback mock and upload-disabled debug APKs and the instrumentation APK built and installed on x86_64. Debug lint reported zero errors and eight warnings. |
+| Android instrumentation | All 47 native tests passed on the upload-disabled debug APK, including share receipt, synchronization, notification, outbox, and staging configuration regressions. |
+| Emulator visuals | Seven screenshots cover the light and dark mixed tray, waiting, processing, completed analysis, and the 320 dp dark tray and processing card at 200% system text. The seeded tray showed three triangles and two circles. Two settled captures had identical tray pixels. |
+| Emulator motion | Three native Android recordings show the cascade and mixed collisions, the processing loop, and the result transition after refreshing the detail against the mock. The cascade clip starts after the Android launch splash. Review of the recordings showed the shapes approaching, joining, and separating, with the original visible and the archive footer stationary. The archive footer pixels matched across waiting, processing, and completion. |
+| Reduced motion and workflow | The connected shapes remained pixel-identical in repeated 320 dp captures with Android animation scales disabled. Back returned from processing to the tray. Dragging a circular pebble archived the mock item, and restore advanced its version with its analysis status intact. |
+
+The timings cover host simulation updates. Physical-device checks remain for
+render frame times, drag response on lower-end devices, and TalkBack interaction.
+The recordings use deterministic mock results and required no hosted model calls.
 
 ## Next concrete tasks
 

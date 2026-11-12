@@ -13,6 +13,7 @@ import 'package:itda_mobile/native/catalog_bridge.dart';
 import 'package:itda_mobile/native/language_preference.dart';
 import 'package:itda_mobile/native/notification_bridge.dart';
 import 'package:itda_mobile/native/share_bridge.dart';
+import 'package:itda_mobile/widgets/connecting_pebbles.dart';
 
 void main() {
   late Map<String, dynamic> fixture;
@@ -226,7 +227,7 @@ void main() {
     expect(find.text('Could not verify your email and password.'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.text('잇다'), findsOneWidget);
     expect(find.byType(TextFormField), findsNothing);
     shares
       ..signInError = null
@@ -237,7 +238,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField).last, 'synthetic');
     await tester.tap(submit);
     await tester.pumpAndSettle();
-    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.text('잇다'), findsOneWidget);
     expect(find.byTooltip('Account'), findsOneWidget);
   });
 
@@ -358,7 +359,7 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('ITDA'), findsOneWidget);
+    expect(find.text('잇다'), findsOneWidget);
     expect(find.text('Revised title'), findsOneWidget);
     expect(find.text('Saved title'), findsNothing);
   });
@@ -510,6 +511,93 @@ void main() {
     expect(tester.getCenter(stone), position);
     expect(find.text(item.title!), findsOneWidget);
     expect(find.byKey(ValueKey('pebble:server:${item.id}')), findsNothing);
+  });
+
+  testWidgets('a queued local share keeps its upload status and opens without motion', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    shares
+      ..mode = UploadMode.mock
+      ..account = _account('a')
+      ..items = [_local('receipt', 'Shared notebook')];
+    await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
+      api: api,
+      shareBridge: shares,
+    ));
+    await tester.pumpAndSettle();
+    await _tapPebble(tester, 'local:receipt');
+    await tester.pumpAndSettle();
+    expect(find.text('Waiting to sync'), findsOneWidget);
+    expect(find.byType(ConnectingPebbles), findsNothing);
+    final route = ModalRoute.of(tester.element(find.text('Content details')))!;
+    expect(route.transitionDuration, Duration.zero);
+    expect(route.reverseTransitionDuration, Duration.zero);
+  });
+
+  testWidgets('open details follow newer analysis results from the scoped library', (
+    tester,
+  ) async {
+    final raw = (fixture['items'] as List).first as Map<String, dynamic>;
+    final completed = ContentItem.fromJson({...raw, 'version': 3});
+    ContentItem waiting(String status, int version) => ContentItem.fromJson({
+      ...raw,
+      'analysis': null,
+      'analysis_status': status,
+      'recommendations': <Object>[],
+      'version': version,
+    });
+    final pending = waiting('pending', 1);
+    var snapshot = pending;
+    shares
+      ..mode = UploadMode.mock
+      ..account = _account(pending.userId);
+    final catalog = _CatalogAdapter((_, __) async => CatalogSnapshot(
+      items: [snapshot],
+      phase: CatalogPhase.current,
+    ));
+    await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
+      api: api,
+      shareBridge: shares,
+      catalogBridge: catalog,
+      notificationBridge: _DetailsAdapter(pending),
+    ));
+    await tester.pumpAndSettle();
+    await _tapPebble(tester, 'server:${pending.id}');
+    await tester.pumpAndSettle();
+    final route = ModalRoute.of(tester.element(find.text('Content details')))!;
+    expect(route.transitionDuration, const Duration(milliseconds: 200));
+    expect(route.reverseTransitionDuration, const Duration(milliseconds: 160));
+    expect(find.text('Analysis pending'), findsOneWidget);
+
+    snapshot = waiting('processing', 2);
+    shares.events.add(null);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 220));
+    expect(find.byType(ConnectingPebbles), findsOneWidget);
+    final edit = find.byWidgetPredicate((widget) =>
+        widget is IconButton && widget.tooltip == 'Edit');
+    expect(tester.widget<IconButton>(edit).onPressed, isNotNull);
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Archive')).onPressed,
+      isNotNull,
+    );
+
+    snapshot = completed;
+    shares.events.add(null);
+    await tester.pumpAndSettle();
+    expect(find.byType(ConnectingPebbles), findsNothing);
+    expect(find.text(completed.analysis!.summary!), findsOneWidget);
+    expect(find.text(completed.recommendations.first.text), findsOneWidget);
+    snapshot = pending;
+    shares.events.add(null);
+    await tester.pumpAndSettle();
+    expect(find.text('Analysis pending'), findsNothing);
+    expect(find.text(completed.analysis!.summary!), findsOneWidget);
   });
 
   testWidgets('the complete list reaches originals beyond the tray limit',
@@ -863,7 +951,7 @@ void main() {
       await tester.pumpWidget(ItdaApp(
           initialLocale: const Locale('en'), api: api, shareBridge: shares));
       await tester.pumpAndSettle();
-      final library = find.text('ITDA');
+      final library = find.text('잇다');
       expect(Theme.of(tester.element(library)).brightness, Brightness.light);
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
