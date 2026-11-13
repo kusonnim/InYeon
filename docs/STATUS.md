@@ -1,13 +1,14 @@
 # Implementation status
 
-Last updated 2026-11-12 (Asia/Seoul). **Integration I1 Windows verification and staging handoff.**
+Last updated 2026-11-12 (Asia/Seoul). **Integration I1 and C1 hosted Supabase verification.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
 and library checkpoints retain their account and realm scope. I1 ran the fixture
 HTTP smoke and checked both migrations on a disposable local Supabase stack.
-Authenticated staging, real-identity RLS and private object transfers, Web/Android
-consistency against the same live API, and FCM remain integration work.
+C1 provisioned a shared Seoul Supabase project and verified real-identity RLS
+through Auth and PostgREST. Private object transfers, authenticated B API
+integration, Web/Android consistency and FCM remain integration work.
 
 Android home presents saved items as rigid rounded triangular pebbles.
 **All saved** and **Archive** use plain, searchable rows with pagination.
@@ -34,7 +35,7 @@ details can focus the corresponding field in the versioned editor.
 | API contract | Versioned OpenAPI, UUID/UTC/bearer conventions, errors, version conflicts, idempotency, cursor sync, private asset lifecycle | Real HTTP authentication, storage and persistence adapters |
 | Backend | FastAPI health/router/model/config structure, fail-closed production mode, explicit in-memory fixture adapter | Persistent ingestion, Supabase JWT, uploads, real worker operations |
 | Worker | Separate extraction/summarization/recommendation/persistence interfaces; standalone supplied-text provider helper from PR #11 | Runnable PostgreSQL claim/lease/retry consumer, bounded source fetching, provider/contract mapping, guarded result transactions |
-| Data | 12 owned tables, RLS, private bucket and notification/sync functions. Both migrations, 33 pgTAP checks and schema lint ran on disposable local Supabase PostgreSQL 17.6 | Two real staging identities, private object byte transfer and B adapter wiring |
+| Data | Both migrations applied to hosted PostgreSQL 17.11, two real password accounts, 86 grouped Auth/RLS checks, private bucket configuration. Earlier local Supabase pgTAP 33 checks and lint passed | Private object bytes and B's persistent API integration |
 | Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
 | Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview, rigid pebble tray and versioned workflow | Two-account live API/RLS verification, server-only private image download, FCM delivery |
 | Integration | Windows runbook, redacted preflight, two-account API smoke with optional operator-managed restart, deterministic analysis and Web rendering tests | Execution against the approved staging tuple with two disposable accounts |
@@ -43,6 +44,22 @@ details can focus the corresponding field in the versioned editor.
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
 
 ## Verification evidence
+
+### C1 hosted Supabase verification
+
+The shared project is `itda-integration` in Seoul, reference
+`udindscqqsqsczmkyrxs`. [Connection handoff](../supabase/integration/HANDOFF.md)
+records its API, JWT and PostgreSQL coordinates and migration versions.
+The account credential manifest is delivered separately.
+
+| Check | C1 outcome |
+| --- | --- |
+| Migrations | Both repository migrations applied, and the history matches versions `202611090001` and `202611090002` |
+| Schema | PostgreSQL 17.11, 12 application tables with RLS, eight owner-read policies, private 20 MiB `content-assets` bucket |
+| Real Auth and RLS | All 86 grouped checks passed using two real password sessions and verified Auth user IDs. Owner reads, foreign-row hiding, anonymous denial, all direct writes, server-only reads and privileged RPC denial passed |
+| Verifier regression | Eight tests passed, including missing fixtures/routes, wrong identities, malformed Auth/key data, false permission errors and credential redaction |
+| Security advisors | Four informational no-policy findings correspond to the four deliberately server-only relations, with client grants revoked |
+| Remaining | B API deployment, real private file transfer and Android/Web acceptance use this same project and private test accounts |
 
 ### I1 Windows verification
 
