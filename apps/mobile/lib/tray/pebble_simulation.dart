@@ -30,6 +30,7 @@ final class TrayGeometry {
     return size.width < 320 || interior.height < 265 ? 6 : 10;
   }
 }
+
 typedef PebblePose = ({
   String id,
   Offset center,
@@ -54,7 +55,11 @@ final class PebbleSimulation {
   static const _releaseInterval = 6;
 
   final TrayGeometry geometry;
-  final _world = World(gravity: Vector2(0, 22));
+  // Firmer contacts keep circles from visibly overlapping in a packed tray.
+  final _world = World(
+    gravity: Vector2(0, 22),
+    definition: WorldDef(contactDampingRatio: 3),
+  );
   late final _walls = _world.createBody();
   final _bodies = <String, ({Body body, PebbleDesign design})>{};
   final _queued = <String, int>{};
@@ -156,7 +161,7 @@ final class PebbleSimulation {
       rect.height / (2 * _pixelsPerMeter),
       center: _point(rect.center),
     ),
-    ShapeDef(material: SurfaceMaterial(friction: .78, restitution: .19)),
+    ShapeDef(material: SurfaceMaterial(friction: .78, restitution: .15)),
   );
 
   void _spawn(String id) {
@@ -177,19 +182,17 @@ final class PebbleSimulation {
         rotation: Rot.fromAngle((design.variant - 2) * .22),
         linearVelocity: Vector2((lane - .5) * 1.8, 0),
         angularVelocity: (design.variant - 2) * .5,
-        linearDamping: .55,
-        angularDamping: 1.15,
+        linearDamping: .64,
+        angularDamping: 1.3,
         isBullet: true,
       ),
     );
     body.createShape(
-      Polygon([
-        for (final point in design.vertices) _point(point * width),
-      ], radius: PebbleDesign.radius * width / _pixelsPerMeter),
+      design.collisionShape(width / _pixelsPerMeter),
       ShapeDef(
         material: SurfaceMaterial(
           friction: .74,
-          restitution: .22,
+          restitution: .16,
           rollingResistance: .05,
         ),
       ),

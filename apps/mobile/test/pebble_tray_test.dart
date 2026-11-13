@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:itda_mobile/tray/pebble_tray.dart';
 
 const _first = (
-  id: 'local:one',
+  id: 'local:receipt',
   title: 'Repair cafe timetable',
   canArchive: true,
 );
@@ -118,7 +118,7 @@ void main() {
     },
   );
 
-  testWidgets('drag moves a rigid body and a dock drop is separate from tap', (
+  testWidgets('circle drag and archive drop stay separate from tap', (
     tester,
   ) async {
     final dock = GlobalKey();

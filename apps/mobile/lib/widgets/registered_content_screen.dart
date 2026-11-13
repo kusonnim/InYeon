@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/generated/app_localizations.dart';
+import '../library/library_controller.dart';
 import '../library/workflow_edit.dart';
 import '../models/content.dart';
 import '../native/notification_bridge.dart';
@@ -22,6 +23,7 @@ class RegisteredContentScreen extends StatefulWidget {
     super.key,
     required this.bridge,
     required this.target,
+    this.library,
     this.openEditor = false,
     this.initialContent,
     this.initialMode = UploadMode.disabled,
@@ -31,6 +33,7 @@ class RegisteredContentScreen extends StatefulWidget {
 
   final NotificationBridge bridge;
   final NoticeTarget target;
+  final LibraryController? library;
   final bool openEditor;
   final ContentItem? initialContent;
   final UploadMode initialMode;
@@ -82,6 +85,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       (_) => unawaited(_checkStatus()),
       onError: (Object _) {},
     );
+    widget.library?.addListener(_useSyncedContent);
     _lifecycle = AppLifecycleListener(onResume: _checkStatus);
     unawaited(_load());
   }
@@ -89,6 +93,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   @override
   void dispose() {
     unawaited(_changes.cancel());
+    widget.library?.removeListener(_useSyncedContent);
     _lifecycle.dispose();
     _title.dispose();
     _note.dispose();
@@ -100,6 +105,32 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   bool _owns(ContentItem content) =>
       content.id == widget.target.contentId &&
       content.userId == widget.target.ownerId;
+
+  void _useSyncedContent() {
+    // Keep a draft's version until its explicit save or review.
+    final current = _item;
+    if (_locked || _busy || _editing || current == null || _error == 'http_404') {
+      return;
+    }
+    final target = widget.target;
+    final next = widget.library?.contentFor(
+      (ownerId: target.ownerId, realm: target.realm),
+      target.contentId,
+    );
+    final previous = current.content;
+    if (next == null ||
+        !_owns(next) ||
+        next.version < previous.version ||
+        (next.version == previous.version &&
+            !next.updatedAt.isAfter(previous.updatedAt))) {
+      return;
+    }
+    setState(() {
+      _item = RegisteredContent(next, current.mode, current.notice);
+      _title.text = next.title ?? '';
+      _note.text = next.userNote ?? '';
+    });
+  }
 
   Future<void> _checkStatus() async {
     if (_locked || _error == 'http_404') return;
@@ -269,6 +300,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       _title.text = _item?.content.title ?? '';
       _note.text = _item?.content.userNote ?? '';
     });
+    _useSyncedContent();
   }
 
   Future<void> _restore() => _run(_Request.restore, () async {
@@ -334,7 +366,10 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         });
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        _useSyncedContent();
+      }
     }
   }
 

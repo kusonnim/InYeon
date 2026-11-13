@@ -110,39 +110,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
   VoidCallback? _openEntry(
     BuildContext context,
     LibraryEntry entry,
-    UploadMode mode,
-  ) {
+    UploadMode mode, {
+    bool fromPebble = false,
+  }) {
     final local = entry.local;
     final owner = controller.scope;
     final id = entry.serverId;
     final bridge = widget.notifications;
     final navigator = Navigator.of(context);
-    void openOriginal() {
-      navigator.push<void>(
-        MaterialPageRoute(
-          builder: (_) => LocalContentScreen(
-            controller: controller,
-            localId: local!.localId,
-          ),
-        ),
-      );
-    }
+    final reduceMotion = fromPebble && MediaQuery.disableAnimationsOf(context);
+    Widget localDetail(BuildContext _) =>
+        LocalContentScreen(controller: controller, localId: local!.localId);
+
+    Route<void> detailRoute(WidgetBuilder builder) => fromPebble
+        ? _pebbleDetailRoute(builder, reduceMotion: reduceMotion)
+        : MaterialPageRoute<void>(builder: builder);
 
     if (id != null && owner != null && bridge != null) {
       return () => navigator.push<void>(
-            MaterialPageRoute(
-              builder: (_) => RegisteredContentScreen(
+            detailRoute(
+              (_) => RegisteredContentScreen(
                 bridge: bridge,
                 target: NoticeTarget(owner.ownerId, owner.realm, id),
+                library: controller,
                 initialContent: entry.remote,
                 initialMode: mode,
-                openOriginal: local == null ? null : openOriginal,
+                openOriginal: local == null
+                    ? null
+                    : () => navigator.push<void>(
+                        MaterialPageRoute(builder: localDetail),
+                      ),
                 onChanged: (item) => controller.updateItem(owner, item),
               ),
             ),
           );
     }
-    return local?.inputType == null ? null : openOriginal;
+    return local?.inputType == null
+        ? null
+        : () => navigator.push<void>(detailRoute(localDetail));
   }
 
   LibraryEntry? _activeEntry(String id) => controller.entries
@@ -156,6 +161,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         context,
         entry,
         controller.inbox?.mode ?? UploadMode.disabled,
+        fromPebble: true,
       )?.call();
     }
   }
@@ -236,7 +242,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
           });
         return Scaffold(
           appBar: AppBar(
-            title: Text(copy.appName),
+            title: FittedBox(
+              alignment: AlignmentDirectional.centerStart,
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '잇다',
+                semanticsLabel: copy.localeName == 'ko' ? null : copy.appName,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontSize: 26,
+                  letterSpacing: -.6,
+                ),
+              ),
+            ),
             toolbarHeight: math.max(
               kToolbarHeight,
               MediaQuery.textScalerOf(context).scale(actionTextSize) * 2.4 +
@@ -355,3 +372,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 }
+
+PageRoute<void> _pebbleDetailRoute(
+  WidgetBuilder builder, {
+  required bool reduceMotion,
+}) => PageRouteBuilder<void>(
+  transitionDuration: reduceMotion
+      ? Duration.zero
+      : const Duration(milliseconds: 200),
+  reverseTransitionDuration: reduceMotion
+      ? Duration.zero
+      : const Duration(milliseconds: 160),
+  pageBuilder: (context, _, _) => builder(context),
+  transitionsBuilder: (_, animation, _, child) {
+    if (reduceMotion) return child;
+    final eased = animation.drive(CurveTween(curve: Curves.easeInOutCubic));
+    return FadeTransition(
+      opacity: eased,
+      child: ScaleTransition(
+        scale: eased.drive(Tween<double>(begin: .985, end: 1)),
+        child: child,
+      ),
+    );
+  },
+);

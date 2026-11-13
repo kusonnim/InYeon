@@ -177,6 +177,9 @@ class LibraryController extends ChangeNotifier {
     }
   }
 
+  ContentItem? contentFor(AccountScope owner, String id) =>
+      scope == owner ? _contents[id] : null;
+
   void updateItem(AccountScope owner, ContentItem item) {
     if (_disposed ||
         owner != scope ||

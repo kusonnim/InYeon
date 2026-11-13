@@ -17,8 +17,44 @@ void main() {
     expect(designs.map((design) => design.color).toSet(), hasLength(6));
     for (final (index, id) in ids.indexed) {
       final same = PebbleDesign.forId(id);
+      expect(same.isCircle, designs[index].isCircle);
       expect(same.vertices, designs[index].vertices);
       expect(same.color, designs[index].color);
+    }
+  });
+
+  test('independent identities approximate a 70/30 triangle and circle mix', () {
+    for (final prefix in ['local:', 'server:']) {
+      final circles = List.generate(
+        10000,
+        (index) => PebbleDesign.forId(
+          '${prefix}10000000-0000-4000-8000-${index.toString().padLeft(12, '0')}',
+        ),
+      ).where((design) => design.isCircle).length;
+      expect(circles, inInclusiveRange(2800, 3200));
+      debugPrint('$prefix $circles circles among 10000 identities');
+    }
+  });
+
+  test('a painted circle matches the native circle fixture at every angle', () {
+    final design = PebbleDesign.forId('local:receipt');
+    expect(design.isCircle, isTrue);
+    final world = World(gravity: Vector2.zero());
+    addTearDown(world.destroy);
+    final fixture = world.createBody().createShape(design.collisionShape(1));
+    final circle = fixture.geometry as Circle;
+    expect(circle.radius, .5);
+    expect(circle.center, Vector2.zero());
+    final path = design.silhouette;
+    expect(path.getBounds(), const Rect.fromLTRB(-.5, -.5, .5, .5));
+    for (var angle = 0; angle < 360; angle += 3) {
+      final direction = angle * math.pi / 180;
+      // Path.contains samples the conic outline at Skia's hit-test precision.
+      expect(_edgeRadius(direction, path.contains), closeTo(.5, .0006));
+      expect(
+        _edgeRadius(direction, (p) => fixture.testPoint(Vector2(p.dx, p.dy))),
+        closeTo(.5, .0001),
+      );
     }
   });
 
@@ -28,14 +64,11 @@ void main() {
     final variants = <int>{};
     for (var index = 0; index < 32; index++) {
       final design = PebbleDesign.forId('local:receipt-$index');
-      if (!variants.add(design.variant)) continue;
+      if (design.isCircle || !variants.add(design.variant)) continue;
       expect(design.vertices, hasLength(6));
       final body = world.createBody();
-      final fixture = body.createShape(
-        Polygon([
-          for (final p in design.vertices) Vector2(p.dx, p.dy),
-        ], radius: PebbleDesign.radius),
-      );
+      final fixture = body.createShape(design.collisionShape(1));
+      expect(fixture.geometry, isA<Polygon>());
       final path = design.silhouette;
       for (var i = 0; i < 6; i += 2) {
         final start = design.vertices[i];
@@ -93,6 +126,10 @@ void main() {
     final steps = _runUntilSleep(scene);
     expect(steps, lessThan(540));
     expect(scene.moving, isFalse);
+    expect(scene.poses.map((pose) => pose.design.isCircle).toSet(), {
+      true,
+      false,
+    });
     _expectContained(scene);
     _expectSeparated(scene);
   });
@@ -218,8 +255,8 @@ List<Offset> _vertices(PebblePose pose, double width) => [
 
 void _expectContained(PebbleSimulation scene, {double tolerance = 2}) {
   final tray = scene.geometry.interior;
-  final radius = PebbleDesign.radius * scene.geometry.pebbleWidth;
   for (final stone in scene.poses) {
+    final radius = stone.design.fixtureRadius * scene.geometry.pebbleWidth;
     for (final point in _vertices(stone, scene.geometry.pebbleWidth)) {
       expect(
         point.dx,
@@ -234,19 +271,28 @@ void _expectContained(PebbleSimulation scene, {double tolerance = 2}) {
 }
 
 void _expectSeparated(PebbleSimulation scene) {
+  final width = scene.geometry.pebbleWidth;
   final stones = scene.poses
-      .map((pose) => _vertices(pose, scene.geometry.pebbleWidth))
+      .map(
+        (pose) => (
+          vertices: _vertices(pose, width),
+          radius: pose.design.fixtureRadius * width,
+        ),
+      )
       .toList();
-  final radius = PebbleDesign.radius * scene.geometry.pebbleWidth;
   for (var i = 0; i < stones.length; ++i) {
     for (var j = i + 1; j < stones.length; ++j) {
-      expect(_overlap(stones[i], stones[j]), lessThan(0));
+      final first = stones[i];
+      final second = stones[j];
+      if (first.vertices.length > 1 || second.vertices.length > 1) {
+        expect(_overlap(first.vertices, second.vertices), lessThan(0));
+      }
       expect(
         math.min(
-          _edgeDistance(stones[i], stones[j]),
-          _edgeDistance(stones[j], stones[i]),
+          _edgeDistance(first.vertices, second.vertices),
+          _edgeDistance(second.vertices, first.vertices),
         ),
-        greaterThan(2 * radius - 2),
+        greaterThan(first.radius + second.radius - 2),
       );
     }
   }
@@ -256,6 +302,10 @@ double _edgeDistance(List<Offset> vertices, List<Offset> polygon) {
   double dot(Offset a, Offset b) => a.dx * b.dx + a.dy * b.dy;
   var minimum = double.infinity;
   for (final vertex in vertices) {
+    if (polygon.length == 1) {
+      minimum = math.min(minimum, (vertex - polygon.single).distance);
+      continue;
+    }
     for (var i = 0; i < polygon.length; i++) {
       final start = polygon[i];
       final edge = polygon[(i + 1) % polygon.length] - start;
@@ -272,6 +322,7 @@ double _edgeDistance(List<Offset> vertices, List<Offset> polygon) {
 double _overlap(List<Offset> first, List<Offset> second) {
   var minimum = double.infinity;
   for (final polygon in [first, second]) {
+    if (polygon.length == 1) continue;
     for (var i = 0; i < polygon.length; ++i) {
       final edge = polygon[(i + 1) % polygon.length] - polygon[i];
       final normal = Offset(-edge.dy, edge.dx) / edge.distance;

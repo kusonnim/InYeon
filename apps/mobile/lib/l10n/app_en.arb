@@ -136,6 +136,7 @@
   "localSaved": "Saved on this device",
   "analysisPending": "Analysis pending",
   "analysisProcessing": "Analysis in progress",
+  "analysisOrganizing": "Organizing",
   "analysisCompleted": "Analyzed",
   "analysisPartial": "Partial analysis",
   "analysisFailed": "Analysis unavailable",
