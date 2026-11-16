@@ -58,7 +58,7 @@ void main() {
         tester.getTopLeft(summary).dy,
         lessThan(tester.getTopLeft(archive).dy),
       );
-      expect(find.textContaining('AI summary'), findsNothing);
+      expect(find.text('AI summary'), findsOneWidget);
       expect(find.text(item.recommendations.first.text), findsOneWidget);
       expect(second, findsNothing);
       expect(find.text('More recommendations'), findsNothing);
@@ -113,8 +113,11 @@ void main() {
         final cardColor = itdaTheme(
           dark ? Brightness.dark : Brightness.light,
         ).colorScheme.surfaceContainerLow;
-        final surface = find.byWidgetPredicate(
-          (widget) => widget is Material && widget.color == cardColor,
+        final surface = find.descendant(
+          of: find.byType(DetailCard),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Material && widget.color == cardColor,
+          ),
         );
         expect(surface, findsOneWidget);
         expect(tester.getRect(surface), layout.card);
@@ -325,7 +328,7 @@ void main() {
       expect(find.byType(ConnectingPebbles), findsNothing);
       expect(find.text('추천'), findsNothing);
       expect(find.text('원문의 일부를 확인했어요'), findsNothing);
-      expect(find.text('AI 요약'), findsNothing);
+      expect(find.text('AI 요약'), findsOneWidget);
       expect(tester.widget<Text>(find.text(summary)).maxLines, 6);
 
       final layout = _detailLayout(tester, toggle: '상세히 보기', archive: '보관하기');

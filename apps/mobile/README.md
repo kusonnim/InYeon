@@ -1,6 +1,6 @@
 # ITDA mobile — Developer A
 
-ITDA opens to a private tray of saved items. On Android, the tray and lists read
+ITDA opens to a private pebble tray and recently saved items. On Android, the tray and lists read
 originals on this device and a durable copy of the signed-in account's server
 catalog. The native outbox delivers assigned shares, and Android notifications
 present acknowledged items. A separate sample library uses synthetic fixtures.
@@ -40,12 +40,13 @@ synchronization recovery. Use a disposable installation for instrumentation.
 
 ## Tray, lists, and workflow
 
-The home tray shows the most recent eligible pending and completed items. Its
-capacity varies from four to ten pebbles with the available viewport. **All
-saved** opens the non-archived collection, including when the viewport is too
-small for a tray. **Archive** opens the archived collection. Both use plain
-rows and search the titles and source labels of loaded items. **Load more**
-reveals additional cached pages and extends the search.
+The bottom bar switches between **Home**, **Library**, and **Account**. The
+compact Home tray shows eligible pending and completed items, followed by up
+to three recent saves. **View all** selects the complete non-archived Library
+and the Home search entry focuses its search field. Library's archive icon and
+the Home drop target open the archived collection. The lists search the titles
+and source labels of loaded items. **Load more** reveals additional cached pages
+and extends the search.
 Repeated exact URLs can expand as a group in **All saved**. Each save keeps its
 own detail route and pebble identity. **Sample library** is available from
 **Account** and from an empty device-only tray.
@@ -55,9 +56,11 @@ session. A stable identity hash selects roughly 70% softly curved triangles and
 30% circles. Triangles use smooth side and corner arcs with a rounded six-point
 hull. Circles use a native circular fixture with the painted radius. Both forms
 share the pebble palette and available width. The home app bar carries **잇다**.
-A new visible share enters on its own. Tap a pebble for details or drag it inside
+A new visible share enters on its own. Tab switches preserve the tray and the
+Library's query. Tap a pebble for details or drag it inside
 the tray. Reduced motion prepares the resting arrangement before displaying it.
-An acknowledged receipt keeps the same pebble as its server details arrive.
+An acknowledged receipt keeps the same pebble and its recent-save sort position
+as its server details arrive.
 The scene sleeps at rest and rebuilds its geometry for viewport or account
 changes. See the [tray decision](../../docs/decisions/0008-android-rigid-pebble-tray.md).
 
@@ -84,7 +87,8 @@ Developer B.
 
 The detail card fills the viewport between the app bar and the fixed action
 area. It starts with the title, saved image, original writing or grounded
-summary, and the first recommendation when available. **Show details** reveals
+summary, and the first recommendation when available. A generated lead is
+labeled **AI summary**. **Show details** reveals
 the full text, original access, saved date, analysis coverage and provenance, and
 remaining recommendations within the same card bounds. **Show less** collapses
 that content. Only the card interior scrolls. The disclosure stays directly
@@ -444,4 +448,4 @@ its synthetic feed remains available.
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, durable content and sync persistence, private assets,
 and the future FCM delivery contract. See the
-[mobile verification results](../../docs/STATUS.md#phase-a73-android-checks).
+[mobile verification results](../../docs/STATUS.md#phase-a751-android-checks).

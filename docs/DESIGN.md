@@ -1,8 +1,8 @@
 # ITDA — Mobile Design System
 
-- **Status** Draft 0.4 for Phase A7.4 motion and visual review
+- **Status** Draft 0.5.2 for the Android pebble palette refinement
 - **Target** Android mobile app (Flutter + Kotlin)
-- **Baseline** Phase A7.3 curved triangular pebbles and full-height detail card
+- **Baseline** Phase A7.4 mixed pebble physics and the A7.3 full-height detail card
 
 > This document governs presentation and interaction, not authoritative product, API, or persistence semantics. If it conflicts with `docs/PRODUCT.md`, `contracts/openapi.yaml`, privacy rules, or established account boundaries, resolve the conflict explicitly rather than silently changing data behavior.
 
@@ -10,11 +10,11 @@
 
 ITDA is a quiet place for things people save and may want to revisit. Its character comes from rigid, matte circles and rounded triangles falling into an angular open tray. The reading, editing, and account screens use the same understated typography and surfaces.
 
-The interface should be **warm without being cute, tactile without being decorative, and simple without hiding useful functionality**.
+The interface pairs matte, tactile pebbles with a saturated blue Home header, prominent search, and a title-led information feed.
 
 ### Core principles
 
-1. **One memorable object, quiet surrounding UI.** The tray and pebbles carry the visual identity. Detail, list, editing, and account screens are understated.
+1. **A recognizable Home.** The solid header establishes blue as the brand color. The tray and pebbles give Home its tactile identity. Detail, list, editing, and account screens use quieter surfaces.
 2. **Use surfaces deliberately.** The detail screen groups the saved content and its actions in one large card. Other screens separate content through hierarchy, spacing, and alignment.
 3. **Prioritize, then disclose.** Show the most useful information first. Keep secondary material available without presenting every field at once.
 4. **Do not manufacture significance.** No invented summaries, actions, resources, preview images, source facts, dates, or task obligations.
@@ -27,38 +27,58 @@ The interface should be **warm without being cute, tactile without being decorat
 
 ### 2.1 Color palette
 
-Start from the existing Phase A7.1 warm neutrals; treat these as initial design tokens, not an immutable brand palette.
+Use solid blue across the Home status bar, wordmark, and search region. Keep the tray field softly tinted and the recent feed on the main surface. Repeat the accent in selected destinations, primary actions, links, focus, and drop feedback. The design tokens live in `apps/mobile/lib/widgets/itda_theme.dart`.
 
 | Role | Light | Dark | Usage |
 | --- | --- | --- | --- |
-| Canvas | `#F8F6F0` | `#232220` | Main screen and reading surfaces |
-| Detail card | `#F2EEE5` | `#2B2926` | Single content surface with subtle contrast against the canvas |
-| Primary ink | `#25231F` | `#F0EBE1` | Titles, body text, primary controls |
-| Secondary ink | `#605B52` | `#C5BEB2` | Metadata and subordinate labels |
-| Hairline | `#DDD6CA` | `#4E4942` | Optional, subtle separators only |
-| Accent | `#4A5745` | `#C9CFBD` | Functional emphasis, sparingly |
-| Soft accent | `#E1E7D8` | `#394338` | Selected/pressed states where necessary |
-| Feedback surface | `#EEE9DF` | `#3C3934` | Real interaction feedback, not decorative cards |
+| Canvas | `#F8FAFD` | `#111923` | Screen background |
+| Main surface | `#FFFFFF` | `#1B2635` | Recent feed, navigation, library, and detail card |
+| Secondary surface | `#F1F5FA` | `#253346` | Library search field and subdued surfaces |
+| Home header | `#0D70DF` | `#144B9E` | Status bar, wordmark, and search surround |
+| Header wordmark and system status icons | `#FFFFFF` | `#FFFFFF` | Light foreground on blue |
+| Home search surface | `#FFFFFF` | `#102440` | Full-width search entry within the header |
+| Tray field | `#E8F4FF` | `#142D49` | Background behind the pebbles and archive drop target |
+| Accent and tray stroke | `#0D70DF` | `#92C9FF` | Primary actions, focus, and solid selection indicator |
+| Accent surface | `#E8F4FF` | `#213E60` | Source icon backgrounds |
+| Accent ink on tinted surfaces | `#075BBA` | `#92C9FF` | Source icons, archive outline control text, and retry |
+| Bright blue detail | `#1598FF` | `#1598FF` | Small marker beside the recent section title |
+| Primary text | `#18263A` | `#F4F7FC` | Titles and body |
+| Pebble labels | `#18263A` | `#111923` | Ink on matte pebble fills |
+| Secondary text | `#5C6C83` | `#B3C0D0` | Metadata and inactive navigation |
+| Dividers and borders | `#E3E9F2` | `#39495C` | Row rules and surface edges |
+| Neutral control outline | `#75859B` | `#8193AA` | Resting input boundaries |
+| Positive status | `#2F8067` | `#88CCB4` | Completed analysis |
+| Error status | `#B84646` | `#FFA8A8` | Analysis or upload failure and input feedback |
 
-- Light pebbles retain the matte sage, clay, sand, dusty blue, lavender, and slate palette.
-- Dark pebbles use deep olive (`#494F35`), dark umber (`#574235`), warm stone (`#62594C`), muted moss (`#465743`), desaturated brown (`#59483D`), and dusty slate (`#455360`). The identity hash keeps the color assignment stable.
+| Matte pebble | Light | Dark |
+| --- | --- | --- |
+| Mist Blue | `#BFD7F2` | `#6E8FB3` |
+| Soft Sky | `#D6E6F8` | `#7C93B3` |
+| Sage Mint | `#BFD8C8` | `#738F82` |
+| Sand Beige | `#DCC8B3` | `#9A836E` |
+| Dusty Lavender | `#CECBE3` | `#8883A3` |
+| Soft Olive | `#C8D3B2` | `#7F8B66` |
+
+- The identity hash keeps the same palette positions in both themes. Soft Sky occupies the former Slate position.
+- Dark ink on the matte fills gives minimum pebble text contrast ratios of 9.41:1 in light mode and 4.87:1 in dark mode, rounded to two decimals. Focus uses the theme's foreground color so the outline remains visible against the tray.
+- White wordmark text has 4.77:1 contrast on the light header and 8.30:1 on the dark header. Use the deeper blue ink for text on the light tray field.
 - Do not make the rest of the app a patchwork of pastel panels.
 - Avoid gradients, gloss, neon, glassmorphism, glow, ornamental shadows, and decorative illustrations.
 - Functional error, warning, and success indicators may depart from the muted palette as needed for accessibility.
-- Meet WCAG contrast targets for normal text where feasible (at least 4.5:1); never rely on color alone to convey state.
+- Pair status colors with text. Keep normal text contrast at 4.5:1 or above and use a stronger outline for interactive boundaries.
 
 ### 2.2 Typography
 
-**Provisional typeface:** SUIT. Keep it replaceable if real-device review shows that it does not fit.
+Use SUIT Regular and SemiBold.
 
-| Role | Initial size | Weight | Guidance |
+| Role | Size | Weight | Guidance |
 | --- | --- | --- | --- |
-| Screen heading | 22–26 sp | SemiBold | One strong heading per screen at most |
-| Content title | 20–24 sp | SemiBold | Readable across multiple lines |
-| Section heading | 15–16 sp | SemiBold | Short, functional labels |
-| Body | 15–16 sp | Regular | Approximately 1.45–1.6 line height |
-| List title | 15–16 sp | Medium/SemiBold | Up to two lines in compact rows |
-| Secondary metadata | 12–14 sp | Regular | Clear contrast and not overloaded |
+| Screen heading | 24–26 sp | SemiBold | The Home wordmark uses 30 sp |
+| Detail title | 26 sp | SemiBold | Readable across multiple lines |
+| Section heading | 18 sp | SemiBold | Short, functional labels |
+| Body | 14–16 sp | Regular | 1.5 line height |
+| List title | 16 sp | SemiBold | Use up to two lines at standard scaling and allow full wrapping at larger text sizes |
+| Secondary metadata | 13 sp | Regular | Source and relevant status |
 | Pebble label | Responsive | Medium/SemiBold | Short and upright even if the pebble rotates |
 
 - Avoid more than two strongly distinct type weights in a small region.
@@ -78,14 +98,18 @@ Start from the existing Phase A7.1 warm neutrals; treat these as initial design 
 
 ## 3. Information Architecture and Progressive Disclosure
 
-The app has four main experiences:
+The bottom bar has three destinations. **Home / 홈** shows the tray and recent
+saves. **Library / 보관함** shows the complete All saved collection. **Account /
+내 정보** contains identity, language, notification settings, samples, and licenses.
+Each destination retains its state while the user switches tabs. Android Back
+returns from a secondary destination to Home. A solid blue selection indicator
+and contrasting icon mark the current destination. Inactive icons and labels
+use neutral secondary ink on the main surface.
 
-1. **Tray (home):** tactile selection and lightweight organization of unarchived saves.
-2. **All saved:** accessible, searchable list of unarchived content, including items beyond the tray's physics capacity.
-3. **Archive:** plain, searchable list of archived content.
-4. **Detail:** understand and act on a saved item, then edit, open its source, or archive it.
-
-Account and language controls live in Account settings. The signed-out home opens the dedicated Sign in screen. That screen offers an Account settings entry for language and other settings.
+**Archived items / 보관된 항목** open from the Library archive action or the
+Home drop target. Detail, archive, editing, and sign-in open above the tab bar
+as dedicated routes. The signed-out Home and Account can each open sign-in.
+The Account settings shortcut in sign-in selects the Account destination.
 
 ### Screen information budget
 
@@ -103,7 +127,7 @@ Use three regions in order. The app bar sits above one full-height content card,
 The collapsed card emphasizes these elements in order.
 
 1. **Title**, with direct editing for authorized items.
-2. **Primary content**, using a real image, original writing, or a grounded summary. Use the original excerpt when a link has no summary and an excerpt is available. A pending, partial, or failed analysis has a concise state label.
+2. **Primary content**, using a real image, original writing, or a grounded summary. Label a generated lead as **AI summary / AI 요약**. Use the original excerpt when a link has no summary and an excerpt is available. A pending, partial, or failed analysis has a concise state label.
 3. **One useful recommendation** when available, in the existing order.
 
 Place **Show details / 상세히 보기** directly above **Archive / 보관하기** in the fixed action area. Pin Archive above the Android bottom inset and keep the same position for the restore action on archived items. Use page margins and safe-area padding.
@@ -114,9 +138,9 @@ The disclosure changes to **Show less / 접기** and reveals the following infor
 - The original link or local PDF action and source-copy controls.
 - Source coverage, limitations, and plain-language provenance for generated summaries.
 - Additional recommendations under **More recommendations / 추천 더 보기**.
-- User notes and applicable notification or environment information.
+- User notes and applicable notification information.
 
-Present the primary summary immediately after the title. Its provenance belongs in the expanded coverage section. Expand long excerpts in the same position and avoid repeating primary text or previews in the secondary sections.
+Present the primary summary after the title and keep its coverage and provenance in the expanded section. Mock, sample, and staging context labels are visible from the first detail view. Expand long excerpts in the same position and avoid repeating primary text or previews in the secondary sections.
 
 Keep the original accessible during analysis or failure. Omit the recommendation area when the list is empty.
 
@@ -133,16 +157,23 @@ Do not use generated stock imagery as a substitute for unavailable originals. Do
 
 ## 4. Home tray and wordmark
 
-Set **잇다** in SUIT SemiBold in the home app bar. Keep the wordmark on one
-line beside the existing library and account controls. Its text can scale down
-to fit the available toolbar space on narrow layouts with large system text.
+Set **잇다** in white SUIT SemiBold on the full-width blue app bar. Extend the
+same surface behind the search entry beneath it. In mock and staging modes,
+place the environment label at the far side of the wordmark. Keep the status
+bar blue and the wordmark visible as the body scrolls.
+
+The search entry is a button styled as a field. It opens Library and focuses
+the editable search field for loaded items. Keep Home ordered as header and
+search, tray, archive drop target, and **Recently saved / 최근 저장**. Search
+scrolls with the tray and rows so the drop target and feed remain reachable in
+short viewports. Show any offline and retry state above the tray.
 
 ### Tray
 
 - Three straight sides only: left, bottom, and right; fully open at the top.
-- Angular U silhouette, simple thin stroke, no rounded card or 3D box treatment.
-- The tray is the visual focus; surrounding navigation is minimal.
-- A separate, reachable “보관함” drop destination appears beneath the tray.
+- Draw the angular U silhouette with a 2 dp blue stroke over the tinted tray field.
+- Tray height follows 28% of the window height, bounded to 232–252 dp. Viewports narrower than 360 dp keep at least 244 dp for legible pebble labels. The existing packing rules determine pebble size and capacity.
+- A separate **보관된 항목** drop target sits beneath the tray. Its outlined surface fills with blue when an eligible pebble reaches it. A drag that begins on a pebble keeps control of that pebble inside the scrollable Home.
 - Keep an obvious path to **all saved items**, since the physics view deliberately caps the number of visible objects.
 - Show an explicit, discoverable sign-in affordance in mock/live modes when signed out; an isolated account icon must not make sign-in effectively invisible.
 
@@ -163,18 +194,28 @@ content identity. Small trays reflect the mix of the items they contain.
 
 ### Physics and touch
 
-Preserve the Forge2D interaction, tray dimensions and position, capacity, and archive destination.
+Use the existing Forge2D simulation and archive destination with the compact viewport.
 
 - On the first home entry of an app session, existing items fall from above in a short cascade, collide, roll, and settle in the U-tray.
 - Modest damping and low restitution soften collisions as the scene settles.
 - Stop stepping/rendering when bodies sleep.
-- Returning from detail does not replay the cascade or randomly reposition settled objects.
+- Returning from detail or another destination keeps resting positions. Pause tray ticks on other destinations.
 - Newly shared items enter individually.
 - Dragging moves a rigid object, respecting collision behavior.
 - Tap opens the existing detail view.
 - Reduced-motion users get a stable, settled arrangement instead of a cascade.
 - Maintain physics bounds and performance limits on small and low-powered devices.
 - The physics representation is not the only way to find or organize an item.
+
+### Recent saves
+
+Show up to three recent visible, unarchived saves from the same account-scoped
+library. For a local receipt, use its original receipt time and stable identity
+before and after acknowledgment. For a catalog-only save, use its creation time
+and stable ID. Use a small blue marker by the section title and blue source
+icons on flat, divided rows. Keep titles prominent and put source and actual
+status in the secondary line. A row opens the existing detail.
+**View all / 전체 보기** selects the full Library.
 
 ## 5. Archive and Completion Behavior
 
@@ -197,10 +238,11 @@ Preserve the Forge2D interaction, tray dimensions and position, capacity, and ar
 - Plain rows with generous touch targets; avoid repeated card backgrounds.
 - Leading: genuine thumbnail if safely available; otherwise a simple source-type icon.
 - Main text: title (prefer at most two lines).
-- Secondary text: source/domain and, when useful, date; do not show every status simultaneously.
-- Use quiet row spacing and optional fine dividers.
+- Secondary text includes source and the actual upload or analysis status. Expanded duplicate saves can also show their saved date and time.
+- Use quiet row spacing and fine dividers.
 - Repeated identical URLs can be grouped visually, but each independent saved record remains accessible with its own ID and state.
-- Keep search and filtering discoverable; avoid crowding the first viewport with filters before they are needed.
+- Pin the search field above the results. Search matches the titles and source labels of loaded items. Pagination expands the set being searched.
+- Preserve the query across tabs and detail navigation. Opening a saved item's detail dismisses the search keyboard and keeps it closed when the user returns to the list.
 - Archive list is straightforward and does not use pebble physics.
 - Support dynamic type, scrolling, account scope changes, and large data sets.
 
@@ -271,12 +313,14 @@ Preferred Korean labels (illustrative):
 
 | Concept | Label |
 | --- | --- |
-| Archive | 보관함 |
+| Library (all saved) | 보관함 |
+| Archived items | 보관된 항목 |
+| Recently saved | 최근 저장 |
 | Archive action | 보관하기 |
 | Restore | 다시 꺼내기 |
 | Original | 원본 |
 | Open original | 원본 열기 |
-| Summary | 요약 |
+| Generated summary | AI 요약 |
 | Recommendations | 추천 |
 | Notes | 내 메모 |
 | Show details | 상세히 보기 |
@@ -293,6 +337,7 @@ Preferred Korean labels (illustrative):
 
 Use external guides as *selective inspiration*, not pasted requirements:
 
+- Reference for discoverable search, clear section hierarchy, and title-led opportunity rows. [Linkareer recruitment home](https://linkareer.com/recruit-home)
 - [Content First](https://github.com/TrustOtc/awesome-mobile-design-md/blob/main/design-md/content-first.md): primary reference for hierarchy, uncluttered reading, minimal cards, and calm lists.
 - [Nova Mobile](https://github.com/TrustOtc/awesome-mobile-design-md/blob/main/design-md/nova-mobile-design-md.md): reference for touch targets, practical mobile navigation, spacing rhythm, and adaptive behavior.
 - [Playful Color](https://github.com/TrustOtc/awesome-mobile-design-md/blob/main/design-md/playful-color.md): reference only for friendly tactile forms and measured color in the pebble scene; do not import its colorful card-heavy controls or continuous spring animations.
@@ -304,14 +349,12 @@ Priority order: **ITDA product rules → this DESIGN.md → native Android usabi
 
 This design revision must not rewrite durable sharing, upload/outbox, authenticated sync, notification dismissal/restoration, account isolation, AI processing contracts, or private asset permissions.
 
-Recommended iteration:
-
-1. Create and review this design system first; do not auto-merge it into unrelated work.
-2. Change the pebble silhouettes and verify visual-to-physics collision parity.
-3. Implement one-step archive behavior against the real existing API contract and mock; keep rollback/conflict behavior.
-4. Refine the archive/list and detail hierarchy; reduce unnecessary card wrappers.
-5. Apply consistent typography, spacing, and settings affordances.
-6. Verify on emulator, then on a real Android phone before declaring visual acceptance.
+Review matched A7.5 and A7.5.1 Home captures with the same Android emulator,
+light theme, display settings, and mock catalog. Check the blue status bar
+and header, search focus, and the tray and feed at 320 dp with 200% text in both
+themes. Exercise tab and scroll state, pebble drag and archive restoration,
+and offline access to saved copies. Record the Flutter and Android checks and
+device evidence in [STATUS](STATUS.md).
 
 Capture the full collapsed and expanded detail layout. Verify fixed card bounds and actions while scrolling, short and long content, light and dark themes, both app languages, narrow and landscape viewports, large text, and keyboard and system insets. Review the image detail, personal note, dedicated sign-in, and dark tray.
 
@@ -323,6 +366,6 @@ Capture the full collapsed and expanded detail layout. Verify fixed card bounds 
 - Do image, link, and personal-note details emphasize the right content?
 - Can an uncompleted item go straight to archive with one intentional action?
 - Does every previously working action still work, including when the network is offline?
-- Is the interface warm and human without becoming childish or generically “AI-styled”?
+- Does the full-width blue header make Home recognizable and put search in view on first entry?
 
 **This is a reversible visual baseline, not final design approval.** Evaluate real screenshots and device behavior, then revise the document based on observed problems rather than defending an initial mockup.

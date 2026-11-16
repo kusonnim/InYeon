@@ -21,6 +21,7 @@ class _DetailCardState extends State<DetailCard> {
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: widget.children(_expanded),
@@ -39,8 +40,11 @@ class _DetailCardState extends State<DetailCard> {
           children: [
             Expanded(
               child: Material(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(ItdaSpace.large),
+                color: colors.surfaceContainerLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(ItdaSpace.medium),
+                  side: BorderSide(color: colors.outlineVariant),
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: SingleChildScrollView(
                   primary: false,

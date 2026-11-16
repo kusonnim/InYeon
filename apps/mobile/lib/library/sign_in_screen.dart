@@ -77,7 +77,10 @@ class _SignInScreenState extends State<SignInScreen> {
       _ => copy.accountProblem,
     };
     return Scaffold(
-      appBar: AppBar(title: Text(copy.signIn)),
+      appBar: AppBar(
+        toolbarHeight: itdaToolbarHeight(context),
+        title: Text(copy.signIn),
+      ),
       body: PageList(
         children: [
           if (uploadEnvironmentLabel(

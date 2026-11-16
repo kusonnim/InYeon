@@ -28,6 +28,7 @@ class AccountScreen extends StatefulWidget {
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
+
 class _AccountScreenState extends State<AccountScreen> {
   bool _busy = false;
   bool _changingLanguage = false;
@@ -35,7 +36,9 @@ class _AccountScreenState extends State<AccountScreen> {
 
   void _openSignIn() {
     Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SignInScreen(controller: widget.controller)),
+      MaterialPageRoute(
+        builder: (_) => SignInScreen(controller: widget.controller),
+      ),
     );
   }
 
@@ -67,7 +70,8 @@ class _AccountScreenState extends State<AccountScreen> {
     } on PlatformException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(copy.notificationSettingsProblem)));
+          SnackBar(content: Text(copy.notificationSettingsProblem)),
+        );
       }
     }
   }
@@ -80,8 +84,9 @@ class _AccountScreenState extends State<AccountScreen> {
     } on PlatformException {
       if (mounted) {
         final copy = AppLocalizations.of(context);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(copy.languageChangeProblem)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(copy.languageChangeProblem)));
       }
     } finally {
       if (mounted) setState(() => _changingLanguage = false);
@@ -92,7 +97,11 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(copy.account)),
+      appBar: AppBar(
+        titleSpacing: ItdaSpace.page,
+        toolbarHeight: itdaToolbarHeight(context),
+        title: Text(copy.accountDestination),
+      ),
       body: ListenableBuilder(
         listenable: widget.controller,
         builder: (context, _) {
@@ -195,7 +204,10 @@ class _AccountScreenState extends State<AccountScreen> {
             child: Text(copy.signOut),
           ),
         ] else
-          TextButton(onPressed: _busy ? null : _openSignIn, child: Text(copy.signIn)),
+          TextButton(
+            onPressed: _busy ? null : _openSignIn,
+            child: Text(copy.signIn),
+          ),
         if (_busy) const LinearProgressIndicator(),
         if (_error != null)
           Padding(

@@ -117,8 +117,8 @@ class _ConnectingPebblesState extends State<ConnectingPebbles>
               child: CustomPaint(
                 painter: _ConnectionPainter(
                   _reduceMotion ? null : _phase,
-                  PebbleDesign.matteColor(theme.brightness, 0),
-                  PebbleDesign.matteColor(theme.brightness, 2),
+                  ItdaPalette.pebble(theme.brightness, 0),
+                  ItdaPalette.pebble(theme.brightness, 2),
                   theme.colorScheme.outline,
                 ),
               ),

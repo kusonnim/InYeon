@@ -14,6 +14,7 @@ import 'package:itda_mobile/native/language_preference.dart';
 import 'package:itda_mobile/native/notification_bridge.dart';
 import 'package:itda_mobile/native/share_bridge.dart';
 import 'package:itda_mobile/widgets/connecting_pebbles.dart';
+import 'package:itda_mobile/widgets/saved_content_row.dart';
 
 void main() {
   late Map<String, dynamic> fixture;
@@ -32,6 +33,7 @@ void main() {
   ContentItem example({
     String? title,
     String? owner,
+    DateTime? createdAt,
     bool dismissed = false,
   }) {
     final raw = (fixture['items'] as List).first as Map<String, dynamic>;
@@ -39,6 +41,10 @@ void main() {
       ...raw,
       if (title != null) 'title': title,
       if (owner != null) 'user_id': owner,
+      if (createdAt != null) ...{
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': createdAt.toIso8601String(),
+      },
       if (dismissed)
         'notification': {
           ...raw['notification'] as Map<String, dynamic>,
@@ -56,7 +62,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('아직 저장한 콘텐츠가 없어요'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('계정'));
+    await tester.tap(_destination('내 정보'));
     await tester.pumpAndSettle();
     await _scrollTo(tester, '앱 언어');
     await tester.tap(find.byType(DropdownButton<Locale>));
@@ -74,7 +80,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Nothing saved yet'), findsOneWidget);
-    await tester.tap(find.byTooltip('Account'));
+    await tester.tap(_destination('Account'));
     await tester.pumpAndSettle();
     await _scrollTo(tester, 'App language');
     await tester.tap(find.byType(DropdownButton<Locale>));
@@ -113,13 +119,11 @@ void main() {
       for (final id in ['a', 'b', 'c']) {
         expect(find.byKey(ValueKey('pebble:local:$id')), findsOneWidget);
       }
-      await tester.tap(find.text('All saved'));
+      await tester.tap(_destination('Library'));
       await tester.pumpAndSettle();
       expect(find.text('2 saves of this link'), findsOneWidget);
       expect(find.text('Spring workshop'), findsOneWidget);
       expect(find.byKey(const ValueKey('local:a')), findsNothing);
-      await tester.tap(find.byTooltip('Search saved items'));
-      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'repair cafe');
       await tester.pumpAndSettle();
       expect(find.text('Spring workshop'), findsNothing);
@@ -157,9 +161,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text(first.title!));
       await tester.pumpAndSettle();
-      expect(find.text('Samples'), findsNothing);
+      expect(find.text('Samples'), findsOneWidget);
       expect(find.text(first.analysis!.summary!), findsOneWidget);
-      expect(find.text('AI summary'), findsNothing);
+      expect(find.text('AI summary'), findsOneWidget);
       await _expandDetails(tester);
       expect(find.text('Samples'), findsOneWidget);
       await _scrollTo(tester, 'Original source');
@@ -239,7 +243,7 @@ void main() {
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(find.text('잇다'), findsOneWidget);
-    expect(find.byTooltip('Account'), findsOneWidget);
+    expect(_destination('Account'), findsOneWidget);
   });
 
   testWidgets(
@@ -267,7 +271,8 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
 
-    expect(find.text('Link from example.org'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'Link from example.org'),
+        findsOneWidget);
     await _tapPebble(tester, 'local:new-item');
     await tester.pumpAndSettle();
     expect(find.text('Waiting to sync'), findsOneWidget);
@@ -360,7 +365,7 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('잇다'), findsOneWidget);
-    expect(find.text('Revised title'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'Revised title'), findsOneWidget);
     expect(find.text('Saved title'), findsNothing);
   });
 
@@ -426,17 +431,16 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(ValueKey('pebble:server:${item.id}')), findsNothing);
-      expect(find.text(item.title!), findsOneWidget);
+      final recent = find.widgetWithText(SavedContentRow, item.title!);
+      expect(recent, findsOneWidget);
       expect(find.text('Local preview'), findsNothing);
       expect(find.textContaining('AI summary'), findsNothing);
       expect(
         find.textContaining(item.recommendations.first.text),
         findsNothing,
       );
-      await tester.tap(find.text('All saved'));
-      await tester.pumpAndSettle();
       expect(find.text('Synced'), findsNothing);
-      await tester.tap(find.text(item.title!));
+      await tester.tap(recent);
       await tester.pumpAndSettle();
       expect(find.text('Content details'), findsOneWidget);
       await _expandDetails(tester);
@@ -469,7 +473,7 @@ void main() {
         catalogBridge: catalog));
     await tester.pumpAndSettle();
     expect(find.text('Connection unavailable'), findsOneWidget);
-    expect(find.text('A saved note'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'A saved note'), findsOneWidget);
     connected = true;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
@@ -479,14 +483,22 @@ void main() {
     expect(find.byKey(ValueKey('pebble:server:${item.id}')), findsOneWidget);
   });
 
-  testWidgets('acknowledging a local receipt keeps the same stone and pose',
+  testWidgets('acknowledgment preserves the pebble pose and recent save order',
       (tester) async {
-    final item = example(title: 'Confirmed collection item');
+    final item = example(
+      title: 'Confirmed collection item',
+      createdAt: DateTime.utc(2026, 11, 12),
+    );
+    final newerShare = _local(
+      'newer',
+      'Newer notebook',
+      receivedAt: DateTime.utc(2026, 11, 11),
+    );
     var acknowledged = false;
     shares
       ..mode = UploadMode.mock
       ..account = _account(item.userId)
-      ..items = [_local('receipt', 'Shared notebook')];
+      ..items = [newerShare, _local('older', 'Shared notebook')];
     final catalog = _CatalogAdapter((_, __) async => CatalogSnapshot(
           items: acknowledged ? [item] : [],
           phase: CatalogPhase.current,
@@ -499,18 +511,85 @@ void main() {
       notificationBridge: _DetailsAdapter(item),
     ));
     await tester.pumpAndSettle();
-    final stone = find.byKey(const ValueKey('pebble:local:receipt'));
+    final stone = find.byKey(const ValueKey('pebble:local:older'));
+    final recent = find.byKey(const ValueKey(('recent', 'local:older')));
     final position = tester.getCenter(stone);
+    final rowPosition = tester.getTopLeft(recent);
+    expect(rowPosition.dy,
+        greaterThan(tester.getTopLeft(find.byKey(
+          const ValueKey(('recent', 'local:newer')),
+        )).dy));
     acknowledged = true;
     shares.items = [
-      _local('receipt', 'Shared notebook',
+      newerShare,
+      _local('older', 'Shared notebook',
           state: LocalUploadState.synchronized, serverId: item.id)
     ];
     shares.events.add(null);
     await tester.pumpAndSettle();
     expect(tester.getCenter(stone), position);
-    expect(find.text(item.title!), findsOneWidget);
+    expect(tester.getTopLeft(recent), rowPosition);
+    expect(find.descendant(of: recent, matching: find.text(item.title!)),
+        findsOneWidget);
+    expect(find.textContaining('Analyzed', findRichText: true), findsOneWidget);
     expect(find.byKey(ValueKey('pebble:server:${item.id}')), findsNothing);
+  });
+
+  testWidgets('tabs keep the settled tray and the loaded-items search query', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    shares.items = [
+      _local('1', 'First workshop'),
+      _local('2', 'Second workshop'),
+      _local('3', 'Third workshop'),
+      _local('4', 'Fourth notebook'),
+    ];
+    await tester.pumpWidget(ItdaApp(
+      initialLocale: const Locale('en'),
+      api: api,
+      shareBridge: shares,
+    ));
+    await tester.pumpAndSettle();
+    final stone = find.byKey(const ValueKey('pebble:local:4'));
+    final settled = tester.getCenter(stone);
+    expect(find.byType(SavedContentRow), findsNWidgets(3));
+    expect(find.widgetWithText(SavedContentRow, 'First workshop'), findsNothing);
+    final homeSearch = find.widgetWithText(TextButton, 'Search saved items');
+    expect(tester.getSize(homeSearch).width, greaterThan(300));
+    expect(tester.getSize(homeSearch).height, greaterThanOrEqualTo(48));
+    await tester.tap(homeSearch);
+    await tester.pumpAndSettle();
+    final search = find.byType(TextField);
+    expect(tester.widget<TextField>(search).focusNode?.hasFocus, isTrue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 290);
+    await tester.enterText(search, 'first workshop');
+    await tester.pumpAndSettle();
+    expect(find.text('Search covers loaded items.'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'First workshop'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'Fourth notebook'), findsNothing);
+
+    await tester.tap(find.widgetWithText(SavedContentRow, 'First workshop'));
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(shares.opened, ['1']);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(search).focusNode?.hasFocus, isFalse);
+    await tester.tap(_destination('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(_destination('Home'));
+    await tester.pump();
+    expect(tester.getCenter(stone), settled);
+    await tester.pumpAndSettle();
+    await tester.tap(_destination('Library'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(search).controller?.text, 'first workshop');
+    expect(tester.widget<TextField>(search).focusNode?.hasFocus, isFalse);
   });
 
   testWidgets('a queued local share keeps its upload status and opens without motion', (
@@ -614,11 +693,19 @@ void main() {
         initialLocale: const Locale('en'), api: api, shareBridge: shares));
     await tester.pumpAndSettle();
     expect(find.text('Workshop notebook 00'), findsNothing);
-    await tester.tap(find.text('All saved'));
+    final viewAll = find.text('View all');
+    await tester.ensureVisible(viewAll);
+    await tester.pumpAndSettle();
+    await tester.tap(viewAll.hitTestable());
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Workshop notebook 00'), 340,
+        scrollable: find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ),
         maxScrolls: 30);
-    await tester.tap(find.text('Workshop notebook 00'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Workshop notebook 00').hitTestable());
     await tester.pumpAndSettle();
     expect(shares.opened, ['notebook-00']);
     expect(find.text('Content details'), findsOneWidget);
@@ -810,14 +897,16 @@ void main() {
         shareBridge: shares,
         catalogBridge: catalog));
     await tester.pumpAndSettle();
-    expect(find.text('Account A item'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'Account A item'), findsOneWidget);
     expect(find.text('Account A archive'), findsNothing);
-    await tester.tap(find.text('Archive'));
+    await tester.tap(_destination('Library'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Archive'));
     await tester.pumpAndSettle();
     expect(find.text('Account A archive'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Account'));
+    await tester.tap(_destination('Account'));
     await tester.pumpAndSettle();
     expect(find.text('Signed in'), findsOneWidget);
     await tester.tap(find.text('Sign out'));
@@ -833,10 +922,10 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('b@example.test'), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(_destination('Home'));
     await tester.pumpAndSettle();
     expect(find.text('Account A item'), findsNothing);
-    expect(find.text('Account B item'), findsOneWidget);
+    expect(find.widgetWithText(SavedContentRow, 'Account B item'), findsOneWidget);
     await tester.tap(find.text('Archive'));
     await tester.pumpAndSettle();
     expect(find.text('Nothing archived yet'), findsOneWidget);
@@ -953,6 +1042,11 @@ void main() {
       await tester.pumpAndSettle();
       final library = find.text('잇다');
       expect(Theme.of(tester.element(library)).brightness, Brightness.light);
+      final title = find.descendant(
+        of: find.byType(SavedContentRow),
+        matching: find.text('A long title for a saved item with wrapping'),
+      );
+      expect(tester.getSize(title).height, greaterThan(96));
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
 
@@ -960,7 +1054,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(Theme.of(tester.element(library)).brightness, Brightness.dark);
       expect(tester.takeException(), isNull);
-      await tester.tap(find.byTooltip('Account'));
+      await tester.tap(find.widgetWithText(TextButton, 'Search saved items'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+        isTrue,
+      );
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      tester.view.physicalSize = const Size(640, 320);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 150);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.enterText(find.byType(TextField), 'long title');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      tester.view.resetViewInsets();
+      tester.view.physicalSize = const Size(320, 640);
+      await tester.pumpAndSettle();
+      await tester.tap(_destination('Account'));
       await tester.pumpAndSettle();
       expect(find.text('On this device'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -969,12 +1080,18 @@ void main() {
     }
   });
 }
+
+Finder _destination(String label) =>
+    find.widgetWithText(NavigationDestination, label);
+
 Future<void> _tapPebble(WidgetTester tester, String id) =>
     tester.tapAt(tester.getCenter(find.byKey(ValueKey('pebble:$id'))));
 
 Future<void> _dropOnArchive(WidgetTester tester, Finder stone) async {
   final drag = await tester.startGesture(tester.getCenter(stone));
-  await drag.moveBy(const Offset(0, -55));
+  for (var i = 0; i < 6; i++) {
+    await drag.moveBy(const Offset(0, 4));
+  }
   await tester.pump(const Duration(milliseconds: 20));
   await drag.moveTo(tester.getCenter(find.text('Archive')));
   await tester.pump(const Duration(milliseconds: 20));
@@ -1002,12 +1119,13 @@ LocalShare _local(
   bool canAssign = false,
   String? subject,
   String? linkText,
+  DateTime? receivedAt,
 }) =>
     LocalShare(
       localId: id,
       inputType: type,
       label: text,
-      receivedAt: DateTime.utc(2026, 11, 10),
+      receivedAt: receivedAt ?? DateTime.utc(2026, 11, 10),
       uploadState: state,
       serverContentId: serverId,
       canAssign: canAssign,
