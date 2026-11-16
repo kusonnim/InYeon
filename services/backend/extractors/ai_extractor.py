@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 from typing import List, Literal
 from pydantic import BaseModel, Field
@@ -44,11 +44,11 @@ SYSTEM_PROMPT = """ You are the core AI analysis engine for 'ITDA', a personaliz
 [STRICT GROUNDING &amp; BEHAVIOR RULES]
 1. Zero Hallucination: Synthesize ONLY facts explicitly stated in the source text. Never invent unmentioned dates, fees, eligibility criteria, or URLs.
 2. Content Type Distinction (Promotional vs General):
-    - Promotional / Commercial Content (광고성/이벤트 정보):
+    - Promotional / Commercial Content (愿묎퀬???대깽???뺣낫):
     * Detect commercial marketing, referral links, affiliate ads, sponsored reviews, or clickbait promotional events.
     * DO NOT generate artificial 'action' items urging the user to buy products, register for clickbait events, or sign up for commercial services. Set 'action' to an empty array ([]).
     * Strip away marketing hype and extract only objective facts (e.g., event period, discount conditions) in the summary and 'info' section.
-    - General Informative Content (일반 정보):
+    - General Informative Content (?쇰컲 ?뺣낫):
     * University notices, academic posts, IT/tech guides, news, and genuine reviews.
     * Extract key takeaways into 'summary', background knowledge into 'info', and official actionable steps (e.g., submit form, check eligibility) into 'action'.
 3. Recommendation Categorization:
@@ -57,13 +57,15 @@ SYSTEM_PROMPT = """ You are the core AI analysis engine for 'ITDA', a personaliz
     - material: Directly referenced links, forms, or official portals.
 4. Language Constraint: All generated output fields ('summary', 'title', 'why') MUST be written in natural, fluent Korean.
 5. Edge Case Handling:
-    - Insufficient/Access Restricted Content (e.g., "ㅋㅋ", "대박", login walls, deleted posts): Set status to "INSUFFICIENT_CONTENT", summary to "분석할 내용이 부족하거나 접근 권한이 없습니다.", and return empty arrays for all recommendation categories.
+    - Insufficient/Access Restricted Content (e.g., "?뗣뀑", "?諛?, login walls, deleted posts): Set status to "INSUFFICIENT_CONTENT", summary to "遺꾩꽍???댁슜??遺議깊븯嫄곕굹 ?묎렐 沅뚰븳???놁뒿?덈떎.", and return empty arrays for all recommendation categories.
     - Casual / Emotional Posts &amp; Pure Commercial Spam: Set action to an empty array ([]). """
 
 # Initialize Async Client
 client = AsyncOpenAI(
     api_key=api_key,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    timeout=180.0,
+    max_retries=0,
 )
 
 async def analyze_content_async(content_text: str, user_profile: dict = None) -> ExtractionResult:
@@ -71,7 +73,7 @@ async def analyze_content_async(content_text: str, user_profile: dict = None) ->
     if not content_text or len(content_text.strip()) < 5:
         return ExtractionResult(
             status="INSUFFICIENT_CONTENT",
-            summary="분석할 내용이 부족합니다.",
+            summary="遺꾩꽍???댁슜??遺議깊빀?덈떎.",
             recommendations=Recommendations()
         )
 
@@ -101,6 +103,6 @@ async def analyze_content_async(content_text: str, user_profile: dict = None) ->
 
         return ExtractionResult(
             status="ERROR",
-            summary="AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+            summary="AI 遺꾩꽍 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??",
             recommendations=Recommendations()
     )
