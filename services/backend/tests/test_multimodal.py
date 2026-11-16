@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 from pydantic import SecretStr
 
+from app.config import Settings
 from app.errors import ApiError
 from app.storage import AssetObject, _verify_bytes
 from extractors import ai_extractor
@@ -51,11 +52,18 @@ def test_large_image_copy_is_bounded_and_valid():
 def test_models_receive_untrusted_text_and_actual_image_bytes(monkeypatch):
     posted = []
     png = image_bytes("PNG")
+    model = "gemini-3.6-flash"
+
+    monkeypatch.delenv("ITDA_LLM_MODEL", raising=False)
+    assert Settings(_env_file=None).llm_model == "gemini-3.8-flash"
+    monkeypatch.setenv("ITDA_LLM_MODEL", model)
+    monkeypatch.setenv("ITDA_LLM_API_KEY", "test-value")
+    settings = Settings(_env_file=None)
 
     def respond(request):
         posted.append(json.loads(request.content))
         return httpx.Response(200, json={
-            "id": "given", "object": "chat.completion", "created": 1, "model": ai_extractor.MODEL,
+            "id": "given", "object": "chat.completion", "created": 1, "model": model,
             "choices": [{"index": 0, "finish_reason": "stop", "message": {
                 "role": "assistant",
                 "content": json.dumps({
@@ -65,7 +73,7 @@ def test_models_receive_untrusted_text_and_actual_image_bytes(monkeypatch):
             }}],
         })
 
-    monkeypatch.setattr(ai_extractor, "get_settings", lambda: SimpleNamespace(llm_api_key=SecretStr("test-value")))
+    monkeypatch.setattr(ai_extractor, "get_settings", lambda: settings)
     monkeypatch.setattr(
         ai_extractor, "DefaultAsyncHttpxClient",
         lambda **kwargs: httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs),
@@ -76,7 +84,7 @@ def test_models_receive_untrusted_text_and_actual_image_bytes(monkeypatch):
     assert text.status == vision.status == "SUCCESS"
     assert json.loads(posted[0]["messages"][1]["content"]) == {"source_text": source}
     for request in posted:
-        assert request["model"] == ai_extractor.MODEL
+        assert request["model"] == model
         assert request["messages"][0]["role"] == "system"
         assert "untrusted data" in request["messages"][0]["content"]
         assert request["response_format"]["type"] == "json_schema"

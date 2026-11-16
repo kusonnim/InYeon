@@ -63,6 +63,7 @@ class Settings(BaseSettings):
 
     # Other services
     llm_api_key: SecretStr = SecretStr("")
+    llm_model: str = "gemini-3.8-flash"
     fcm_credentials_path: str = ""
 
     @model_validator(mode="after")

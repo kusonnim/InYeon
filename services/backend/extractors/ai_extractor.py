@@ -12,7 +12,6 @@ from app.config import get_settings
 
 
 logger = logging.getLogger(__name__)
-MODEL = "gemini-3.8-flash"
 PROVIDER_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 MODEL_TIMEOUT = 120
 
@@ -64,6 +63,12 @@ action for explicit steps, info for relevant facts and conditions, and material
 for named forms, documents, or official resources explicitly referenced in the
 source. Use an exact web address only if it appears verbatim in the supplied
 source text. Generate no placeholder or speculative links.
+
+For recruitment, activities, and contests, prioritize the notice title,
+organizer, eligibility, application deadline, required submissions, and
+application method when explicitly stated. Distinguish a label for applying
+from an organizer's homepage or a listing. Keep multiple printed deadlines
+with their stated stages.
 """
 
 IMAGE_INSTRUCTIONS = """Use the visible image pixels as source material.
@@ -76,7 +81,8 @@ Refer to named resources without reproducing web addresses from the image.
 
 
 async def _analyze(messages: list[dict]) -> ExtractionResult:
-    api_key = get_settings().llm_api_key.get_secret_value()
+    settings = get_settings()
+    api_key = settings.llm_api_key.get_secret_value()
     if not api_key:
         raise HostedAnalysisUnavailable
     try:
@@ -88,7 +94,7 @@ async def _analyze(messages: list[dict]) -> ExtractionResult:
             http_client=DefaultAsyncHttpxClient(trust_env=False, follow_redirects=False),
         ) as client:
             response = await client.chat.completions.parse(
-                model=MODEL,
+                model=settings.llm_model,
                 messages=messages,
                 response_format=ExtractionResult,
                 temperature=0.1,

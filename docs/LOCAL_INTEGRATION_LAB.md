@@ -273,9 +273,11 @@ use owner-scoped readback, and consume the images from the worker. Deterministic
 analysis callbacks assert the input and exercise result persistence.
 
 For a hosted demo, configure an approved Gemini `ITDA_LLM_API_KEY` with access
-and quota for `gemini-3.8-flash`. Start `uv run python -m worker` against the
-same disposable database and Storage. Create fresh receipts for a supplied text,
-a public page, and a synthetic recruitment poster. Compare the summary and
+and quota for the selected model. Set `ITDA_LLM_MODEL` to `gemini-3.6-flash` in
+the worker process to match the live local verification. Run
+`uv run python -m worker` against the same disposable database and Storage.
+Create fresh receipts for supplied text, a public page, and a synthetic
+recruitment poster. Compare the summary and
 recommendations with the source and verify the final state through detail and
 sync. For Android, use device-reachable trusted HTTPS for the API and the
 matching Auth and Storage gateway.

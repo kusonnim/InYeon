@@ -422,10 +422,9 @@ async def _analyze_job(
     if input_type == "url":
         try:
             page = await extract_url(job["source_url"])
-        except PageTemporarilyUnavailable:
+        except PageTemporarilyUnavailable as exc:
             raise _AnalysisAttemptError(
-                "url_fetch_unavailable", "metadata_only",
-                ("재시도 한도 내에 공개 페이지에서 본문을 가져올 수 없었습니다.",),
+                "url_fetch_unavailable", "metadata_only", exc.limitations,
             ) from None
         if not page.text:
             return _AnalysisOutcome("partial", page.coverage, page.limitations)
