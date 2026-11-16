@@ -1941,6 +1941,7 @@ class FixtureRepository:
                     updated.append(rec_data)
                 content["recommendations"] = updated
 
+            content["version"] += 1
             content["updated_at"] = self._now()
             self._record_sync("content", content["id"], content["id"])
             return content
