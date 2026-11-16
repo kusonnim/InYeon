@@ -32,7 +32,10 @@ before starting the API.
 - `ITDA_SUPABASE_SERVICE_ROLE_KEY` authorizes the API and worker to access the
   private Storage bucket. Set it in the server processes only.
 - `ITDA_LLM_API_KEY` is the approved Gemini API key for hosted text and vision
-  inference. The existing adapter uses `gemini-3.8-flash`. [Gemini model reference](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash)
+  inference.
+- `ITDA_LLM_MODEL` selects the Gemini model for text and vision analysis. It
+  defaults to `gemini-3.8-flash`. The local live text, URL, and image checks used
+  `gemini-3.6-flash`. [Gemini model reference](https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash)
 
 `GET /health` reports the configured persistence adapter. Verify connectivity
 with an authenticated API request. Keep database and signing credentials in the
@@ -69,6 +72,12 @@ send the extracted title and body to the same text analyzer. This fetch honors
 robots and access restrictions. It accepts standard HTTP and HTTPS ports and
 caps the response at 1 MiB, extracted text at 32,000 characters, and the fetch at
 15 seconds. Coverage describes the accessible response.
+
+URL jobs isolate public opportunity details on Linkareer, Wevity, and
+Thinkgood. They preserve labeled application details and links. A single
+public JobPosting JSON-LD record can supply partial coverage. Unreadable
+pages keep their saved URL and return the reason and the option to share
+the notice text or a screenshot. [Opportunity URL audit](../../docs/OPPORTUNITY_URL_AUDIT.md)
 
 Image jobs read attached, verified JPEG, PNG, or WebP originals from private
 Storage and check the bytes again before sending them to Gemini. A large image

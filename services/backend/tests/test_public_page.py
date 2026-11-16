@@ -108,17 +108,17 @@ def test_rechecks_redirect_destination(request_page):
     assert [request.url.path for request in requests] == ["/robots.txt", "/start"]
 
 
-@pytest.mark.parametrize("reply", [
-    lambda: httpx.Response(401),
-    lambda: html("<title>Sign in to campus</title><main><h1>Log in</h1><form></form></main>"),
-    lambda: html(ARTICLE, **{"X-Robots-Tag": "nosnippet"}),
-    lambda: html(ARTICLE.replace("</head>", '<script type="application/ld+json">'
-                                              '{"isAccessibleForFree":false}</script></head>')),
+@pytest.mark.parametrize(("reply", "failure"), [
+    (lambda: httpx.Response(401), "access_restricted"),
+    (lambda: html("<title>Sign in to campus</title><main><h1>Log in</h1><form></form></main>"), "access_restricted"),
+    (lambda: html(ARTICLE, **{"X-Robots-Tag": "nosnippet"}), "content_policy"),
+    (lambda: html(ARTICLE.replace("</head>", '<script type="application/ld+json">'
+                                              '{"isAccessibleForFree":false}</script></head>')), "access_restricted"),
 ])
-def test_restricted_page_has_only_metadata(request_page, reply):
+def test_restricted_page_has_only_metadata(request_page, reply, failure):
     page, _ = request_page(lambda req: httpx.Response(404) if req.url.path == "/robots.txt" else reply())
     assert page.text == "" and page.coverage == "metadata_only"
-    assert page.limitations == (public_page.RESTRICTED,)
+    assert page.failure == failure and page.limitations[-1] == public_page.SHARE_FALLBACK
 
 
 def test_robots_exclusion_prevents_page_request(request_page):
@@ -131,6 +131,118 @@ def test_robots_exclusion_prevents_page_request(request_page):
 
     page, requests = request_page(handle)
     assert page.text == "" and page.coverage == "metadata_only" and len(requests) == 1
+    assert page.failure == "robots_disallowed" and page.limitations[-1] == public_page.SHARE_FALLBACK
+
+
+def test_unavailable_robots_policy_never_probes_the_detail(request_page):
+    page, requests = request_page(lambda _: httpx.Response(403))
+    assert page.failure == "robots_unavailable"
+    assert [request.url.path for request in requests] == ["/robots.txt"]
+
+
+@pytest.mark.parametrize(("robots_status", "page_status", "failure"), [
+    (503, None, "robots_unavailable"),
+    (404, 429, "rate_limited"),
+    (404, 503, "server_error"),
+])
+def test_temporary_errors_keep_the_specific_reason_and_fallback(request_page, robots_status, page_status, failure):
+    def handle(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(robots_status)
+        assert page_status is not None
+        return httpx.Response(page_status)
+
+    with pytest.raises(public_page.PageTemporarilyUnavailable) as error:
+        request_page(handle)
+    assert error.value.failure == failure
+    assert error.value.limitations[-1] == public_page.SHARE_FALLBACK
+
+
+def test_javascript_shell_and_missing_opportunity_layout_are_not_access_gates(request_page):
+    shell = """<title>Public contest</title><header>Site menu</header><div id="__next"></div>
+           <script src="/page.js"></script><noscript>Please enable JavaScript.</noscript>"""
+    url = "https://linkareer.com/activity/1"
+    for body, failure in [(shell, "javascript_required"), (ARTICLE, "parse_error")]:
+        page, _ = request_page(lambda req: httpx.Response(404) if req.url.path == "/robots.txt" else html(body), url)
+        assert not page.text and page.coverage == "metadata_only" and page.failure == failure
+
+
+def test_linkareer_isolates_the_notice_and_keeps_the_labeled_application_link(request_page):
+    document = """
+    <title>Recruitment site</title><main><header><h1>캠퍼스 에디터 모집</h1></header>
+    <div class="activity-info"><dl><dt>접수기간</dt><dd>2026.09.10 ~ 2026.09.17</dd></dl></div>
+    <header class="organization-info"><h2 class="organization-name">에디터 운영팀</h2></header>
+    <article id="DETAIL"><section><h2 class="detail-title">상세내용</h2>
+    <p>지원 자격: 대학 재학생</p><p>제출서류: 신청서</p>
+    <p>지원폼 : <a href="https://registration.example/form">온라인 양식</a></p>
+    <p>참고 <a href="https://organization.example/">홈페이지</a></p>
+    <a href="https://registration.example/form?access_token=fixture">신청하기</a>
+    </section><section><h2>합격스펙</h2><p>개별 사용자 경험</p></section></article>
+    <h2>다른 공고</h2></main>
+    """
+    page, _ = request_page(lambda req: httpx.Response(404) if req.url.path == "/robots.txt" else html(document),
+                           "https://linkareer.com/activity/1")
+    assert page.coverage == "full_text" and page.failure is None and page.text.startswith("캠퍼스 에디터 모집\n")
+    for value in ("주최: 에디터 운영팀", "접수기간: 2026.09.10 ~ 2026.09.17", "대학 재학생", "제출서류: 신청서"):
+        assert value in page.text
+    assert "공고의 지원 링크: https://registration.example/form" in page.text
+    for other in ("합격스펙", "개별 사용자 경험", "다른 공고", "organization.example", "access_token"):
+        assert other not in page.text
+
+
+@pytest.mark.parametrize(("url", "document"), [
+    ("https://www.wevity.com/?c=find&gbn=viewok&ix=1", """
+    <main>다른 공고</main><div class="contest-detail"><h6 class="tit">공개 공모전</h6>
+    <ul class="cd-info-list"><li><span class="tit">주최/주관</span>문화재단</li>
+    <li><span class="tit">접수기간</span>2026-11-20 17:00<span class="cil-dday">D-1</span></li></ul>
+    <div id="viewContents"><p>접수방법: 이메일로 참가 신청서 제출</p></div></div>
+    """),
+    ("https://thinkcontest.com/thinkgood/user/contest/view.do?contest_pk=1", """
+    <main>다른 공고</main><form id="detailForm"><h3>팀원 모집</h3>
+    <div class="view-header"><span class="contest-view__title">공개 공모전</span></div>
+    <div class="content-detail__top"><div class="info">
+    <div><div class="tit">주최</div><div class="txt">문화재단</div></div>
+    <div><div class="tit">접수기간</div><div class="txt">2026-11-20 17:00</div></div></div></div>
+    <div id="tab01" class="current"><div id="contest_content" style="display: none">
+    <p>접수방법: 이메일로 참가 신청서 제출</p><p style="display: none">숨겨진 별도 문구</p></div>
+    <naver-content content-id="contest_content"></naver-content></div></form>
+    """),
+])
+def test_contest_extracts_the_notice_outside_the_generic_main(request_page, url, document):
+    page, _ = request_page(lambda req: httpx.Response(404) if req.url.path == "/robots.txt" else html(document), url)
+    assert page.coverage == "full_text" and page.text.startswith("공개 공모전\n")
+    assert "문화재단" in page.text and "접수기간: 2026-11-20 17:00" in page.text
+    assert "이메일로 참가 신청서 제출" in page.text
+    for noise in ("다른 공고", "D-1", "숨겨진 별도 문구", "팀원 모집"):
+        assert noise not in page.text
+
+
+def test_thinkgood_template_without_public_display_is_not_read(request_page):
+    document = """
+    <form id="detailForm"><h3>공개 공모전</h3><div id="tab01" class="current">
+    <div id="contest_content" style="display:none"><p>표시되지 않는 문구</p></div>
+    <naver-content content-id="unrelated"></naver-content></div></form>
+    """
+    url = "https://thinkcontest.com/thinkgood/user/contest/view.do?contest_pk=1"
+    page, _ = request_page(lambda req: httpx.Response(404) if req.url.path == "/robots.txt" else html(document), url)
+    assert page.coverage == "metadata_only" and page.failure == "parse_error" and not page.text
+
+
+def test_public_job_posting_json_ld_is_partial_and_keeps_expiration_distinct(request_page):
+    document = r"""<title>Careers</title><div id="root"></div><script src="/app.js"></script>
+    <script type="application/ld+json">{"@graph":[{"@type":"Organization","name":"Site host"},
+    {"@type":"JobPosting","title":"Research assistant","hiringOrganization":{"name":"Library"},
+    "validThrough":"2026-11-25","qualifications":"Enrolled students",
+    "description":"<p>Submit a short CV.</p>\u003cscript>other context\u003c/script>",
+    "url":"https://campus.example/posting",
+    "potentialAction":{"@type":"ApplyAction","target":"https://application.example/form"}}]}</script>
+    """
+    page, _ = request_page(lambda req: httpx.Response(404) if req.url.path == "/robots.txt" else html(document))
+    assert page.coverage == "partial_text" and page.failure is None
+    assert "채용 기관: Library" in page.text and "지원 자격: Enrolled students" in page.text
+    assert "공고 게시 유효기간: 2026-11-25" in page.text and "접수마감" not in page.text
+    assert "공고의 지원 링크: https://application.example/form" in page.text
+    assert "Submit a short CV." in page.text and "Site host" not in page.text and "campus.example/posting" not in page.text
 
 
 def test_raw_response_size_and_text_limits_are_independent(monkeypatch, request_page):

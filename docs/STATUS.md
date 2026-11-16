@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated 2026-11-16 (Asia/Seoul). **A7.5.2 and PR #17 follow-up integration.**
+Last updated 2026-11-16 (Asia/Seoul). **Korean opportunity extraction and live Gemini verification.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
@@ -41,7 +41,7 @@ details can focus the corresponding field in the versioned editor.
 | Onboarding | Root AGENTS, product/architecture/development/ownership/integration docs, ADRs | Evolving decisions require future updates |
 | API contract | Versioned OpenAPI, full Content PATCH responses, structured errors, versions, idempotency, owner-scoped cursors and private asset lifecycle | Shared sync and idempotency retention policies |
 | Backend | Supabase JWT verification, owner-scoped PostgreSQL repository, transactional receipts, notification mutations, sync, private upload verification and signed download | Authenticated deployed API and Storage against C1 |
-| Worker | PostgreSQL job leases and retries, guarded result persistence, public URL extraction, and hosted text and verified-image adapters | Successful hosted inference, document extraction and FCM delivery |
+| Worker | PostgreSQL job leases and retries, guarded result persistence, public opportunity extraction, and live local Gemini 3.6 Flash checks for text, URLs, and verified images | Broader hosted evaluation, document extraction and FCM delivery |
 | Data | Both migrations and 33 pgTAP checks on disposable Supabase, two real local Auth subjects and private object transfer. Separate hosted C1 Auth/RLS evidence below | C1 private object lifecycle |
 | Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
 | Mobile | A7.5.2 Home, Library and Account, offline receipt, account-bound WorkManager outboxes, Supabase session client, native notifications, versioned editor, durable sync, isolated staging build, and Korean and English UI | Authenticated Android/Web convergence, remote private image opening and FCM delivery |
@@ -51,6 +51,22 @@ details can focus the corresponding field in the versioned editor.
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
 
 ## Verification evidence
+
+### Korean opportunity URL audit
+
+Public detail extraction passed for Linkareer, Wevity, and Thinkgood. The
+extractor isolates the published notice and separates robots, access,
+rendering, parser, and temporary failures. All 34 targeted parser and Worker
+tests passed, and one Gemini 3.6 Flash request summarized the extracted
+Linkareer notice. [Audit evidence](OPPORTUNITY_URL_AUDIT.md)
+
+### Live Gemini and C1 TLS follow-up
+
+| Check | Outcome |
+| --- | --- |
+| Gemini 3.6 Flash | **PASS.** Text, public URL, and a synthetic recruitment PNG produced structured results on a disposable local stack. PostgreSQL persistence, API detail, sync, and original and edit preservation passed. URL and PNG used one generation request each with an output cap of 768 tokens and zero SDK retries. Provider totals were 431 tokens for URL and 1,681 for PNG. |
+| Gemini 3.8 Flash | **FAIL.** The earlier live requests returned HTTP 503 at the outbound HTTPS client. The error type and headers were unavailable for finer attribution. The worker now reads `ITDA_LLM_MODEL` and defaults to `gemini-3.8-flash`. |
+| C1 certificate verification | **PASS.** The default trust stores rejected the Supabase root. The Dashboard CA, `sslmode=verify-full`, and process-scoped `PGSSLROOTCERT` allowed the backend adapter to run an authenticated read-only query with certificate and hostname verification. |
 
 ### Final MVP integration
 

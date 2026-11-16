@@ -153,3 +153,25 @@ def test_url_result_keeps_only_verbatim_addresses_from_the_extracted_page():
     assert result.status == "completed"
     with pytest.raises(_AnalysisAttemptError, match="model_processing_error"):
         asyncio.run(run("Apply at https://apply.example."))
+
+
+def test_unreadable_url_preserves_coverage_and_offers_a_share_without_inference():
+    from extractors.public_page import FAILURE_MESSAGES, SHARE_FALLBACK, PublicPage
+    from worker.pipeline import _analyze_job
+
+    source = "https://linkareer.com/activity/1"
+    limitations = (FAILURE_MESSAGES["robots_disallowed"], SHARE_FALLBACK)
+
+    async def extract(url):
+        assert url == source
+        return PublicPage("", "metadata_only", limitations, "robots_disallowed")
+
+    async def analyzer(_):
+        pytest.fail("Unreadable pages must not invoke inference")
+
+    job = {"input_type": "url", "source_url": source, "source_text": "Original caption"}
+    result = asyncio.run(_analyze_job(None, job, analyzer, extract, None, None))
+    assert (result.status, result.coverage, result.summary, result.limitations) == (
+        "partial", "metadata_only", None, limitations,
+    )
+    assert job["source_url"] == source and job["source_text"] == "Original caption"
