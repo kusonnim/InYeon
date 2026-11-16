@@ -408,6 +408,20 @@ edits.
 Physical-device review and live service checks remain open. Server-only
 private image and PDF originals require an authenticated download path.
 
+### Android launcher icon
+
+The default and staging packages use the approved ITDA pebble symbol. The shared
+Android resources provide five legacy PNG densities and a white adaptive icon
+with a vector foreground for API 26 and later.
+
+Both `flutter build apk --debug --no-pub` builds passed. The APKs retain the
+existing package IDs and labels and bundle the same icon artwork. Debug lint
+passed with zero errors and six warnings, including one for the optional
+monochrome layer. The packaged icon files match the builds installed and
+launched on an Android 15 (API 35) x86_64 emulator. Both icons appeared on the
+light and dark Pixel Launcher home screens and app drawers, in the Android
+share sheet, and in Recents. The staging build used synthetic HTTPS endpoints.
+
 ### Phase A7.4 Android checks
 
 A7.4 starts from `main` at `bcddd1a` on 2026-11-12 (Asia/Seoul). Verification
