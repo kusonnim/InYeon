@@ -34,8 +34,9 @@ flowchart LR
 | Supabase | Auth, PostgreSQL, RLS, private objects | UI workflow semantics |
 | FCM | Best-effort mobile wake/delivery signal | Authoritative state or permanent event history |
 
-Deploy the web to Vercel and API/worker to Railway only after real adapters and
-security checks are complete. No deployment or cloud resources are created in Phase 0.
+A public Vercel demo can serve the checked-in synthetic catalog in fixture mode.
+Deploy the authenticated web library to Vercel and API/worker to Railway after
+the live integration and security checks are complete.
 
 ## Durable ingestion and private assets
 

@@ -52,6 +52,19 @@ Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR
 
 ## Verification evidence
 
+### Public Vercel demo
+
+The read-only web demo labels its synthetic data in the library and detail
+views. The [Vercel setup](../apps/web/README.md#public-vercel-demo) uses the shared
+catalog and requires no API or Supabase credentials.
+
+| Check | Outcome |
+| --- | --- |
+| Local production build | **PASS.** Locked install, typecheck, seven Web tests, and the Next.js Webpack build on Node.js 24.15.0. |
+| Local production HTTP | **PASS.** The library, all five fixture details, and their same-origin assets rendered without API or Supabase settings. The login route redirected to the demo library. |
+| Public URL | **PENDING.** Vercel deployment and signed-out browser verification remain pending. |
+| Authenticated hosting | The hosted C1 Auth and RLS evidence is separate. A deployed HTTPS FastAPI instance using the same Supabase project and two-account Web acceptance remain pending. |
+
 ### Korean opportunity URL audit
 
 Public detail extraction passed for Linkareer, Wevity, and Thinkgood. The
@@ -460,7 +473,7 @@ The recordings use deterministic mock results and required no hosted model calls
    two real identities, private objects, and simultaneous Android/web edits.
 3. Validate cursor expiry and full resync with B's retention policy. Review
    cross-library search with A and B before adding a shared API operation.
-4. Configure Vercel after the real adapters and integration checks are ready.
+4. Connect a separate authenticated Vercel environment after the live integration checks pass.
 
 ### Integration Lead — I1 acceptance
 

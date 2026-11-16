@@ -7,7 +7,13 @@ import { getWebSessionUser } from "@/lib/supabase-session";
 import { signOut } from "./login/actions";
 import "./globals.css";
 
-export const metadata: Metadata = { title: "잇다 · ITDA", description: "모바일에서 저장한 콘텐츠를 웹 보관함에서 확인하세요." };
+export function generateMetadata(): Metadata {
+  if (getDataMode() === "fixture") {
+    return { title: "잇다 · ITDA 데모", description: "가상의 예시 데이터로 잇다 웹 보관함을 둘러보세요." };
+  }
+  return { title: "잇다 · ITDA", description: "모바일에서 저장한 콘텐츠를 웹 보관함에서 확인하세요." };
+}
+
 // A fixture-mode build can serve API mode at runtime. Auth pages must stay request-scoped.
 export const dynamic = "force-dynamic";
 
@@ -27,7 +33,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </nav>
     </header>
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      {fixture && <p role="status" className="mb-6 rounded-lg border border-border bg-muted px-4 py-3 text-sm">미리보기 · 샘플 콘텐츠를 표시해요. 편집과 동기화는 API 모드에서 사용할 수 있어요.</p>}
+      {fixture && <p role="status" className="mb-6 rounded-lg border border-border bg-muted px-4 py-3 text-sm">공개 데모 · 가상의 예시 데이터를 읽기 전용으로 제공해요.</p>}
       <EditorDraftProvider key={fixture ? "fixture" : user?.id ?? "signed-out"}>
         {children}
       </EditorDraftProvider>
