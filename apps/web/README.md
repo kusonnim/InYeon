@@ -19,6 +19,21 @@ npm test
 npm run build
 ```
 
+## Public Vercel demo
+
+Import `kusonnim/InYeon` into a dedicated Vercel demo project. Set **Root
+Directory** to `apps/web` and enable **Include source files outside of the
+Root Directory in the Build Step** so the build can read
+`contracts/examples/catalog.json` from the same Git revision. Select Node.js
+24.x. The checked-in `vercel.json` selects Next.js and runs `npm ci` and
+`npm run build`.
+
+Set `ITDA_DATA_MODE=fixture` in the Vercel Production environment. Fixture mode
+needs no API, Supabase settings, or credentials. Deploy the demo revision to
+the demo project's Production environment and open its production domain in a
+signed-out browser. Check the library, a sample detail page, and the
+`공개 데모` banner.
+
 ## Connect Auth and FastAPI
 
 1. Copy `.env.example` to `.env.local` and set `ITDA_DATA_MODE=api`.
