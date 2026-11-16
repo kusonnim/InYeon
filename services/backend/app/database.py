@@ -1,12 +1,18 @@
 from typing import AsyncGenerator
+from uuid import UUID
 
-from fastapi import HTTPException, Request, status
+from asyncpg import PostgresError
+from fastapi import Request
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError, DBAPIError, TimeoutError as PoolTimeoutError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+
+from app.errors import ApiError
 
 
 def create_database_engine(database_url: str):
@@ -34,9 +40,41 @@ def create_database_engine(database_url: str):
     return create_async_engine(
         url,
         echo=False,
+        hide_parameters=True,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
+        connect_args={"timeout": 5},
+    )
+
+
+async def lock_owner_sync(db: AsyncSession, user_id: str | UUID) -> None:
+    await db.execute(
+        text("SELECT public.lock_sync_head(CAST(:user_id AS uuid))"),
+        {"user_id": user_id},
+    )
+
+
+async def append_sync_event(
+    db: AsyncSession,
+    user_id: str | UUID,
+    entity_type: str,
+    entity_id: str | UUID,
+    content_id: str | UUID | None = None,
+) -> None:
+    await db.execute(
+        text("""
+            SELECT public.append_sync_event(
+                CAST(:user_id AS uuid), :entity_type, CAST(:entity_id AS uuid),
+                'upsert', CAST(:content_id AS uuid)
+            )
+        """),
+        {
+            "user_id": user_id,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "content_id": content_id,
+        },
     )
 
 
@@ -67,14 +105,22 @@ async def get_db(request: Request) -> AsyncGenerator[AsyncSession | None, None]:
             )
             app.state.engine = engine
             app.state.db_session_factory = session_factory
-        except Exception:
-            raise HTTPException(
-                status_code=503,
-                detail="Database connection is not configured.",
-            )
+        except (ArgumentError, ValueError):
+            raise ApiError(503, "database_unavailable", "Database connection is not configured") from None
 
-    async with session_factory() as session:
-        yield session
+    try:
+        async with session_factory() as session:
+            yield session
+    except (OSError, PoolTimeoutError):
+        raise ApiError(503, "database_unavailable", "Database connection is temporarily unavailable") from None
+    except (DBAPIError, PostgresError) as exc:
+        original = exc.orig if isinstance(exc, DBAPIError) else exc
+        state = getattr(original, "sqlstate", None) or ""
+        if getattr(exc, "connection_invalidated", False) or state.startswith(("08", "28")) or state in {
+            "3D000", "53300", "57P01", "57P02", "57P03",
+        }:
+            raise ApiError(503, "database_unavailable", "Database connection is temporarily unavailable") from None
+        raise
 
 def create_worker_session_factory():
     from app.config import get_settings

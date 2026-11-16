@@ -3,8 +3,8 @@
 Developer C owns migrations; Developer B reviews API and worker implications. Read
 the root `AGENTS.md`, `docs/OWNERSHIP.md`, and `contracts/openapi.yaml` first.
 Migrations are the authoritative persisted schema. The OpenAPI contract is the
-authoritative HTTP shape; normalized records are assembled into that shape by
-the future database adapter.
+authoritative HTTP shape. The PostgreSQL repository assembles normalized
+records into that shape.
 
 ## What exists
 
@@ -19,9 +19,10 @@ the future database adapter.
 - `verify_contract.py`: static mapping/enum checks between nine HTTP schemas and
   the normalized SQL schema, including explicitly derived response fields.
 
-This is not a deployed database integration. The FastAPI fixture repository does
-not call these functions. JWT verification, API database transactions, byte
-uploads, worker claim/retry logic, and FCM delivery remain implementation work.
+The production FastAPI repository uses these functions for owner-ordered sync
+and notification transitions. The local integration audit covers real Auth,
+PostgreSQL and private object transfers. [STATUS](../docs/STATUS.md) records that
+audit and the separate hosted C1 evidence.
 
 ## Local verification
 
@@ -43,13 +44,11 @@ supabase db lint --level error
 to the test/reset commands. Schema SQL requires Supabase's `auth` and `storage`
 schemas; it is not intended for an empty vanilla PostgreSQL database.
 
-Both migrations applied and all 33 pgTAP assertions passed in disposable
-PostgreSQL 17.5 (PGlite 0.3.14 with the pgTAP 1.3.5 SQL extension). The run used
-a minimal Supabase-compatible harness for the `auth` and `storage` schemas and
-roles. It exercised PostgreSQL RLS, constraints, and transition functions with
-synthetic identities. Supabase CLI reset and lint, Auth sessions, and Storage
-object transfer remain to be verified on the full disposable Supabase stack.
-See `docs/STATUS.md` for verification and integration status.
+The final integration applied both migrations and passed all 33 pgTAP
+assertions with disposable Supabase PostgreSQL 17.6, GoTrue and Storage.
+It also verified PostgREST RLS with two real local identities and API
+transfers through the private bucket. See [STATUS](../docs/STATUS.md)
+for the verification record.
 
 Static verification did pass during authoring: pglast 8.7 parsed all SQL statements
 in both migrations and the test file, plus all four PL/pgSQL function bodies. The
@@ -93,7 +92,7 @@ Public roles have no execute permission on transition/sync helper functions.
   on recommendations/analyses are internal provenance and ownership fields.
 - SQL `timestamptz` stores instants; the API serializes them as UTC ISO 8601.
   Integer versions and revisions must be incremented by every relevant write.
-  HTTP version conflicts are handled by the future adapter's conditional updates.
+  The PostgreSQL repository handles HTTP version conflicts with conditional updates.
 
 ## Required transaction boundaries
 
@@ -144,9 +143,9 @@ return `applied: false, reason: stale_generation`; they cannot hide a newer one.
 Other generation/revision mismatches raise `notification_conflict`, which the
 adapter maps to HTTP 409 with the current generation/revision.
 
-The SQL helpers implement these transitions and sync writes, but the future API
-must add authentication and idempotency replay around them. Neither helper alters
-`workflow_status`. AI completion, sync, startup, and retries must not call restore.
+The SQL helpers implement these transitions and sync writes. The production API
+adds authentication and idempotency replay around them. Workflow status remains
+independent. Only an explicit user request can restore a notification.
 FCM is a wake-up hint; mobile must reconcile the current server state plus its
 durable pending local dismissal before showing/updating anything. A persisted
 device/generation delivery marker is still needed for one automatic notification;

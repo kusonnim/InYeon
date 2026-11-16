@@ -5,8 +5,8 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 from common import (
-    Auth, Blocked, CheckError, FIXTURE_USERS, Report, account, api_base, expect,
-    parser, process_health, request, require, uuid_field,
+    Auth, Blocked, CheckError, FIXTURE_USERS, LAB_TARGETS, Report, account, api_base, expect,
+    lab_setting, parser, process_health, request, require, uuid_field,
 )
 
 
@@ -113,27 +113,38 @@ def edit_title(base, path, token, before, title, check):
 
 
 def run(args, report):
-    staging = args.profile == "staging"
-    with report.step("Profile configuration", "Disposable staging" if staging else "Synthetic FastAPI fixture"):
+    authenticated = args.profile != "fixture"
+    lab = args.profile in LAB_TARGETS
+    with report.step("Profile configuration", args.profile):
         base = api_base(args.profile, args.api_url)
-        require(not args.restart_check or staging, "Restart persistence can only be checked in staging.")
+        require(not args.restart_check or authenticated, "Restart persistence requires an authenticated profile.")
         if args.restart_check and not sys.stdin.isatty():
             raise Blocked("Use an interactive shell for --restart-check.")
-        if staging:
+        if args.profile == "staging":
             auth = Auth.from_environment()
             login_a, login_b = account("A"), account("B")
             require(login_a[0].casefold() != login_b[0].casefold(), "Supply two distinct disposable accounts.")
 
     with report.step("GET /health", "Process profile confirmed"):
-        process_health(base, args.profile)
-    with report.step("Authentication", "Supabase password sessions" if staging else "Synthetic fixture identities"):
-        if staging:
+        persistence = process_health(base, args.profile)
+    if lab:
+        with report.step("Authenticated adapter readiness"):
+            if persistence == "unconfigured":
+                raise Blocked("JWT and persistent API adapters are required before the authenticated smoke.")
+            auth = Auth.from_environment(args.profile)
+            login_a, login_b = account("A", args.profile), account("B", args.profile)
+            require(login_a[0].casefold() != login_b[0].casefold(), "Supply two distinct disposable accounts.")
+    with report.step("Authentication", "Supabase password sessions" if authenticated else "Synthetic fixture identities"):
+        if authenticated:
             owner, token = auth.sign_in(*login_a)
             owner_b, token_b = auth.sign_in(*login_b)
         else:
             owner, token = FIXTURE_USERS["A"]
             owner_b, token_b = FIXTURE_USERS["B"]
         require(owner != owner_b, "The two sessions resolve to the same owner.")
+    if lab:
+        with report.step("JWT signing mode"):
+            auth.check_signing_mode(((owner, token), (owner_b, token_b)), lab_setting(args.profile, "JWT_ALGORITHM"))
 
     with report.step("Authenticated catalog and sync baseline", "Account A checkpoint and valid account B API access"):
         for session_owner, session_token in ((owner, token), (owner_b, token_b)):
@@ -165,7 +176,7 @@ def run(args, report):
     def check(item):
         check_content(item, owner, marker, identifier)
 
-    with report.step("Read acknowledgment", "Independent GET returned the source and owner" if staging
+    with report.step("Read acknowledgment", "Independent GET returned the source and owner" if authenticated
                      else "Independent GET returned the in-memory receipt"):
         before = api_json(base, path, token)
         check(before)
@@ -204,9 +215,9 @@ def run(args, report):
         require(scan_catalog(base, token_b, owner_b, marker, identifier) == [], "Account B can list account A's item.")
 
     if args.restart_check:
-        with report.step("API process restart persistence", "Edited item and receipt survived the operator-confirmed restart"):
+        with report.step("API process restart persistence", "Edited item, receipt, and sync cursor survived the restart"):
             try:
-                input("Restart only the approved disposable staging API process, then press Enter when it is ready. ")
+                input("Restart the selected disposable API process, then press Enter when it is ready. ")
             except EOFError:
                 raise Blocked("Process restart confirmation was unavailable.") from None
             process_health(base, args.profile)
@@ -217,8 +228,10 @@ def run(args, report):
             require(saved["title"] == title and saved["version"] >= edited["version"], "Edit lost after restart.")
             require(create(token) == receipt, "Idempotency receipt changed after restart.")
             require(scan_catalog(base, token, owner, marker, identifier) == [identifier], "Duplicate after restart.")
+            _, replayed = scan_sync(base, token, after_create, identifier)
+            require(replayed[:len(updates)] == updates, "The pre-restart sync cursor did not replay the edit.")
     else:
-        report.add("NOT TESTED", "API process restart persistence", "Optional in the staging profile.")
+        report.add("NOT TESTED", "API process restart persistence", "Optional with authenticated profiles.")
 
 
 def main():

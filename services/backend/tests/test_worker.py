@@ -59,18 +59,19 @@ def test_recover_expired_jobs_updates_content_and_sync(
 
     class FakeResult:
         def mappings(self):
-            return self
-
-        def all(self):
             return expired_jobs
 
     class FakeDB:
         def __init__(self):
             self.calls = []
 
+        async def scalars(self, statement):
+            self.calls.append((str(statement), None))
+            return [user_id]
+
         async def execute(self, statement, params=None):
             self.calls.append((str(statement), params))
-            if len(self.calls) == 1:
+            if "UPDATE public.analysis_jobs" in str(statement):
                 return FakeResult()
             return None
 
@@ -79,40 +80,35 @@ def test_recover_expired_jobs_updates_content_and_sync(
     recovered_count = asyncio.run(recover_expired_jobs(db))
 
     assert recovered_count == 1
-    assert len(db.calls) == 3
+    assert len(db.calls) == 5
+    assert "ORDER BY user_id" in db.calls[0][0]
+    assert "lock_sync_head" in db.calls[1][0]
 
-    recovery_sql = db.calls[0][0]
+    recovery_sql = db.calls[2][0]
     assert "attempts < 3" in recovery_sql
-    assert "locked_at <= now() - interval '10 minutes'" in recovery_sql
+    assert "locked_at <= clock_timestamp() - interval '10 minutes'" in recovery_sql
 
-    content_sql, content_params = db.calls[1]
-    assert "UPDATE contents" in content_sql
+    content_sql, content_params = db.calls[3]
+    assert "UPDATE public.contents" in content_sql
     assert content_params == {
         "status": expected_content_status,
         "content_id": content_id,
+        "user_id": user_id,
     }
 
-    sync_sql, sync_params = db.calls[2]
+    sync_sql, sync_params = db.calls[4]
     assert "append_sync_event" in sync_sql
     assert sync_params == {
         "user_id": user_id,
-        "content_id": content_id,
+        "entity_type": "content",
+        "entity_id": content_id,
+        "content_id": None,
     }
 
 
 
 def test_process_pending_jobs_returns_false_when_no_job():
     from worker.pipeline import process_pending_jobs
-
-    class FakeResult:
-        def mappings(self):
-            return self
-
-        def first(self):
-            return None
-
-        def all(self):
-            return []
 
     class FakeDB:
         async def __aenter__(self):
@@ -124,8 +120,11 @@ def test_process_pending_jobs_returns_false_when_no_job():
         def begin(self):
             return self
 
-        async def execute(self, statement, params=None):
-            return FakeResult()
+        async def scalars(self, statement):
+            return []
+
+        async def scalar(self, statement):
+            return None
 
     class FakeSessionFactory:
         def __call__(self):
@@ -136,3 +135,21 @@ def test_process_pending_jobs_returns_false_when_no_job():
     )
 
     assert result is False
+
+
+def test_url_result_keeps_only_verbatim_addresses_from_the_extracted_page():
+    from worker.pipeline import _AnalysisAttemptError, _summarize
+
+    source = "The printed application address is https://apply.example/notice."
+
+    async def run(summary):
+        async def analyzer(text):
+            assert text == source
+            return SimpleNamespace(status="SUCCESS", summary=summary, recommendations=None)
+
+        return await _summarize(analyzer, source, "url", "full_text")
+
+    result = asyncio.run(run("Apply at https://apply.example/notice."))
+    assert result.status == "completed"
+    with pytest.raises(_AnalysisAttemptError, match="model_processing_error"):
+        asyncio.run(run("Apply at https://apply.example."))

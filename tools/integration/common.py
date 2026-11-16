@@ -1,6 +1,7 @@
 """Shared, redacted HTTP checks for the I1 Windows runbook."""
 
 import argparse
+import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
 from email.message import Message
@@ -20,6 +21,8 @@ LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 STAGING_API = "ITDA_STAGING_API_BASE_URL"
 STAGING_AUTH = "ITDA_STAGING_SUPABASE_URL"
 STAGING_KEY = "ITDA_STAGING_SUPABASE_PUBLISHABLE_KEY"
+LAB_TARGETS = json.loads(Path(__file__).with_name("lab-targets.json").read_text(encoding="utf-8"))
+LAB_PREFIXES = {"c1": "ITDA_LAB_STAGING_", "local": "ITDA_LAB_LOCAL_"}
 FIXTURE_USERS = {
     "A": ("00000000-0000-4000-8000-000000000001", "fixture-user-a"),
     "B": ("00000000-0000-4000-8000-000000000002", "fixture-user-b"),
@@ -100,13 +103,13 @@ def publishable_key(value):
 
 def parser(description):
     command = argparse.ArgumentParser(description=description)
-    command.add_argument("--profile", choices=("fixture", "staging"), required=True)
-    command.add_argument("--api-url", help="Override the local fixture API base URL (default http://127.0.0.1:8000).")
+    command.add_argument("--profile", choices=("fixture", "staging", *LAB_TARGETS), required=True)
+    command.add_argument("--api-url", help="Override the loopback API base (default http://127.0.0.1:8000).")
     return command
 
 
 def api_base(profile, override):
-    if profile == "fixture":
+    if profile == "fixture" or profile in LAB_TARGETS:
         return base_url(override or "http://127.0.0.1:8000", allow_local_http=True, local_only=True)
     require(override is None, f"Use {STAGING_API} so the harness and Android share the staging API base.")
     return base_url(setting(STAGING_API))
@@ -205,7 +208,14 @@ class Auth:
     key: str
 
     @classmethod
-    def from_environment(cls):
+    def from_environment(cls, profile="staging"):
+        if profile in LAB_TARGETS:
+            key = lab_setting(profile, "PUBLIC_KEY")
+            if profile == "local" and re.fullmatch(r"[\w-]+\.[\w-]+\.[\w-]+", key, re.ASCII):
+                require(jwt_segment(key, 1).get("role") == "anon", "Use a public client key.")
+            else:
+                publishable_key(key)
+            return cls(LAB_TARGETS[profile]["auth_url"], key)
         return cls(base_url(setting(STAGING_AUTH)), publishable_key(setting(STAGING_KEY)))
 
     def sign_in(self, email, password):
@@ -219,6 +229,49 @@ class Auth:
                 and isinstance(user, dict), "Supabase Auth did not return a user access JWT.")
         return uuid_field(user.get("id"), "Supabase user ID"), token
 
+    def check_signing_mode(self, sessions, algorithm):
+        """Compare newly issued sessions with the selected Auth configuration."""
+        require(algorithm in {"HS256", "ES256", "RS256"}, "Configure HS256, ES256, or RS256.")
+        keys = signing_keys(self.base) if algorithm != "HS256" else ()
+        for owner, token in sessions:
+            header, claims = jwt_segment(token, 0), jwt_segment(token, 1)
+            require(header.get("alg") == algorithm, "Issued JWT algorithm differs from configuration.")
+            require(claims.get("iss") == self.base + "/auth/v1"
+                    and claims.get("aud") == "authenticated" and claims.get("sub") == owner,
+                    "Issued JWT has unexpected issuer, audience, or subject.")
+            if algorithm != "HS256":
+                kid = header.get("kid")
+                require(isinstance(kid, str) and kid and any(
+                    key.get("alg") == algorithm and key.get("kid") == kid
+                    and key.get("kty") == ("EC" if algorithm == "ES256" else "RSA") for key in keys
+                ), "Issued JWT signing key is absent from the Auth JWKS.")
+            user = expect(request(self.base, "/auth/v1/user", key=self.key, token=token), 200).json()
+            require(uuid_field(user.get("id"), "verified Supabase user ID") == owner,
+                    "Auth did not confirm the issued JWT's owner.")
 
-def account(label):
+
+def jwt_segment(token, index):
+    segment = token.split(".")[index]
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+    except (ValueError, UnicodeError):
+        raise CheckError("Invalid JWT metadata.") from None
+    require(isinstance(decoded, dict), "Invalid JWT metadata.")
+    return decoded
+
+
+def signing_keys(base):
+    payload = expect(request(base, "/auth/v1/.well-known/jwks.json"), 200).json()
+    keys = payload.get("keys")
+    require(isinstance(keys, list) and all(isinstance(key, dict) for key in keys), "Invalid Auth JWKS.")
+    return keys
+
+
+def lab_setting(profile, name):
+    return setting(LAB_PREFIXES[profile] + name)
+
+
+def account(label, profile="staging"):
+    if profile in LAB_TARGETS:
+        return lab_setting(profile, f"{label}_EMAIL").strip(), lab_setting(profile, f"{label}_PASSWORD")
     return setting(f"ITDA_SMOKE_{label}_EMAIL").strip(), setting(f"ITDA_SMOKE_{label}_PASSWORD")

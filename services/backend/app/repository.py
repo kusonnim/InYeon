@@ -7,10 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.errors import ApiError
 import hashlib
+import hmac
 from sqlalchemy.exc import IntegrityError, DBAPIError
 import base64
 
+from app.database import append_sync_event, lock_owner_sync
+
 logger = logging.getLogger(__name__)
+
+
+def _encode_sync_cursor(user_id: str, sequence: str, secret: str) -> str:
+    message = f"sync-v1:{user_id}:{sequence}".encode()
+    signature = hmac.digest(secret.encode(), message, "sha256").hex()
+    return f"{sequence}.{signature}"
+
 
 class PostgresRepository:
     """ ?ㅼ젣 PostgreSQL DB ?곕룞 諛?Fixture/Test ?명솚 ?명꽣?섏씠???대뙌??"""
@@ -164,13 +174,15 @@ class PostgresRepository:
                             event_type,
                             comment
                         )
-                        VALUES (
-                            :user_id,
-                            :content_id,
-                            :recommendation_id,
-                            :event_type,
-                            :comment
-                        )
+                        SELECT c.user_id, c.id, CAST(:recommendation_id AS uuid), :event_type, :comment
+                        FROM public.contents AS c
+                        WHERE c.id = CAST(:content_id AS uuid)
+                          AND c.user_id = CAST(:user_id AS uuid)
+                          AND (CAST(:recommendation_id AS uuid) IS NULL OR EXISTS (
+                              SELECT 1 FROM public.recommendations AS r
+                              WHERE r.id = CAST(:recommendation_id AS uuid)
+                                AND (r.content_id, r.user_id) = (c.id, c.user_id)
+                          ))
                         RETURNING
                             id,
                             user_id,
@@ -191,7 +203,9 @@ class PostgresRepository:
                     },
                 )
 
-                row = result.mappings().one()
+                row = result.mappings().one_or_none()
+                if row is None:
+                    raise ApiError(404, "not_found", "Content or recommendation not found")
 
                 response_body = {
                     "id": str(row["id"]),
@@ -321,6 +335,8 @@ class PostgresRepository:
         try:
             async with session.begin():
                 if idempotency_key:
+                    # Serialize the receipt lookup with the transition and its recorded replay.
+                    await lock_owner_sync(session, user_id)
                     existing = await self.get_idempotency(
                         db=session,
                         idempotency_key=idempotency_key,
@@ -489,12 +505,39 @@ class PostgresRepository:
             },
         )
 
-    async def sync(self, user: str, cursor: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
-        """동기화 이벤트 목록 조회"""
+    async def sync(
+        self, db: AsyncSession, user_id: str, cursor: str | None, limit: int, secret: str
+    ) -> Dict[str, Any]:
+        sequence = 0
+        if cursor is not None:
+            try:
+                position = cursor.split(".", 1)[0]
+                sequence = int(position)
+                if not 0 <= sequence <= 2**63 - 1:
+                    raise ValueError("Sequence is outside the PostgreSQL bigint range")
+                if not hmac.compare_digest(cursor, _encode_sync_cursor(user_id, str(sequence), secret)):
+                    raise ValueError("Cursor signature mismatch")
+            except (ValueError, TypeError):
+                raise ApiError(400, "invalid_cursor", "Invalid or expired cursor") from None
+
+        result = await db.execute(
+            text("""
+                SELECT sequence::text AS sequence, entity_type, entity_id,
+                       content_id, operation, occurred_at
+                FROM public.sync_events AS event
+                WHERE user_id = CAST(:user_id AS uuid) AND event.sequence > :sequence
+                ORDER BY event.sequence
+                LIMIT :fetch_limit
+            """),
+            {"user_id": user_id, "sequence": sequence, "fetch_limit": limit + 1},
+        )
+        rows = result.mappings().all()
+        events = [dict(row) for row in rows[:limit]]
+        next_sequence = events[-1]["sequence"] if events else str(sequence)
         return {
-            "items": [],
-            "next_cursor": None,
-            "has_more": False
+            "events": events,
+            "next_cursor": _encode_sync_cursor(user_id, next_sequence, secret),
+            "has_more": len(rows) > limit,
         }
 
 # 2. 鍮꾨룞湲?PostgreSQL DB ?곕룞 硫붿꽌??
@@ -569,6 +612,7 @@ class PostgresRepository:
 
         try:
             async with session.begin():
+                await lock_owner_sync(session, user_id)
                 if idempotency_key:
                     existing = await self.get_idempotency(
                         db=session,
@@ -719,21 +763,7 @@ class PostgresRepository:
                 )
 
                 # ?숆린???대깽?몃뒗 DB ?⑥닔濡??앹꽦
-                await session.execute(
-                    text("""
-                        SELECT public.append_sync_event(
-                            :user_id,
-                            'content',
-                            :content_id,
-                            'upsert',
-                            :content_id
-                        )
-                    """),
-                    {
-                        "user_id": user_id,
-                        "content_id": content_id,
-                    },
-                )
+                await append_sync_event(session, user_id, "content", content_id)
 
                 response_body = {
                     "id": str(content_id),
@@ -917,11 +947,11 @@ class PostgresRepository:
         cursor_created_at = None
         cursor_id = None
 
-        if cursor:
+        if cursor is not None:
             try:
                 padded = cursor.encode() + b"=" * (-len(cursor) % 4)
                 decoded = json.loads(
-                    base64.urlsafe_b64decode(padded).decode()
+                    base64.b64decode(padded, altchars=b"-_", validate=True)
                 )
 
                 if decoded["user_id"] != str(user_id):
@@ -930,6 +960,8 @@ class PostgresRepository:
                 cursor_created_at = datetime.fromisoformat(
                     decoded["last_created_at"]
                 )
+                if cursor_created_at.utcoffset() is None:
+                    raise ValueError("Cursor timestamp has no time zone")
                 cursor_id = str(UUID(decoded["last_id"]))
 
             except (ValueError, TypeError, KeyError, UnicodeDecodeError):
@@ -1114,6 +1146,7 @@ class PostgresRepository:
         fields = value.model_fields_set
 
         async with db.begin():
+            await lock_owner_sync(db, user_id)
             await db.execute(
                 text("""
                     INSERT INTO public.preferences (
@@ -1212,6 +1245,7 @@ class PostgresRepository:
                 {"user_id": str(user_id)},
             )
 
+            await append_sync_event(db, user_id, "preferences", user_id)
             return dict(updated.mappings().one())
 
     async def patch_content(
@@ -1224,6 +1258,7 @@ class PostgresRepository:
         fields = value.model_fields_set
 
         async with db.begin():
+            await lock_owner_sync(db, user_id)
             result = await db.execute(
                 text("""
                     SELECT version
@@ -1285,32 +1320,12 @@ class PostgresRepository:
                 },
             )
 
-            updated = await db.execute(
-                text("""
-                    SELECT
-                        id::text AS id,
-                        user_id::text AS user_id,
-                        input_type,
-                        source_text,
-                        source_url,
-                        title,
-                        user_note,
-                        analysis_status,
-                        workflow_status,
-                        version,
-                        created_at,
-                        updated_at
-                    FROM public.contents
-                    WHERE id = CAST(:content_id AS uuid)
-                      AND user_id = CAST(:user_id AS uuid)
-                """),
-                {
-                    "content_id": str(content_id),
-                    "user_id": str(user_id),
-                },
-            )
+            await append_sync_event(db, user_id, "content", content_id)
+            updated = await self.get_content(db, content_id, user_id)
+            if updated is None:
+                raise ApiError(503, "database_unavailable", "Content state is incomplete")
+            return updated
 
-            return dict(updated.mappings().one())
     async def patch_recommendation(
         self,
         db: AsyncSession,
@@ -1321,6 +1336,7 @@ class PostgresRepository:
         fields = value.model_fields_set
 
         async with db.begin():
+            await lock_owner_sync(db, user_id)
             target = await db.execute(
                 text("""
                     SELECT content_id::text AS content_id
@@ -1471,22 +1487,7 @@ class PostgresRepository:
                     },
                 )
 
-            await db.execute(
-                text("""
-                    SELECT public.append_sync_event(
-                        CAST(:user_id AS uuid),
-                        'recommendation',
-                        CAST(:recommendation_id AS uuid),
-                        'upsert',
-                        CAST(:content_id AS uuid)
-                    )
-                """),
-                {
-                    "user_id": str(user_id),
-                    "recommendation_id": str(recommendation_id),
-                    "content_id": content_id,
-                },
-            )
+            await append_sync_event(db, user_id, "recommendation", recommendation_id, content_id)
 
             updated = await db.execute(
                 text("""
@@ -1941,6 +1942,7 @@ class FixtureRepository:
                     updated.append(rec_data)
                 content["recommendations"] = updated
 
+            content["version"] += 1
             content["updated_at"] = self._now()
             self._record_sync("content", content["id"], content["id"])
             return content

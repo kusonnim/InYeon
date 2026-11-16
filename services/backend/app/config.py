@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Supabase project configuration
     supabase_url: str = ""
     supabase_publishable_key: str = Field(default="")
+    supabase_service_role_key: SecretStr = SecretStr("")
 
     # JWT configuration
     supabase_jwks_url: str = Field(
@@ -58,9 +59,10 @@ class Settings(BaseSettings):
             "ITDA_SUPABASE_JWT_SECRET",
         ),
     )
+    sync_cursor_secret: SecretStr = SecretStr("")
 
     # Other services
-    llm_api_key: str = ""
+    llm_api_key: SecretStr = SecretStr("")
     fcm_credentials_path: str = ""
 
     @model_validator(mode="after")

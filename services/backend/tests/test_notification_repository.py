@@ -111,7 +111,7 @@ def test_idempotency_replay_returns_saved_response(monkeypatch):
     )
 
     assert result == expected
-    assert session.calls == []
+    assert len(session.calls) == 1 and "lock_sync_head" in session.calls[0][0]
 
 
 def test_idempotency_key_with_different_request_conflicts(monkeypatch):
@@ -139,7 +139,7 @@ def test_idempotency_key_with_different_request_conflicts(monkeypatch):
 
     assert exc.value.status == 409
     assert exc.value.body["error"]["code"] == "idempotency_conflict"
-    assert session.calls == []
+    assert len(session.calls) == 1 and "lock_sync_head" in session.calls[0][0]
 
 
 def test_postgres_notification_conflict_maps_to_api_error():

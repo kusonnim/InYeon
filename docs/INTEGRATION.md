@@ -13,7 +13,17 @@ user session. The sample library and loopback contract mock use synthetic
 data. Live authentication, transactional persistence, and storage authorization
 require verification against the real adapters.
 
+The [PR17 URL and image audit](LOCAL_INTEGRATION_LAB.md#url-and-private-image-audit)
+uses disposable Supabase Auth, PostgreSQL, and Storage. It checks real URL
+extraction, private image transfers, ownership, and result readback via detail
+and sync. An injected deterministic analyzer exercises the queue and persistence.
+Hosted model acceptance requires approved inference credentials and a separate run.
+
 ## Windows integration setup
+
+Use the [local integration lab](LOCAL_INTEGRATION_LAB.md) for the PowerShell
+launcher, the C1 and disposable Docker profiles, and the local Developer B import
+workflow. The commands below show the underlying I1 harness.
 
 Use PowerShell in separate terminals for API, web, and Android. Install Git,
 Python 3.12 and uv, Node 22.6+ or 24 with npm, Flutter with Dart, a Gradle-compatible

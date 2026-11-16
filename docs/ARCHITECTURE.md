@@ -2,9 +2,9 @@
 
 ## Status and components
 
-The product flow below is the **target design**. Phase 0 supplies contracts,
-migrations, fixture adapters, and scaffolds. [STATUS](STATUS.md) records executed
-checks; diagram arrows do not mean integrations are implemented.
+The diagram shows the target product flow. [STATUS](STATUS.md) records
+implemented adapters, local integration results, and the separate deployment and
+device acceptance milestones.
 
 ```mermaid
 flowchart LR
@@ -58,13 +58,14 @@ directory and API realm isolate its test data. Stage and live transports
 require HTTPS and use the existing session client.
 [Android staging decision](decisions/0007-android-staging-environment.md)
 
-For images/documents, use the upload contract in OpenAPI: authenticated initiation,
-server-selected owner-prefixed object path and expiring upload capability, upload,
-then authenticated completion with server-side object verification. Only completed,
-owned assets can be attached. No public bucket or permanent public URL. The adapter
-must verify actual size, MIME signature, and checksum, and reject replaced, missing,
-cross-owner or already-bound assets as specified. Expiring authenticated read
-capabilities are issued only after an ownership check. Treat capability URLs as secrets.
+For images and documents, the upload contract starts with authenticated
+reservation. FastAPI selects the owner-prefixed object path and issues a
+path-scoped Supabase PUT capability with overwrite disabled. The replay record
+for the reservation is server-only. Completion verifies the private object's
+actual size, media type, and SHA-256. Image verification includes decoding.
+The content transaction attaches ready assets owned by the caller once.
+Owner-checked download URLs expire within 60 seconds. Keep capability URLs out
+of logs, content, and sync events.
 
 One server transaction must commit the content, asset relationships, initial
 notification state, analysis job, sync event, and idempotency receipt. A response
@@ -106,8 +107,8 @@ operation**. Never trust a request's owner field or allow an arbitrary object pa
 Supabase access tokens require signature, issuer, audience, expiry, and subject
 validation. The server derives the owner from the verified subject. Missing/invalid
 credentials are unauthorized; cross-owner identifiers are not found to avoid
-enumeration. Phase 0 fixture tokens are local demo tokens only. The production
-scaffold fails closed until the real adapter is implemented.
+enumeration. Production verifies the configured Supabase signing realm before
+any owner-scoped PostgreSQL access. Fixture tokens are local demo identities.
 
 ## Analysis pipeline and jobs
 
@@ -118,17 +119,28 @@ Persist failures/limitations and retain originals. Provider output is untrusted:
 validate schemas and source references before saving, and never execute source text
 as instructions, code, or automatic user actions.
 
-The planned PostgreSQL worker claims jobs using leases and `FOR UPDATE SKIP LOCKED`,
-commits the claim, performs slow inference outside the transaction, then commits
-results with a lease/attempt guard. Retries must not duplicate generated rows or
-notify twice. Exponential backoff, finite retry budgets, stale-lease recovery, and
-operational monitoring are future work. Failure is a terminal analysis outcome
-until an explicit retry policy acts; it does not change workflow or visibility.
+The PostgreSQL worker acquires the owner sync lock before row locks and claims
+jobs with `FOR UPDATE SKIP LOCKED`. Analysis runs after the claim commits. The
+result transaction checks the owner lock, worker, attempt and lease expiry.
+Status changes and their sync events commit together. A published result or
+terminal failure advances the content version. The worker currently
+allows three attempts with a 30-second retry delay and recovers 10-minute-old
+leases. Workflow and notification state remain independent of analysis.
 
-Before URL fetching, the real extractor must enforce network restrictions against
-SSRF (including redirects/private addresses), byte/time limits, content-type checks,
-and safe document handling. These defenses are prerequisites for live extraction,
-not capabilities claimed by Phase 0.
+URL jobs resolve each destination and connect directly to a vetted public
+address with the original HTTP authority and TLS name. Redirects are checked
+before connecting. The fetch uses standard web ports, honors the site's
+robots rules and access restrictions, and bounds time and response bytes.
+The parser extracts accessible title and body text. The worker passes that
+text as untrusted data to the supplied-text analyzer and keeps the saved URL and
+caption as the original source.
+
+Image jobs look up ready assets by both content and owner. The worker reads
+and verifies the private objects before passing image bytes to the configured
+vision analyzer. Request-size or frame limitations are recorded in the
+analysis. Generated results use the existing summary and recommendation
+categories. Missing access or analyzer credentials produce an explicit
+limitation, and terminal failure preserves the original and user edits.
 
 ## Versions and synchronization
 
@@ -141,9 +153,10 @@ List and sync endpoints use opaque bounded cursors, specified in OpenAPI. Never
 derive order from client clocks. The DB design allocates per-owner sync sequences
 under an owner-row lock in the same mutation transaction: bare global bigserial
 values can commit out of order and skip events. Persist cursor advancement with
-the complete received page. The real adapter must expose retained events from a
-cursorless start and return HTTP 400 `invalid_cursor` for invalid or expired
-cursors. FCM can signal that authoritative state should be fetched.
+the complete received page. The production sync adapter signs each account
+checkpoint and returns retained events from a cursorless start. Invalid
+checkpoints return HTTP 400 `invalid_cursor`. FCM can signal that authoritative
+state should be fetched.
 
 Phase A5 stores content, preferences, tombstones and the sync checkpoint in
 SQLite per API realm and authenticated user. The worker applies each feed page

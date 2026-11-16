@@ -24,18 +24,15 @@ uv run pytest
 uv run python -m app.contract_tools --check
 ```
 
-Copy `.env.example` to `.env` if configuring local mode. The safe default is
-`ITDA_MODE=production`: health works, but data integrations are not implemented and
-fail closed. For a disposable local fixture API, set `ITDA_MODE=fixture` and keep
-`ITDA_ENVIRONMENT=local`. Fixture bearer tokens are `fixture-user-a` and
-`fixture-user-b`. They are synthetic test identities, not Supabase authentication.
-Bind only to loopback. Restart clears in-memory changes; it is not durable storage.
-Never deploy fixture mode or use real private content in it.
+The default production mode uses PostgreSQL and verifies Supabase access
+tokens. See the [backend settings](../services/backend/README.md#run-locally) and
+the [Windows lab profiles](LOCAL_INTEGRATION_LAB.md) to configure the disposable
+or approved integration realm. Store server secrets in the process environment
+or an ignored local `.env`.
 
-The module README explains worker invocation. Real Supabase URL, privileged server
-credential, LLM API key and FCM credential path are placeholders for future adapters.
-Their presence does not implement those integrations. Store secrets in local `.env`
-or deployment secret management, never client bundles or committed files.
+Use `ITDA_MODE=fixture` and `ITDA_ENVIRONMENT=local` for a loopback-only demo
+with the synthetic tokens `fixture-user-a` and `fixture-user-b`. Restart
+clears fixture changes.
 
 ## Web
 
@@ -48,12 +45,10 @@ npm test
 npm run build
 ```
 
-Open `http://localhost:3000`. Fixture mode renders the shared synthetic catalog;
-see `apps/web/.env.example` and README for the mode switch and server-only API
-configuration. Do not add a service key to a `NEXT_PUBLIC_` variable. Real user
-session plumbing remains work; use the API adapter only once authentication is wired.
-The preview routes are a library and `/contents/<uuid>` detail view. No desktop
-notification permission is required.
+Open `http://localhost:3000`. Fixture mode renders the shared synthetic catalog.
+See the [Web README](../apps/web/README.md) for the mode switch and the Supabase
+session and server API settings. Use only the publishable key in the Web client.
+The preview serves the library and `/contents/<uuid>` details.
 
 Web scripts use Next.js's Webpack option because the default Turbopack CSS worker
 could not start on the authoring Windows host. Typecheck explicitly generates route

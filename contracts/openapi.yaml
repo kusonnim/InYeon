@@ -3,8 +3,8 @@ info:
   title: ITDA API
   description: Phase 0 reviewed API contract. Bearer authentication required on all
     /v1 routes. UTC ISO 8601 timestamps, UUID identifiers, snake_case JSON. Structured
-    errors never include source text or credentials. Production data adapters remain
-    unimplemented; local fixture mode is volatile and must not be deployed.
+    errors never include source text or credentials. Production content and sync use
+    PostgreSQL. Local fixture mode is volatile and must not be deployed.
   version: 0.1.0
 paths:
   /health:
@@ -12,7 +12,8 @@ paths:
       tags:
       - operations
       summary: Health
-      description: Process health only; not database, worker or deployment readiness.
+      description: Reports process health and the configured persistence adapter.
+        Use an authenticated API request to verify database connectivity.
       operationId: health
       responses:
         '200':
@@ -1007,8 +1008,8 @@ paths:
         never accept client paths or user IDs. Signed upload capability currently
         has Supabase's 2-hour lifetime; expiry is explicit. Allow JPEG/PNG/WebP/PDF/plain
         text, <=20 MiB. Do not log capability URLs. Replays return same reservation
-        while live; expired reservation ->409 upload_expired, use a new key. Phase
-        0 returns 501; no fake upload URL.
+        while live; expired reservation ->409 upload_expired, use a new key. The fixture
+        adapter returns 501. Private Storage configuration failures return 503.
       operationId: createAssetUpload
       security:
       - BearerAuth: []
@@ -1101,9 +1102,9 @@ paths:
       description: Owner-only verification of the exact reserved object's existence,
         actual bytes, signature/media type, size and SHA-256; reject mismatch. Mark
         ready only after server verification. Idempotent completion before content
-        ingestion. Unclaimed uploads expire and are garbage-collected by a planned
-        service job. Attach each ready asset once to owned content in its ingestion
-        transaction.
+        ingestion. A missing upload returns 409 upload_incomplete. Unclaimed uploads
+        expire and are garbage-collected by a planned service job. Attach each ready
+        asset once to owned content in its ingestion transaction.
       operationId: completeAssetUpload
       security:
       - BearerAuth: []
@@ -1197,7 +1198,7 @@ paths:
       description: 'Owner-only short-lived (at most 60 seconds) signed GET for a verified
         ready asset. Objects and bucket remain private. Bearer capability URL must
         never be stored in source_url, sync events, analytics, or logs. Set Cache-Control:
-        no-store. Phase 0 returns 501.'
+        no-store. The fixture adapter returns 501.'
       operationId: getAssetDownloadUrl
       security:
       - BearerAuth: []
@@ -1755,6 +1756,7 @@ components:
           enum:
           - unconfigured
           - volatile-memory
+          - postgresql
           title: Persistence
       additionalProperties: false
       type: object
