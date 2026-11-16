@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +12,7 @@ import '../tray/pebble_tray.dart';
 import '../widgets/itda_theme.dart';
 import '../widgets/library_components.dart';
 import '../widgets/registered_content_screen.dart';
+import '../widgets/saved_content_row.dart';
 import 'account_screen.dart';
 import 'library_collection.dart';
 import 'library_controller.dart';
@@ -20,6 +20,8 @@ import 'local_content_screen.dart';
 import 'sample_library_screen.dart';
 import 'sign_in_screen.dart';
 import 'workflow_edit.dart';
+
+enum _Destination { home, library, account }
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
@@ -38,12 +40,36 @@ class LibraryScreen extends StatefulWidget {
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
+
 class _LibraryScreenState extends State<LibraryScreen> {
   final _archiveDock = GlobalKey();
   final _archiveRequests = <(AccountScope, String)>{};
+  final _searchFocus = FocusNode(debugLabel: 'Saved items search');
+  _Destination _destination = _Destination.home;
   bool _archiveHover = false;
 
   LibraryController get controller => widget.controller;
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _selectDestination(_Destination destination) {
+    if (destination == _destination) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _destination = destination);
+  }
+
+  void _openSearch() {
+    _selectDestination(_Destination.library);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _destination == _Destination.library) {
+        _searchFocus.requestFocus();
+      }
+    });
+  }
 
   Future<void> _refresh() async {
     unawaited(_refreshNotifications());
@@ -66,40 +92,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  void _openAccount({bool replace = false}) {
-    final route = MaterialPageRoute<void>(
-      builder: (_) => AccountScreen(
-        controller: controller,
-        notifications: widget.notifications,
-        changeLanguage: widget.changeLanguage,
-        openSamples: _openSamples,
-      ),
-    );
-    final navigator = Navigator.of(context);
-    if (replace) {
-      navigator.pushReplacement<void, void>(route);
-    } else {
-      navigator.push<void>(route);
-    }
-  }
-
   void _openSignIn() {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => SignInScreen(
           controller: controller,
-          openAccountSettings: () => _openAccount(replace: true),
+          openAccountSettings: () {
+            Navigator.of(context).pop();
+            _selectDestination(_Destination.account);
+          },
         ),
       ),
     );
   }
 
-  void _openCollection({required bool archived}) {
+  void _openArchive() {
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => LibraryCollection(
           controller: controller,
-          archived: archived,
+          archived: true,
           refresh: _refresh,
           openEntry: _openEntry,
         ),
@@ -126,28 +139,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ? _pebbleDetailRoute(builder, reduceMotion: reduceMotion)
         : MaterialPageRoute<void>(builder: builder);
 
-    if (id != null && owner != null && bridge != null) {
-      return () => navigator.push<void>(
-            detailRoute(
-              (_) => RegisteredContentScreen(
-                bridge: bridge,
-                target: NoticeTarget(owner.ownerId, owner.realm, id),
-                library: controller,
-                initialContent: entry.remote,
-                initialMode: mode,
-                openOriginal: local == null
-                    ? null
-                    : () => navigator.push<void>(
-                        MaterialPageRoute(builder: localDetail),
-                      ),
-                onChanged: (item) => controller.updateItem(owner, item),
-              ),
-            ),
-          );
+    void openDetail(WidgetBuilder builder) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      unawaited(navigator.push<void>(detailRoute(builder)));
     }
-    return local?.inputType == null
-        ? null
-        : () => navigator.push<void>(detailRoute(localDetail));
+
+    if (id != null && owner != null && bridge != null) {
+      return () => openDetail(
+        (_) => RegisteredContentScreen(
+          bridge: bridge,
+          target: NoticeTarget(owner.ownerId, owner.realm, id),
+          library: controller,
+          initialContent: entry.remote,
+          initialMode: mode,
+          openOriginal: local == null
+              ? null
+              : () => navigator.push<void>(
+                  MaterialPageRoute(builder: localDetail),
+                ),
+          onChanged: (item) => controller.updateItem(owner, item),
+        ),
+      );
+    }
+    return local?.inputType == null ? null : () => openDetail(localDetail);
   }
 
   LibraryEntry? _activeEntry(String id) => controller.entries
@@ -173,8 +187,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _showStatus(String message) => ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
 
   Future<void> _archive(String id) async {
     final entry = _activeEntry(id);
@@ -223,152 +237,377 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final destinations = [
+      _home(context),
+      LibraryCollection(
+        controller: controller,
+        archived: false,
+        refresh: _refresh,
+        openEntry: _openEntry,
+        openArchive: _openArchive,
+        searchFocus: _searchFocus,
+      ),
+      AccountScreen(
+        controller: controller,
+        notifications: widget.notifications,
+        changeLanguage: widget.changeLanguage,
+        openSamples: _openSamples,
+      ),
+    ];
+    final index = _destination.index;
+    return PopScope<void>(
+      canPop: _destination == _Destination.home,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _selectDestination(_Destination.home);
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: index,
+          sizing: StackFit.expand,
+          children: [
+            for (final (i, page) in destinations.indexed)
+              TickerMode(
+                enabled: i == index,
+                child: ExcludeFocus(excluding: i != index, child: page),
+              ),
+          ],
+        ),
+        bottomNavigationBar: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: colors.outlineVariant)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: NavigationBar(
+              selectedIndex: index,
+              onDestinationSelected: (index) =>
+                  _selectDestination(_Destination.values[index]),
+              maintainBottomViewPadding: true,
+              animationDuration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 180),
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Icons.home_outlined),
+                  selectedIcon: const Icon(Icons.home_rounded),
+                  label: copy.homeDestination,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.bookmarks_outlined),
+                  selectedIcon: const Icon(Icons.bookmarks_rounded),
+                  label: copy.libraryDestination,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.person_outline_rounded),
+                  selectedIcon: const Icon(Icons.person_rounded),
+                  label: copy.accountDestination,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _home(BuildContext context) {
+    final copy = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final header = ItdaPalette.homeHeader(theme.brightness);
+    final viewport = MediaQuery.sizeOf(context);
+    // Keep the canvas size stable while the Library keyboard is open.
+    final trayHeight = (viewport.height * .28).clamp(
+      viewport.width < 360 ? 244.0 : 232.0,
+      252.0,
+    );
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
         final mode = controller.inbox?.mode ?? UploadMode.disabled;
-        final signedOut =
-            mode != UploadMode.disabled && controller.scope == null;
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        final actionTextSize = theme.textTheme.labelLarge!.fontSize!;
-        final entries = controller.entries
-            .where((entry) => !entry.archived)
-            .toList();
-        final pebbles = entries.where((entry) => entry.type != null).toList()
-          ..sort((a, b) {
-            final order = b.pebbleSavedAt.compareTo(a.pebbleSavedAt);
-            return order == 0 ? b.pebbleId.compareTo(a.pebbleId) : order;
-          });
+        final environment = uploadEnvironmentLabel(copy, mode);
+        final entries =
+            controller.entries
+                .where((entry) => !entry.archived && entry.type != null)
+                .toList()
+              ..sort((a, b) {
+                final order = b.pebbleSavedAt.compareTo(a.pebbleSavedAt);
+                return order == 0 ? b.pebbleId.compareTo(a.pebbleId) : order;
+              });
         return Scaffold(
+          backgroundColor: colors.surface,
           appBar: AppBar(
-            title: FittedBox(
-              alignment: AlignmentDirectional.centerStart,
-              fit: BoxFit.scaleDown,
-              child: Text(
-                '잇다',
-                semanticsLabel: copy.localeName == 'ko' ? null : copy.appName,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontSize: 26,
-                  letterSpacing: -.6,
+            backgroundColor: header,
+            foregroundColor: Colors.white,
+            titleSpacing: 0,
+            toolbarHeight: itdaToolbarHeight(context, titleSize: 30),
+            systemOverlayStyle: const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
+            ),
+            title: PageWidth(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: ItdaSpace.page),
+                child: Row(
+                  children: [
+                    Text(
+                      '잇다',
+                      semanticsLabel: copy.localeName == 'ko'
+                          ? null
+                          : copy.appName,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontSize: 30,
+                        letterSpacing: -.6,
+                      ),
+                    ),
+                    if (environment != null) ...[
+                      const SizedBox(width: ItdaSpace.medium),
+                      Expanded(
+                        child: Text(
+                          environment,
+                          textAlign: TextAlign.end,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
-            toolbarHeight: math.max(
-              kToolbarHeight,
-              MediaQuery.textScalerOf(context).scale(actionTextSize) * 2.4 +
-                  ItdaSpace.large,
-            ),
-            actions: [
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: screenWidth * .40),
-                child: TextButton(
-                  onPressed: () => _openCollection(archived: false),
-                  child: Text(copy.allSaved, textAlign: TextAlign.center),
+          ),
+          body: SingleChildScrollView(
+            primary: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _homeSearch(context, header),
+                _homeTray(context, entries, mode, height: trayHeight),
+                PageWidth(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      ItdaSpace.page,
+                      ItdaSpace.small,
+                      ItdaSpace.page,
+                      ItdaSpace.section,
+                    ),
+                    child: _recentSaves(context, entries.take(3), mode),
+                  ),
                 ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _homeSearch(BuildContext context, Color header) {
+    final copy = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return ColoredBox(
+      color: header,
+      child: PageWidth(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            ItdaSpace.page,
+            ItdaSpace.tiny,
+            ItdaSpace.page,
+            ItdaSpace.large,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                backgroundColor: ItdaPalette.homeSearch(theme.brightness),
+                foregroundColor: colors.onSurfaceVariant,
+                overlayColor: colors.primary,
+                alignment: AlignmentDirectional.centerStart,
+                minimumSize: const Size(ItdaSpace.touchTarget, 52),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: ItdaSpace.large,
+                  vertical: ItdaSpace.medium,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(ItdaSpace.medium),
+                ),
+                side: theme.brightness == Brightness.dark
+                    ? BorderSide(color: colors.primary)
+                    : null,
+                textStyle: theme.textTheme.bodyLarge,
+              ),
+              onPressed: _openSearch,
+              icon: Icon(
+                Icons.search_rounded,
+                color: colors.onPrimaryContainer,
+              ),
+              label: Text(copy.searchSaved),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _homeTray(
+    BuildContext context,
+    Iterable<LibraryEntry> entries,
+    UploadMode mode, {
+    required double height,
+  }) {
+    final copy = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final signedOut = mode != UploadMode.disabled && controller.scope == null;
+    return ColoredBox(
+      color: ItdaPalette.traySurface(theme.brightness),
+      child: PageWidth(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: ItdaSpace.page),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LibraryStatus(
+                controller: controller,
+                refresh: _refresh,
+                showEnvironment: false,
               ),
               if (signedOut)
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: screenWidth * .32),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
                   child: TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.onPrimaryContainer,
+                    ),
                     onPressed: _openSignIn,
-                    child: Text(copy.signIn, textAlign: TextAlign.center),
+                    child: Text(copy.signIn),
                   ),
-                )
-              else
-                IconButton(
-                  tooltip: copy.account,
-                  onPressed: _openAccount,
-                  icon: const Icon(Icons.person_outline_rounded),
                 ),
-              const SizedBox(width: ItdaSpace.small),
+              SizedBox(
+                height: height,
+                child: PebbleTray(
+                  scope: (controller.scope, mode),
+                  items: [
+                    for (final entry in entries.take(10))
+                      (
+                        id: entry.pebbleId,
+                        title: entryTitle(copy, entry),
+                        canArchive:
+                            entry.remote != null &&
+                            controller.scope != null &&
+                            widget.notifications != null,
+                      ),
+                  ],
+                  onOpen: _openPebble,
+                  isOverArchive: _overArchiveDock,
+                  onArchiveHover: (value) =>
+                      setState(() => _archiveHover = value),
+                  onArchive: _archive,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  ItdaSpace.tiny,
+                  0,
+                  ItdaSpace.medium,
+                ),
+                child: Center(
+                  child: OutlinedButton.icon(
+                    key: _archiveDock,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: _archiveHover
+                          ? colors.primary
+                          : colors.surface,
+                      foregroundColor: _archiveHover
+                          ? colors.onPrimary
+                          : colors.onPrimaryContainer,
+                      minimumSize: const Size(128, ItdaSpace.touchTarget),
+                      side: BorderSide(color: colors.primary),
+                    ),
+                    onPressed: _openArchive,
+                    icon: const Icon(Icons.archive_outlined, size: 19),
+                    label: Text(copy.archiveTitle),
+                  ),
+                ),
+              ),
             ],
           ),
-          body: PageWidth(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: ItdaSpace.page),
-              child: Column(
+        ),
+      ),
+    );
+  }
+
+  Widget _recentSaves(
+    BuildContext context,
+    Iterable<LibraryEntry> entries,
+    UploadMode mode,
+  ) {
+    final copy = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Row(
                 children: [
-                  Expanded(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        PebbleTray(
-                          scope: (controller.scope, mode),
-                          items: [
-                            for (final entry in pebbles.take(10))
-                              (
-                                id: entry.pebbleId,
-                                title: entryTitle(copy, entry),
-                                canArchive:
-                                    entry.remote != null &&
-                                    controller.scope != null &&
-                                    widget.notifications != null,
-                              ),
-                          ],
-                          onOpen: _openPebble,
-                          isOverArchive: _overArchiveDock,
-                          onArchiveHover: (value) =>
-                              setState(() => _archiveHover = value),
-                          onArchive: _archive,
-                        ),
-                        if (entries.isEmpty &&
-                            !controller.loadingCatalog &&
-                            controller.inbox != null &&
-                            controller.catalogIssue == null)
-                          Center(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: [
-                                  Text(
-                                    copy.emptyLibrary,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  if (mode == UploadMode.disabled)
-                                    TextButton(
-                                      onPressed: _openSamples,
-                                      child: Text(copy.sampleLibraryAction),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: LibraryStatus(
-                            controller: controller,
-                            refresh: _refresh,
-                          ),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(
+                    width: 3,
+                    height: 18,
+                    child: ColoredBox(color: ItdaPalette.brightBlue),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      top: ItdaSpace.small,
-                      bottom: ItdaSpace.medium,
-                    ),
-                    child: TextButton.icon(
-                      key: _archiveDock,
-                      style: TextButton.styleFrom(
-                        backgroundColor: _archiveHover
-                            ? theme.colorScheme.primaryContainer
-                            : theme.colorScheme.surfaceContainerHighest,
-                        minimumSize: const Size(128, ItdaSpace.touchTarget),
+                  const SizedBox(width: ItdaSpace.small),
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        copy.recentSaved,
+                        style: theme.textTheme.titleMedium,
                       ),
-                      onPressed: () => _openCollection(archived: true),
-                      icon: const Icon(Icons.archive_outlined, size: 19),
-                      label: Text(copy.archiveTitle),
                     ),
                   ),
                 ],
               ),
             ),
+            TextButton.icon(
+              iconAlignment: IconAlignment.end,
+              onPressed: () => _selectDestination(_Destination.library),
+              icon: const Icon(Icons.chevron_right, size: 18),
+              label: Text(copy.viewAllSaved),
+            ),
+          ],
+        ),
+        if (entries.isEmpty &&
+            controller.inbox != null &&
+            !controller.loadingCatalog &&
+            controller.catalogIssue == null) ...[
+          Text(copy.emptyLibrary, style: theme.textTheme.bodySmall),
+          if (mode == UploadMode.disabled)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: _openSamples,
+                child: Text(copy.sampleLibraryAction),
+              ),
+            ),
+        ],
+        for (final entry in entries) ...[
+          const Divider(height: 1),
+          SavedContentRow(
+            key: ValueKey(('recent', entry.pebbleId)),
+            entry: entry,
+            mode: mode,
+            onOpen: _openEntry(context, entry, mode),
           ),
-        );
-      },
+        ],
+      ],
     );
   }
 }

@@ -1,19 +1,23 @@
 # Implementation status
 
-Last updated 2026-11-12 (Asia/Seoul). **Integration I1 and C1 hosted Supabase verification.**
+Last updated 2026-11-16 (Asia/Seoul). **A7.5.2 and PR #17 follow-up integration.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
 and library checkpoints retain their account and realm scope. I1 ran the fixture
 HTTP smoke and checked both migrations on a disposable local Supabase stack.
-C1 provisioned a shared Seoul Supabase project and verified real-identity RLS
-through Auth and PostgREST. Private object transfers, authenticated B API
-integration, Web/Android consistency and FCM remain integration work.
+The integrated API verifies Supabase JWTs, persists content and sync in
+PostgreSQL, and uses private Supabase Storage for verified asset transfers. The
+worker processes saved text, accessible public URL text and verified images
+asynchronously. The hosted C1 and cross-client acceptance runs are separate
+milestones.
 
-Android home presents saved items as rigid matte triangles and circles with
-stable identity assignment. The home app bar shows the **잇다** wordmark.
-**All saved** and **Archive** use plain, searchable rows with pagination.
-Repeated links in **All saved** can expand to their individual saves.
+Android A7.5.2 opens to Home with blue branding, the **잇다** wordmark, and
+a matte pebble palette with paired light and dark colors. Home shows the
+rigid pebble tray and recent saves. Bottom navigation opens Home, Library and
+Account. Home search opens the existing Library search. **All saved** and
+**Archive** use searchable rows with pagination. Repeated links in **All saved**
+can expand to their individual saves.
 Pending and completed items can move directly to the archive through a
 versioned workflow update. Explicit restoration returns them to pending.
 The [mobile design draft](DESIGN.md) guides the Korean and English interfaces.
@@ -35,18 +39,41 @@ details can focus the corresponding field in the versioned editor.
 | Area | Implemented now | Explicitly incomplete |
 | --- | --- | --- |
 | Onboarding | Root AGENTS, product/architecture/development/ownership/integration docs, ADRs | Evolving decisions require future updates |
-| API contract | Versioned OpenAPI, UUID/UTC/bearer conventions, errors, version conflicts, idempotency, cursor sync, private asset lifecycle | Real HTTP authentication, storage and persistence adapters |
-| Backend | FastAPI health/router/model/config structure, fail-closed production mode, explicit in-memory fixture adapter | Persistent ingestion, Supabase JWT, uploads, real worker operations |
-| Worker | Separate extraction/summarization/recommendation/persistence interfaces; standalone supplied-text provider helper from PR #11 | Runnable PostgreSQL claim/lease/retry consumer, bounded source fetching, provider/contract mapping, guarded result transactions |
-| Data | Both migrations applied to hosted PostgreSQL 17.11, two real password accounts, 86 grouped Auth/RLS checks, private bucket configuration. Earlier local Supabase pgTAP 33 checks and lint passed | Private object bytes and B's persistent API integration |
+| API contract | Versioned OpenAPI, full Content PATCH responses, structured errors, versions, idempotency, owner-scoped cursors and private asset lifecycle | Shared sync and idempotency retention policies |
+| Backend | Supabase JWT verification, owner-scoped PostgreSQL repository, transactional receipts, notification mutations, sync, private upload verification and signed download | Authenticated deployed API and Storage against C1 |
+| Worker | PostgreSQL job leases and retries, guarded result persistence, public URL extraction, and hosted text and verified-image adapters | Successful hosted inference, document extraction and FCM delivery |
+| Data | Both migrations and 33 pgTAP checks on disposable Supabase, two real local Auth subjects and private object transfer. Separate hosted C1 Auth/RLS evidence below | C1 private object lifecycle |
 | Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview, rigid pebble tray and versioned workflow | Two-account live API/RLS verification, server-only private image download, FCM delivery |
+| Mobile | A7.5.2 Home, Library and Account, offline receipt, account-bound WorkManager outboxes, Supabase session client, native notifications, versioned editor, durable sync, isolated staging build, and Korean and English UI | Authenticated Android/Web convergence, remote private image opening and FCM delivery |
 | Integration | Windows runbook, redacted preflight, two-account API smoke with optional operator-managed restart, deterministic analysis and Web rendering tests | Execution against the approved staging tuple with two disposable accounts |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
 
 ## Verification evidence
+
+### Final MVP integration
+
+Verified the combined A7.5.2 and backend changes from main at `01e5131`.
+Local checks used Python 3.12.14, Node 24.15.0, Flutter 3.47.8, Android API 35,
+and disposable Supabase PostgreSQL 17.6, GoTrue v2.197.0 and Storage v1.77.0.
+
+| Check | Outcome |
+| --- | --- |
+| Backend and contracts | **PASS.** 47 Python tests, including URL fetch restrictions and image input checks. OpenAPI runtime parity, 11 example payloads and SQL mapping for nine models and 12 tables passed. |
+| I1 and identity verifier regressions | **PASS.** 20 tests across the I1 harness and C1 verifier unit suites. The fixture HTTP smoke covered creation, replay, edit, sync and account isolation. |
+| Deterministic analysis | **PASS.** Four analysis cases covered recommendations, zero recommendations, partial coverage and failure with the original retained. |
+| Authenticated HTTP and private Storage | **PASS.** 12 production-route tests with real local JWTs, PostgreSQL and private Storage. They exercised full PATCH responses, concurrent replay, account-bound cursors, ownership, bounded URL extraction, and verified PNG, JPEG and WebP transfers. The worker used deterministic analyzers. |
+| Database and restart | **PASS.** Both migrations, all 33 pgTAP assertions and Supabase schema lint passed. PostgREST hid the first account's receipt from the second account. After an API process restart, the edited item, original receipt and old sync checkpoint replayed successfully. |
+| Web | **PASS.** Locked dependency install, typecheck, seven tests, production build and four fixture detail cases, including a failed-analysis case in a disposable catalog. |
+| Android | **PASS.** Locked dependency install, fixture parity, static analysis, 72 Flutter tests and debug APK launch. Native lint reported zero errors and five warnings after reanalysis of the escaped local SDK paths. All 47 instrumentation tests passed on an isolated API 35 emulator. |
+| Hosted model | **NOT TESTED.** The earlier PR #17 handoff recorded HTTP 503 from the hosted Gemini text, URL and image generation calls. This run injected deterministic inference. |
+| Hosted C1 API and Storage | **NOT TESTED.** The current API and byte-transfer audit used a disposable local stack. Historical C1 Auth and RLS evidence follows below. |
+| Authenticated Android/Web end to end, physical-device acceptance and FCM | **NOT TESTED.** Device tests used the isolated debug app and native fixtures. The authenticated HTTP audit exercised the API directly. |
+
+The [local audit runbook](LOCAL_INTEGRATION_LAB.md#url-and-private-image-audit)
+documents the switches for API, Storage and worker verification. The
+[mobile design](DESIGN.md) records the A7.5.2 palette and navigation.
 
 ### C1 hosted Supabase verification
 
@@ -401,16 +428,12 @@ The recordings use deterministic mock results and required no hosted model calls
 
 ### Developer B — Backend and AI
 
-1. Implement verified Supabase JWT authentication and owner-filtered DB repository;
-   retain safe default behavior and two-identity negative tests.
-2. Commit ingestion, asset attachment, job, sync event and idempotency receipt in
-   one transaction. Implement conditional updates and conflict mapping.
-3. Implement private upload completion verification and URL/document extraction
-   defenses before accepting live content. Preserve raw originals on failure.
-   Provide owner-checked private download capabilities and review a way to
-   preserve original share subjects separately from user-edited titles.
-4. Implement PostgreSQL job claims, leases, retries, bounded LLM adapters, validated
-   coverage/results and atomic persistence. Then design durable FCM dispatch with A.
+1. Verify the authenticated API, private Storage and restart persistence against
+   the approved C1 configuration with two disposable accounts.
+2. Evaluate hosted text, public URL and image analysis with approved credentials
+   and quota. Verify source grounding, coverage and result readback.
+3. Define document extraction, abandoned-asset cleanup and operational limits.
+4. Design durable FCM dispatch with A.
 
 ### Developer C — Web and Data
 
@@ -433,13 +456,13 @@ Android/Web sync round trip against the pinned API revision and migrations.
 
 | Decision | Owners | Current boundary / proposed default |
 | --- | --- | --- |
-| Hosted model/provider, cost/latency budget, data retention | B + team | Hosted multimodal API required; provider/model undecided |
+| Hosted model/provider, cost/latency budget, data retention | B + team | Gemini text and vision adapter exists. Production model choice, quota and acceptance are open |
 | Source formats, file quotas, scanning and cleanup | B + C | Contract currently proposes JPEG/PNG/WebP/PDF/text, 20 MiB; bytes verified server-side; no public objects |
 | Job retries/leases and processing SLO | B | PostgreSQL queue chosen; budgets/monitoring undecided |
 | FCM dispatch, device registration/revocation, multi-device delivery | A + B | One automatic eligibility per item; explicit restore only; no device API yet |
 | Sync retention/bootstrap expiry | B + C | Per-owner commit order chosen. Android recovery verified against the mock. Retention policy and live cursor validation remain open |
 | Idempotency retention | A + B + C | Keep receipts for the lifetime of their effect until a safe retention policy is agreed |
-| JWT verification/rotation and auth session UX | A + B + C | Android password and refresh flow tested with a mock; live project and backend JWT validation pending |
+| JWT verification/rotation and auth session UX | A + B + C | Backend verification exercised with local Supabase JWTs. Device session and hosted rotation acceptance remain open |
 | Analysis history and user-edit preservation on rerun | B + C | One current analysis; preserve source/generated/user distinctions; history migration needs review |
 | GitHub rules and deployment environments | Team | PR workflow documented; repository protection/secrets not configured here |
 

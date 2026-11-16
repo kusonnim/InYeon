@@ -3,13 +3,14 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 AnalysisStatus = Literal["pending", "processing", "completed", "partial", "failed"]
 WorkflowStatus = Literal["pending", "completed", "archived"]
 Coverage = Literal["full_text", "partial_text", "metadata_only", "unsupported"]
 RecommendationKind = Literal["action", "information", "resource"]
 Version = Annotated[int, Field(ge=1)]
+MAX_ASSET_BYTES = 20 * 1024 * 1024
 
 
 class Model(BaseModel):
@@ -200,8 +201,15 @@ class SyncPage(Model):
 class AssetUploadCreate(Model):
     filename: str = Field(min_length=1, max_length=255)
     media_type: Literal["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"]
-    size_bytes: int = Field(gt=0, le=20971520)
+    size_bytes: int = Field(gt=0, le=MAX_ASSET_BYTES)
     sha256: str = Field(pattern="^[a-f0-9]{64}$")
+
+    @field_validator("filename")
+    @classmethod
+    def filename_can_be_stored(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("filename contains a null character")
+        return value
 
 
 class AssetUpload(Model):
@@ -228,4 +236,4 @@ class AssetDownload(Model):
 class Health(Model):
     status: Literal["ok"]
     mode: Literal["production", "fixture"]
-    persistence: Literal["unconfigured", "volatile-memory"]
+    persistence: Literal["unconfigured", "volatile-memory", "postgresql"]

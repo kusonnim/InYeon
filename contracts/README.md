@@ -15,15 +15,15 @@
 - List pages sort by `(created_at, id)` descending. Cursors are opaque and owner-bound. Sync sequence is a decimal string and must be processed in owner-scoped commit order; deduplicate replayed sequences. `content_id` resolves changed recommendation/notification aggregates. Delete events retain tombstone identifiers. Production cursor retention and full bootstrap policy need an ADR before deployment.
 - Structured errors use `error.code`, `message`, `request_id` and optional current version/generation/revision. Owned-resource lookups return 404 for another user's IDs. Validation errors do not echo private inputs.
 
-## Private asset flow (contract only)
+## Private asset flow
 
 1. Call `POST /v1/assets/uploads` with filename, media type, byte count and SHA-256. The server selects a new asset UUID and private `content-assets/{user_id}/{asset_id}/source` key. JPEG/PNG/WebP/PDF/plain text are allowed, maximum 20 MiB. Filename never controls object path.
-2. Upload with the returned capability and exact headers. The planned Supabase signed upload capability lasts two hours; upsert is false. Capability URLs are bearer secrets: never log or store in content/source fields.
+2. Upload with the returned capability and exact headers. The Supabase signed upload capability lasts two hours with overwrites disabled. Keep capability URLs out of logs and content fields.
 3. Call `POST /v1/assets/{id}/complete`. Server checks ownership, actual bytes, digest, size and file signature before `ready`. Client-provided metadata alone is insufficient.
 4. Include only owned, ready, unattached `asset_ids` in content creation. Attach atomically with source record/job/notification/sync/receipt. Private objects stay private.
 5. Read through owner-checked `GET /v1/assets/{id}/download-url`, with an at-most-60-second signed URL and `Cache-Control: no-store`. Orphan reservation cleanup is planned.
 
-Asset endpoints currently return 501 in every mode. Storage policy SQL is a foundation, not proof that uploads work end to end. The fixture server intentionally accepts no real files.
+The production API issues capabilities through the configured private Supabase Storage gateway. The fixture API returns 501 for asset routes. See [the local audit](../docs/LOCAL_INTEGRATION_LAB.md#url-and-private-image-audit) for verified transfers and rejection cases.
 
 ## Fixtures
 

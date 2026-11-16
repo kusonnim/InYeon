@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:forge2d/forge2d.dart';
 
+import '../widgets/itda_theme.dart';
+
 /// The painted outline and collision geometry for a stable library identity.
 final class PebbleDesign {
   const PebbleDesign._(this.variant, this.color, {required this.isCircle});
@@ -14,7 +16,7 @@ final class PebbleDesign {
     }
     return PebbleDesign._(
       hash % _corners.length,
-      (hash >> 8) % _light.length,
+      (hash >> 8) % ItdaPalette.pebbleCount,
       isCircle: (hash >> 16) % 10 < 3,
     );
   }
@@ -42,26 +44,6 @@ final class PebbleDesign {
   }
 
   static Path triangleSilhouette(int variant) => _triangles[variant];
-
-  static Color matteColor(Brightness brightness, int index) =>
-      (brightness == Brightness.dark ? _dark : _light)[index];
-
-  static const _light = [
-    Color(0xffc2c8ad),
-    Color(0xffd5b7a4),
-    Color(0xffd8c79e),
-    Color(0xffadbfbc),
-    Color(0xffc6b8c5),
-    Color(0xffb8becb),
-  ];
-  static const _dark = [
-    Color(0xff494f35),
-    Color(0xff574235),
-    Color(0xff62594c),
-    Color(0xff465743),
-    Color(0xff59483d),
-    Color(0xff455360),
-  ];
 
   static const _corners = [
     [Offset(-.028, -.405), Offset(.365, .183), Offset(-.333, .224)],

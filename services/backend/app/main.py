@@ -5,6 +5,7 @@ from app.errors import ApiError, api_error_handler, validation_error_handler
 from app.models import Health
 from app.repository import FixtureRepository
 from app.routers import router as contents_router
+from app.storage import SupabaseStorage
 from contextlib import asynccontextmanager
 from app.database import configure_database, close_database
 
@@ -31,12 +32,13 @@ def create_app(
             "Bearer authentication required on all /v1 routes. "
             "UTC ISO 8601 timestamps, UUID identifiers, snake_case JSON. "
             "Structured errors never include source text or credentials. "
-            "Production data adapters remain unimplemented; "
-            "local fixture mode is volatile and must not be deployed."
+            "Production content and sync use PostgreSQL. "
+            "Local fixture mode is volatile and must not be deployed."
         ),
     )
 
     application.state.settings = settings
+    application.state.storage = SupabaseStorage(settings)
     configure_database(application, settings)
 
     application.state.repository = (
@@ -61,19 +63,20 @@ def create_app(
         tags=["operations"],
         operation_id="health",
         description=(
-            "Process health only; not database, worker "
-            "or deployment readiness."
+            "Reports process health and the configured persistence adapter. "
+            "Use an authenticated API request to verify database connectivity."
         ),
     )
     def health():
+        persistence = "unconfigured"
+        if settings.mode == "fixture":
+            persistence = "volatile-memory"
+        elif settings.database_url:
+            persistence = "postgresql"
         return {
             "status": "ok",
             "mode": settings.mode,
-            "persistence": (
-                "volatile-memory"
-                if settings.mode == "fixture"
-                else "unconfigured"
-            ),
+            "persistence": persistence,
         }
 
     # 테스트 계약에 맞춰 /v1 경로 사용

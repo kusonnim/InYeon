@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import 'pebble_design.dart';
+import '../widgets/itda_theme.dart';
 import 'pebble_simulation.dart';
 
 typedef TrayItem = ({String id, String title, bool canArchive});
@@ -194,7 +194,7 @@ class _SceneState extends State<_Scene> with SingleTickerProviderStateMixin {
           CustomPaint(
             painter: _TrayOutline(
               scene.geometry.interior,
-              theme.colorScheme.outline,
+              theme.colorScheme.primary,
             ),
           ),
           for (final pose in scene.poses)
@@ -253,7 +253,7 @@ class _StoneState extends State<_Stone> {
     final width = widget.width;
     final half = width * .55;
     final theme = Theme.of(context);
-    final textColor = theme.colorScheme.onSurface;
+    final textColor = ItdaPalette.pebbleInk(theme.brightness);
     final transform = Matrix4.identity()..translateByDouble(half, half, 0, 1);
     if (!pose.design.isCircle) transform.rotateZ(pose.angle);
     transform.scaleByDouble(width, width, 1, 1);
@@ -277,23 +277,41 @@ class _StoneState extends State<_Stone> {
               },
             ),
           },
-          child: GestureDetector(
-            dragStartBehavior: DragStartBehavior.down,
-            onTap: widget.onTap,
-            onPanStart: (event) => widget.onPickUp(event.globalPosition),
-            onPanUpdate: (event) => widget.onDrag(event.globalPosition),
-            onPanEnd: (_) => widget.onDrop(),
-            onPanCancel: widget.onCancel,
+          child: RawGestureDetector(
+            gestures: {
+              TapGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                    TapGestureRecognizer.new,
+                    (recognizer) => recognizer
+                      ..gestureSettings = MediaQuery.gestureSettingsOf(context)
+                      ..onTap = widget.onTap,
+                  ),
+              _PebbleDragGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<
+                    _PebbleDragGestureRecognizer
+                  >(_PebbleDragGestureRecognizer.new, (recognizer) {
+                    recognizer.gestureSettings = MediaQuery.gestureSettingsOf(
+                      context,
+                    );
+                    recognizer.dragStartBehavior = DragStartBehavior.down;
+                    recognizer.onStart = (event) =>
+                        widget.onPickUp(event.globalPosition);
+                    recognizer.onUpdate = (event) =>
+                        widget.onDrag(event.globalPosition);
+                    recognizer.onEnd = (_) => widget.onDrop();
+                    recognizer.onCancel = widget.onCancel;
+                  }),
+            },
             child: CustomPaint(
               painter: _StoneOutline(
                 outline,
-                PebbleDesign.matteColor(theme.brightness, pose.design.color),
-                _focused ? textColor : null,
+                ItdaPalette.pebble(theme.brightness, pose.design.color),
+                _focused ? theme.colorScheme.onSurface : null,
               ),
               child: IgnorePointer(
                 child: Center(
                   child: SizedBox(
-                    width: width * .51,
+                    width: width * (pose.design.isCircle ? .72 : .56),
                     child: ExcludeSemantics(
                       child: Text(
                         widget.title,
@@ -320,6 +338,18 @@ class _StoneState extends State<_Stone> {
       ),
     );
   }
+}
+
+// Match the scroll view's drag threshold so a drag starting on a pebble
+// stays with that pebble, including when moving straight down to the dock.
+class _PebbleDragGestureRecognizer extends PanGestureRecognizer {
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) =>
+      globalDistanceMoved.abs() >
+      computeHitSlop(pointerDeviceKind, gestureSettings);
 }
 
 class _StoneOutline extends CustomPainter {
@@ -371,7 +401,7 @@ class _TrayOutline extends CustomPainter {
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6,
+        ..strokeWidth = 2,
     );
   }
 

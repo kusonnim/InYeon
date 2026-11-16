@@ -14,6 +14,8 @@ class LibraryCollection extends StatelessWidget {
     required this.archived,
     required this.refresh,
     required this.openEntry,
+    this.openArchive,
+    this.searchFocus,
   });
 
   final LibraryController controller;
@@ -21,6 +23,8 @@ class LibraryCollection extends StatelessWidget {
   final Future<void> Function() refresh;
   final VoidCallback? Function(BuildContext, LibraryEntry, UploadMode)
   openEntry;
+  final VoidCallback? openArchive;
+  final FocusNode? searchFocus;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -31,6 +35,7 @@ class LibraryCollection extends StatelessWidget {
     ),
   );
 }
+
 class _CollectionView extends StatefulWidget {
   const _CollectionView({super.key, required this.collection});
 
@@ -39,22 +44,25 @@ class _CollectionView extends StatefulWidget {
   @override
   State<_CollectionView> createState() => _CollectionViewState();
 }
-class _CollectionViewState extends State<_CollectionView> {
-  bool _searching = false;
-  String _query = '';
 
-  void _toggleSearch() => setState(() {
-    _searching = !_searching;
-    _query = '';
-  });
+class _CollectionViewState extends State<_CollectionView> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final copy = AppLocalizations.of(context);
+    final theme = Theme.of(context);
     final collection = widget.collection;
     final controller = collection.controller;
     final archived = collection.archived;
     final mode = controller.inbox?.mode ?? UploadMode.disabled;
+    final query = _search.text.trim().toLowerCase();
     final groups = <Object, List<LibraryEntry>>{};
     for (final entry in controller.entries.where(
       (entry) => entry.archived == archived,
@@ -66,61 +74,83 @@ class _CollectionViewState extends State<_CollectionView> {
         .where(
           (row) => row.any(
             (entry) =>
-                entryTitle(copy, entry).toLowerCase().contains(_query) ||
+                entryTitle(copy, entry).toLowerCase().contains(query) ||
                 sourceCue(
                   copy,
                   entry.type,
                   entry.linkUrl,
-                ).toLowerCase().contains(_query),
+                ).toLowerCase().contains(query),
           ),
         )
         .toList(growable: false);
     final showEmpty =
         rows.isEmpty &&
-        (!controller.hasMore || _query.isNotEmpty) &&
+        (!controller.hasMore || query.isNotEmpty) &&
         !controller.loadingCatalog &&
         controller.inbox != null &&
         controller.catalogIssue == null;
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: Text(archived ? copy.archiveTitle : copy.allSaved),
+        titleSpacing: archived ? ItdaSpace.small : ItdaSpace.page,
+        toolbarHeight: itdaToolbarHeight(context),
+        title: Text(
+          archived ? copy.archiveTitle : copy.allSaved,
+          style: archived ? theme.textTheme.titleMedium : null,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
-          IconButton(
-            tooltip: _searching ? copy.closeSearch : copy.searchSaved,
-            onPressed: _toggleSearch,
-            icon: Icon(_searching ? Icons.close : Icons.search),
-          ),
+          if (collection.openArchive case final openArchive?)
+            IconButton(
+              tooltip: copy.archiveTitle,
+              onPressed: openArchive,
+              icon: const Icon(Icons.archive_outlined),
+            ),
           IconButton(
             tooltip: copy.refreshLibrary,
             onPressed: collection.refresh,
             icon: const Icon(Icons.refresh_rounded),
           ),
+          const SizedBox(width: ItdaSpace.small),
         ],
       ),
       body: PageWidth(
         child: Column(
           children: [
-            if (_searching)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  ItdaSpace.page,
-                  ItdaSpace.small,
-                  ItdaSpace.page,
-                  ItdaSpace.small,
-                ),
-                child: TextField(
-                  autofocus: true,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(labelText: copy.searchSaved),
-                  onChanged: (value) =>
-                      setState(() => _query = value.trim().toLowerCase()),
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                ItdaSpace.page,
+                ItdaSpace.small,
+                ItdaSpace.page,
+                ItdaSpace.small,
               ),
+              child: TextField(
+                controller: _search,
+                focusNode: collection.searchFocus,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: copy.searchSaved,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: copy.clearSearch,
+                          onPressed: () => setState(_search.clear),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                  filled: true,
+                  fillColor: theme.colorScheme.surfaceContainerHigh,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: collection.refresh,
                 child: CustomScrollView(
                   key: PageStorageKey((controller.scope, archived)),
+                  primary: false,
                   physics: const AlwaysScrollableScrollPhysics(),
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
@@ -130,9 +160,19 @@ class _CollectionViewState extends State<_CollectionView> {
                         horizontal: ItdaSpace.page,
                       ),
                       sliver: SliverToBoxAdapter(
-                        child: LibraryStatus(
-                          controller: controller,
-                          refresh: collection.refresh,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (query.isNotEmpty || controller.hasMore)
+                              Text(
+                                copy.searchLoadedHint,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            LibraryStatus(
+                              controller: controller,
+                              refresh: collection.refresh,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -141,7 +181,7 @@ class _CollectionViewState extends State<_CollectionView> {
                         child: Padding(
                           padding: const EdgeInsets.all(ItdaSpace.page),
                           child: Text(
-                            _query.isEmpty
+                            query.isEmpty
                                 ? (archived
                                       ? copy.archiveEmpty
                                       : copy.emptyLibrary)
@@ -156,10 +196,11 @@ class _CollectionViewState extends State<_CollectionView> {
                       padding: const EdgeInsets.symmetric(
                         horizontal: ItdaSpace.page,
                       ),
-                      sliver: SliverList.builder(
+                      sliver: SliverList.separated(
                         itemCount: rows.length,
                         itemBuilder: (context, index) =>
                             _row(context, rows[index], mode),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
                       ),
                     ),
                     if (controller.hasMore)
@@ -188,41 +229,25 @@ class _CollectionViewState extends State<_CollectionView> {
     final copy = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final first = row.first;
-    Widget tile(LibraryEntry entry) {
-      final local = entry.local;
-      return SavedContentRow(
-        key: ValueKey(entry.key),
-        entry: entry,
-        onOpen: widget.collection.openEntry(context, entry, mode),
-        showSavedAt: row.length > 1,
-        status:
-            mode != UploadMode.disabled &&
-                local?.inputType != null &&
-                local!.uploadState != LocalUploadState.synchronized
-            ? uploadName(copy, mode, local)
-            : null,
-      );
-    }
+    Widget tile(LibraryEntry entry) => SavedContentRow(
+      key: ValueKey(entry.key),
+      entry: entry,
+      mode: mode,
+      onOpen: widget.collection.openEntry(context, entry, mode),
+      showSavedAt: row.length > 1,
+    );
 
     if (row.length == 1) return tile(first);
     return ExpansionTile(
       key: PageStorageKey((widget.collection.controller.scope, first.linkUrl)),
       shape: const Border(),
       tilePadding: EdgeInsets.zero,
+      minTileHeight: 68,
       childrenPadding: const EdgeInsetsDirectional.only(
         start: ItdaSpace.section,
       ),
-      leading: Icon(
-        sourceIcon(first.type),
-        size: 20,
-        color: theme.colorScheme.onSurfaceVariant,
-      ),
-      title: Text(
-        entryTitle(copy, first),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleMedium,
-      ),
+      leading: SavedSourceIcon(first.type),
+      title: SavedContentTitle(entryTitle(copy, first)),
       subtitle: Wrap(
         spacing: ItdaSpace.small,
         children: [
@@ -240,15 +265,18 @@ class _CollectionViewState extends State<_CollectionView> {
     );
   }
 }
+
 class LibraryStatus extends StatelessWidget {
   const LibraryStatus({
     super.key,
     required this.controller,
     required this.refresh,
+    this.showEnvironment = true,
   });
 
   final LibraryController controller;
   final VoidCallback refresh;
+  final bool showEnvironment;
 
   @override
   Widget build(BuildContext context) {
@@ -257,7 +285,9 @@ class LibraryStatus extends StatelessWidget {
     final inbox = controller.inbox;
     final mode = inbox?.mode ?? UploadMode.disabled;
     final issue = controller.catalogIssue;
-    final environment = uploadEnvironmentLabel(copy, mode);
+    final environment = showEnvironment
+        ? uploadEnvironmentLabel(copy, mode)
+        : null;
     final saved = controller.showingSavedCopies;
     final problem = controller.localError
         ? copy.localLoadError
@@ -287,7 +317,13 @@ class LibraryStatus extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(problem)),
-              TextButton(onPressed: refresh, child: Text(copy.retry)),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.onPrimaryContainer,
+                ),
+                onPressed: refresh,
+                child: Text(copy.retry),
+              ),
             ],
           )
         else if (inbox == null || controller.loadingCatalog)

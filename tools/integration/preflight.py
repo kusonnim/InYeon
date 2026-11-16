@@ -9,9 +9,9 @@ import sys
 from urllib.parse import urljoin
 
 from common import (
-    Auth, Blocked, CheckError, FIXTURE_USERS, LOOPBACK, ROOT, Report, STAGING_API, STAGING_AUTH,
-    STAGING_KEY, api_base, base_url, expect, parser, process_health, publishable_key,
-    request, require, setting,
+    Auth, Blocked, CheckError, FIXTURE_USERS, LAB_TARGETS, LOOPBACK, ROOT, Report, STAGING_API,
+    STAGING_AUTH, STAGING_KEY, account, api_base, base_url, expect, lab_setting, parser,
+    process_health, publishable_key, request, require, setting, signing_keys,
 )
 
 
@@ -72,6 +72,8 @@ def check_tools(report, database):
 
 
 def android_config(profile):
+    if profile in LAB_TARGETS:
+        raise Blocked("Authenticated Android access requires a device-trusted HTTPS API.")
     require((ROOT / "apps/mobile/android/gradlew.bat").is_file(), "Android Gradle wrapper is missing.")
     mode = os.getenv("ITDA_UPLOAD_MODE", "disabled")
     staging = profile == "staging"
@@ -96,7 +98,7 @@ def database_connection(profile):
     setting("PGUSER")
     require(re.fullmatch(r"[A-Za-z0-9.:-]+", host) and re.fullmatch(r"[A-Za-z0-9_-]+", database),
             "Supply one PostgreSQL host and a database name in PGHOST and PGDATABASE.")
-    require(profile != "fixture" or host in LOOPBACK, "The fixture profile allows only a loopback database.")
+    require(profile not in ("fixture", "local") or host in LOOPBACK, "This profile allows only a loopback database.")
     psql = shutil.which("psql")
     if not psql:
         raise Blocked("Install psql or add it to PATH.")
@@ -113,11 +115,12 @@ def database_connection(profile):
 
 
 def check_web(profile, value):
+    authenticated = profile != "fixture"
     if profile == "staging" and not value:
         raise Blocked("Pass --web-url for the approved staging or local API-mode web server.")
-    url = base_url(value or "http://127.0.0.1:3000", allow_local_http=True, local_only=profile == "fixture")
+    url = base_url(value or "http://127.0.0.1:3000", allow_local_http=True, local_only=profile != "staging")
     reply = request(url, "/")
-    if profile == "staging":
+    if authenticated:
         if reply.status not in (302, 303, 307, 308):
             expect(reply, 307)
         try:
@@ -128,7 +131,7 @@ def check_web(profile, value):
         reply = request(url, "/login")
     expect(reply, 200)
     require(reply.headers.get_content_type() == "text/html", "Expected a rendered web page.")
-    heading = "잇다에 로그인" if profile == "staging" else "콘텐츠 보관함"
+    heading = "잇다에 로그인" if authenticated else "콘텐츠 보관함"
     require(heading.encode("utf-8") in reply.body, "Expected the ITDA sign-in or library page.")
 
 
@@ -136,6 +139,34 @@ def auth_health(auth):
     value = expect(request(auth.base, "/auth/v1/health", key=auth.key), 200).json()
     require(isinstance(value.get("version"), str) and value.get("name") in ("GoTrue", "Auth"),
             "Expected the Supabase Auth health response.")
+
+
+def lab_auth_checks(report, profile):
+    keys = report.attempt("Supabase public JWKS", lambda: signing_keys(LAB_TARGETS[profile]["auth_url"]))
+    if keys is not None:
+        advertised = sorted({alg for key in keys if (alg := key.get("alg")) in ("ES256", "RS256")})
+        report.add("PASS", "Discovery evidence", ", ".join(advertised) or "No supported public algorithms advertised")
+
+    auth = report.attempt("Supabase Auth configuration", lambda: Auth.from_environment(profile))
+    if not auth:
+        report.add("BLOCKED", "JWT signing mode", "Configure the public client key and disposable accounts.")
+        return
+    report.attempt("Supabase Auth availability", lambda: auth_health(auth), "GET /auth/v1/health")
+
+    def verify():
+        sessions = (auth.sign_in(*login_a), auth.sign_in(*login_b))
+        require(sessions[0][0] != sessions[1][0], "Both sessions resolve to the same owner.")
+        auth.check_signing_mode(sessions, algorithm)
+
+    try:
+        algorithm = lab_setting(profile, "JWT_ALGORITHM")
+        require(algorithm in ("HS256", "ES256", "RS256"), "Configure HS256, ES256, or RS256.")
+        login_a, login_b = account("A", profile), account("B", profile)
+        require(login_a[0].casefold() != login_b[0].casefold(), "Supply two distinct disposable accounts.")
+    except CheckError as error:
+        report.add(error.outcome, "JWT signing mode", str(error))
+        return
+    report.attempt("JWT signing mode", verify, f"{algorithm}; issuer, audience, and owners confirmed by Auth")
 
 
 def api_checks(report, args):
@@ -158,7 +189,7 @@ def api_checks(report, args):
     elif persistence == "unconfigured":
         report.add("BLOCKED", "API persistence readiness", "API reports unconfigured persistence.")
     else:
-        report.add("NOT TESTED", "API persistence readiness", "Run the two-account staging smoke.")
+        report.add("NOT TESTED", "API persistence readiness", "Run the two-account authenticated smoke.")
 
 
 def main():
@@ -174,7 +205,9 @@ def main():
     check_tools(report, args.check_db)
     report.attempt("Android build configuration", lambda: android_config(args.profile), "Settings and wrapper")
     api_checks(report, args)
-    if args.profile == "staging":
+    if args.profile in LAB_TARGETS:
+        lab_auth_checks(report, args.profile)
+    elif args.profile == "staging":
         auth = report.attempt("Supabase Auth configuration", Auth.from_environment)
         if auth:
             report.attempt("Supabase Auth availability", lambda: auth_health(auth), "GET /auth/v1/health")
@@ -192,7 +225,7 @@ def main():
     report.attempt("Web startup", lambda: check_web(args.profile, args.web_url), "Unauthenticated page")
     entry = ROOT / "services/backend/worker/__main__.py"
     if not entry.is_file() or "Worker scaffold only" in entry.read_text(encoding="utf-8"):
-        report.add("BLOCKED" if args.profile == "staging" else "NOT TESTED", "Worker execution",
+        report.add("BLOCKED" if args.profile != "fixture" else "NOT TESTED", "Worker execution",
                    "This checkout has no runnable job consumer.")
     else:
         report.add("NOT TESTED", "Worker execution", "Verify a deterministic job reaches persisted results.")

@@ -47,7 +47,7 @@ class ContentHeading extends StatelessWidget {
                         Icon(
                           Icons.edit_outlined,
                           size: 18,
-                          color: theme.colorScheme.onSurfaceVariant,
+                          color: theme.colorScheme.primary,
                         ),
                       ],
                     ),
@@ -105,6 +105,8 @@ class ContentDetails extends StatelessWidget {
         : type == InputType.text
         ? originalText ?? generated
         : generated ?? originalText;
+    final hasSummary =
+        generated != null && primary == generated && generated != originalText;
     final status = content.analysisStatus;
     final statusText = status != AnalysisStatus.completed
         ? analysisName(copy, status)
@@ -119,6 +121,11 @@ class ContentDetails extends StatelessWidget {
       primaryAction: primaryAction,
       children: (expanded) => [
         ...header,
+        if (contextLabel != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: ItdaSpace.tiny),
+            child: Text(contextLabel!, style: meta),
+          ),
         ContentHeading(title: title, onEditTitle: onEditTitle),
         if (image)
           OriginalImagePreview(
@@ -127,10 +134,16 @@ class ContentDetails extends StatelessWidget {
             onExpand: openImage,
           )
         else if (primary != null && primary.trim() != title.trim())
-          Padding(
-            padding: const EdgeInsets.only(bottom: ItdaSpace.large),
-            child: DetailText(text: primary, expanded: expanded),
-          ),
+          if (hasSummary)
+            ContentSection(
+              title: copy.summary,
+              children: [DetailText(text: primary, expanded: expanded)],
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+              child: DetailText(text: primary, expanded: expanded),
+            ),
         if (statusText != null)
           Padding(
             padding: const EdgeInsets.only(bottom: ItdaSpace.large),
@@ -150,7 +163,6 @@ class ContentDetails extends StatelessWidget {
             type: type,
             savedAt: content.createdAt,
             sourceUrl: sourceUrl,
-            contextLabel: contextLabel,
           ),
           OriginalSource.fromContent(
             content,

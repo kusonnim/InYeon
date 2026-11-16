@@ -1,5 +1,7 @@
 """Regression checks for the I1 environment and failure gates."""
 
+import base64
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -51,3 +53,56 @@ def test_staging_sign_in_refuses_fixture_tokens(monkeypatch):
     monkeypatch.setattr(common, "request", token_response)
     with pytest.raises(common.CheckError, match="user access JWT"):
         common.Auth("https://auth.example.test", "sb_publishable_example").sign_in("a@example.test", "synthetic")
+
+
+def token(claims, *, alg="ES256", kid="signing-key"):
+    def encode(value):
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+    return f"{encode({'alg': alg, 'kid': kid})}.{encode(claims)}.synthetic-signature"
+
+
+@pytest.mark.parametrize("profile", ["c1", "local"])
+def test_lab_cannot_send_auth_sessions_to_remote_api(profile):
+    with pytest.raises(common.CheckError, match="loopback"):
+        common.api_base(profile, "https://api.example.test")
+
+
+def test_lab_auth_credentials_and_origin_are_profile_scoped(monkeypatch):
+    monkeypatch.setenv(common.STAGING_AUTH, "https://other-project.example.test")
+    monkeypatch.setenv("ITDA_LAB_STAGING_PUBLIC_KEY", "sb_publishable_c1_example")
+    monkeypatch.setenv("ITDA_LAB_LOCAL_PUBLIC_KEY", token({"role": "service_role"}))
+    assert common.Auth.from_environment("c1").base == common.LAB_TARGETS["c1"]["auth_url"]
+    with pytest.raises(common.CheckError, match="public client key"):
+        common.Auth.from_environment("local")
+    monkeypatch.setenv("ITDA_LAB_LOCAL_PUBLIC_KEY", token({"role": "anon"}))
+    assert common.Auth.from_environment("local").base == "http://127.0.0.1:55421"
+
+
+@pytest.mark.parametrize("profile", ["c1", "local"])
+def test_lab_smoke_stops_before_sign_in_on_scaffold(profile, monkeypatch):
+    monkeypatch.setattr(smoke, "process_health", lambda *_: "unconfigured")
+    monkeypatch.setattr(smoke.Auth, "from_environment", lambda *_: pytest.fail("Scaffold must stop before sign-in"))
+    report = common.Report()
+    with pytest.raises(common.Blocked, match="JWT and persistent API adapters"):
+        smoke.run(SimpleNamespace(profile=profile, api_url=None, restart_check=False), report)
+    assert report.exit_code() == 2
+
+
+def test_signing_check_requires_fresh_token_metadata_and_auth_confirmation(monkeypatch):
+    owner = common.FIXTURE_USERS["A"][0]
+    auth = common.Auth("https://auth.example.test", "sb_publishable_example")
+    claims = {"iss": auth.base + "/auth/v1", "aud": "authenticated", "sub": owner}
+    session_jwt = token(claims)
+    monkeypatch.setattr(common, "signing_keys", lambda _: [{"alg": "ES256", "kid": "signing-key", "kty": "EC"}])
+
+    def confirmed(base, path, **options):
+        assert base == auth.base and path == "/auth/v1/user"
+        assert options == {"key": auth.key, "token": session_jwt}
+        return common.Reply(200, {}, json.dumps({"id": owner}).encode())
+
+    monkeypatch.setattr(common, "request", confirmed)
+    auth.check_signing_mode([(owner, session_jwt)], "ES256")
+    with pytest.raises(common.CheckError, match="algorithm differs"):
+        auth.check_signing_mode([(owner, session_jwt)], "HS256")
+    with pytest.raises(common.CheckError, match="absent from the Auth JWKS"):
+        auth.check_signing_mode([(owner, token(claims, kid="other-key"))], "ES256")

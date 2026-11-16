@@ -1,7 +1,8 @@
 from typing import Annotated, Optional
 from uuid import UUID
-from fastapi import APIRouter, Header, Query, Request, Depends, HTTPException, status
+from fastapi import APIRouter, Header, Query, Request, Response, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.assets import complete_upload, download_url, reserve_upload
 from app.auth import User
 from app.database import get_db
 from app.errors import ApiError
@@ -125,7 +126,7 @@ async def get_content(
 
     content = await repository.get_content(db=db, content_id=str(id), user_id=user)
     if not content:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise ApiError(404, "not_found", "Content not found")
     return content
 
 
@@ -362,8 +363,29 @@ async def restore_notification(
         "Production cursor retention/expiry is unresolved; fixture cursors expire on process restart."
     )
 )
-def sync_changes(user: User, request: Request, cursor: Cursor = None, limit: Limit = 20):
-    return request.app.state.repository.sync(user, cursor, limit)
+async def sync_changes(
+    user: User,
+    request: Request,
+    cursor: Cursor = None,
+    limit: Limit = 20,
+    db: AsyncSession = Depends(get_db),
+):
+    if request.app.state.repository is not None:
+        return request.app.state.repository.sync(user, cursor, limit)
+
+    secret = request.app.state.settings.sync_cursor_secret.get_secret_value()
+    if not secret:
+        raise ApiError(503, "sync_unavailable", "Sync cursor signing is not configured")
+    return await repository.sync(db, user, cursor, limit, secret)
+
+async def require_asset_db(db: AsyncSession | None = Depends(get_db)) -> AsyncSession:
+    if db is None:
+        raise ApiError(501, "adapter_not_implemented", "Private storage requires the PostgreSQL adapter")
+    return db
+
+
+AssetDb = Annotated[AsyncSession, Depends(require_asset_db)]
+
 
 @router.post(
     "/assets/uploads",
@@ -377,11 +399,14 @@ def sync_changes(user: User, request: Request, cursor: Cursor = None, limit: Lim
         "never accept client paths or user IDs. Signed upload capability currently "
         "has Supabase's 2-hour lifetime; expiry is explicit. Allow JPEG/PNG/WebP/PDF/plain text, &lt;=20 MiB. "
         "Do not log capability URLs. Replays return same reservation while live; "
-        "expired reservation -&gt;409 upload_expired, use a new key. Phase 0 returns 501; no fake upload URL."
+        "expired reservation -&gt;409 upload_expired, use a new key. "
+        "The fixture adapter returns 501. Private Storage configuration failures return 503."
     )
 )
-def create_asset_upload(value: AssetUploadCreate, user: User, key: Key):
-    raise ApiError(501, "adapter_not_implemented", "Private storage upload adapter is not implemented")
+async def create_asset_upload(value: AssetUploadCreate, user: User, key: Key, db: AssetDb,
+                              request: Request, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return await reserve_upload(db, request.app.state.storage, user, key, value)
 
 @router.post(
     "/assets/{id}/complete",
@@ -391,12 +416,14 @@ def create_asset_upload(value: AssetUploadCreate, user: User, key: Key):
     description=(
         "Owner-only verification of the exact reserved object's existence, actual bytes, "
         "signature/media type, size and SHA-256; reject mismatch. Mark ready only after server verification. "
-        "Idempotent completion before content ingestion. Unclaimed uploads expire and are "
+        "Idempotent completion before content ingestion. A missing upload returns 409 upload_incomplete. "
+        "Unclaimed uploads expire and are "
         "garbage-collected by a planned service job. Attach each ready asset once to owned content in its ingestion transaction."
     )
 )
-def complete_asset_upload(id: UUID, user: User, key: Key):
-    raise ApiError(501, "adapter_not_implemented", "Private storage verification adapter is not implemented")
+async def complete_asset_upload(id: UUID, user: User, key: Key, db: AssetDb, request: Request):
+    # The verified state is the durable result for completion keys scoped to this asset.
+    return await complete_upload(db, request.app.state.storage, user, id)
 
 @router.get(
     "/assets/{id}/download-url",
@@ -406,8 +433,9 @@ def complete_asset_upload(id: UUID, user: User, key: Key):
     description=(
         "Owner-only short-lived (at most 60 seconds) signed GET for a verified ready asset. "
         "Objects and bucket remain private. Bearer capability URL must never be stored in source_url, "
-        "sync events, analytics, or logs. Set Cache-Control: no-store. Phase 0 returns 501."
+        "sync events, analytics, or logs. Set Cache-Control: no-store. The fixture adapter returns 501."
     )
 )
-def get_asset_download_url(id: UUID, user: User):
-    raise ApiError(501, "adapter_not_implemented", "Private storage download adapter is not implemented")
+async def get_asset_download_url(id: UUID, user: User, db: AssetDb, request: Request, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    return await download_url(db, request.app.state.storage, user, id)
