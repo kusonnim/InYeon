@@ -1,1 +1,7 @@
-raise SystemExit("Worker scaffold only: implement PostgreSQL job claiming, retries, extraction, LLM adapters and transactional result persistence before running a worker.")
+﻿import asyncio
+
+from worker.pipeline import main
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
