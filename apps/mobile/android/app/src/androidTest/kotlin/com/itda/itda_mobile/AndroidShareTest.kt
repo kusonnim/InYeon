@@ -155,20 +155,48 @@ class AndroidShareTest {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
             bitmap.recycle()
         }.toByteArray()
-        val pdf = ByteArrayOutputStream().also { output ->
-            val document = PdfDocument()
-            try {
-                val page = document.startPage(PdfDocument.PageInfo.Builder(72, 72, 1).create())
-                document.finishPage(page)
-                document.writeTo(output)
-            } finally {
-                document.close()
-            }
-        }.toByteArray()
-
         assertPrivateCopy("fixture.png", "image/png", "image", image)
-        assertPrivateCopy("fixture.pdf", "application/pdf", "document", pdf)
+        assertPrivateCopy("fixture.pdf", "application/pdf", "document", pdfBytes())
         assertEquals(2, LocalShareStore(inboxDir).listShares().size)
+    }
+
+    @Test
+    fun servesOnlyVerifiedOriginalPdfsThroughReadOnlyGrants() {
+        val appStore = localShareStore(context)
+        val localId = UUID.randomUUID()
+        val bytes = pdfBytes()
+        val owner = UploadOwner(UUID.randomUUID(), "a".repeat(64))
+        val ref = NoticeRef(owner, UUID.randomUUID())
+        val originals = LocalOriginals(appStore) { owner }
+        val directory = File(context.noBackupFilesDir, "share-inbox-v1/$localId")
+        try {
+            appStore.persist(localId, receivedAtMs) { file ->
+                file.writeBytes(bytes)
+                JSONObject().put("input_type", "document").put("attachment", JSONObject()
+                    .put("file_ref", LocalShareStore.ATTACHMENT_NAME).put("filename", "Field notes.pdf")
+                    .put("media_type", "application/pdf").put("size_bytes", bytes.size).put("sha256", sha256(bytes)))
+            }
+            val intent = SavedPdfProvider.viewIntent(context, localId)
+            val uri = checkNotNull(intent.data)
+            assertEquals(Intent.ACTION_VIEW, intent.action)
+            assertEquals("application/pdf", intent.type)
+            assertEquals(Intent.FLAG_GRANT_READ_URI_PERMISSION, intent.flags)
+            val provider = checkNotNull(context.packageManager.resolveContentProvider(checkNotNull(uri.authority), 0))
+            assertFalse(provider.exported)
+            assertTrue(provider.grantUriPermissions)
+            assertArrayEquals(bytes, checkNotNull(resolver.openInputStream(uri)).use { it.readBytes() })
+            assertThrows(java.io.FileNotFoundException::class.java) { resolver.openFileDescriptor(uri, "rw") }
+
+            appStore.updateProgress(localId) {
+                it.copy(owner = owner, state = UploadState.SYNCHRONIZED, serverContentId = ref.contentId)
+            }
+            assertEquals("Field notes.pdf", originals.registeredPdf(ref).filename)
+            assertThrows(java.io.FileNotFoundException::class.java) { resolver.openInputStream(uri) }
+            File(directory, LocalShareStore.ATTACHMENT_NAME).writeBytes(ByteArray(bytes.size))
+            assertThrows(UploadProblem::class.java) { originals.registeredPdf(ref) }
+        } finally {
+            directory.deleteRecursively()
+        }
     }
 
     @Test
@@ -239,6 +267,17 @@ class AndroidShareTest {
         Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
 
     private fun receipt(id: String) = JSONObject(File(inboxDir, "$id/receipt.json").readText())
+
+    private fun pdfBytes(): ByteArray = ByteArrayOutputStream().also { output ->
+        val document = PdfDocument()
+        try {
+            val page = document.startPage(PdfDocument.PageInfo.Builder(72, 72, 1).create())
+            document.finishPage(page)
+            document.writeTo(output)
+        } finally {
+            document.close()
+        }
+    }.toByteArray()
 
     private fun assertPrivateCopy(name: String, mime: String, kind: String, bytes: ByteArray) {
         val uri = checkNotNull(resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, ContentValues().apply {

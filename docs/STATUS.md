@@ -1,21 +1,34 @@
 # Implementation status
 
-Last updated 2026-11-10 (Asia/Seoul). **Phase A6.1 Android UX and C web integration.**
+Last updated 2026-11-12 (Asia/Seoul). **Integration I1 and C1 hosted Supabase verification.**
 
 Android has a separate HTTPS-only staging installation with explicit API and
 Supabase configuration. The local originals, upload outbox, notification state
-and library checkpoints retain their account and realm scope. The checked-in
-backend and database evidence supports local mock verification. Authenticated
-staging, private storage, RLS, web consistency, and FCM remain integration work.
+and library checkpoints retain their account and realm scope. I1 ran the fixture
+HTTP smoke and checked both migrations on a disposable local Supabase stack.
+C1 provisioned a shared Seoul Supabase project and verified real-identity RLS
+through Auth and PostgREST. Private object transfers, authenticated B API
+integration, Web/Android consistency and FCM remain integration work.
 
-The Android library and editor support Korean and English, compact cards, and
-expandable repeated-link groups. Details and editing show locally available
-original images. Android notifications show a localized source, title, and
-processing state with the existing dismissal and restoration rules.
+Android home presents saved items as rigid matte triangles and circles with
+stable identity assignment. The home app bar shows the **잇다** wordmark.
+**All saved** and **Archive** use plain, searchable rows with pagination.
+Repeated links in **All saved** can expand to their individual saves.
+Pending and completed items can move directly to the archive through a
+versioned workflow update. Explicit restoration returns them to pending.
+The [mobile design draft](DESIGN.md) guides the Korean and English interfaces.
+One detail card presents primary content and expands in place to reveal source
+information and additional recommendations. A dedicated sign-in screen opens
+from home or Account settings and returns to the previous screen on success.
+The card shows a Connecting Pebbles indicator during acknowledged processing
+and reflects newer analysis results delivered by account-scoped sync.
+Android notifications show a localized source, title, and processing state
+with the existing dismissal and restoration rules.
 
 Android details and editing open saved source and recommendation web links
-through Android's external app resolution. Titles and personal notes in
-editable details can focus the corresponding field in the versioned editor.
+through Android's external app resolution. A locally saved PDF opens with a
+temporary read grant to an Android viewer. Titles and personal notes in editable
+details can focus the corresponding field in the versioned editor.
 
 ## Delivered foundation
 
@@ -24,21 +37,61 @@ editable details can focus the corresponding field in the versioned editor.
 | Onboarding | Root AGENTS, product/architecture/development/ownership/integration docs, ADRs | Evolving decisions require future updates |
 | API contract | Versioned OpenAPI, UUID/UTC/bearer conventions, errors, version conflicts, idempotency, cursor sync, private asset lifecycle | Real HTTP authentication, storage and persistence adapters |
 | Backend | FastAPI health/router/model/config structure, fail-closed production mode, explicit in-memory fixture adapter | Persistent ingestion, Supabase JWT, uploads, real worker operations |
-| Worker | Separate extraction/summarization/recommendation/persistence interfaces | PostgreSQL claim/lease/retry, actual extraction, hosted LLM, result transactions |
-| Data | 12 owned tables, RLS, private bucket, notification/sync functions, both migrations and 33 pgTAP checks executed on isolated PostgreSQL 17.5 | Full Supabase CLI stack, hosted Auth/Storage integration, and B adapter wiring |
+| Worker | Separate extraction/summarization/recommendation/persistence interfaces; standalone supplied-text provider helper from PR #11 | Runnable PostgreSQL claim/lease/retry consumer, bounded source fetching, provider/contract mapping, guarded result transactions |
+| Data | Both migrations applied to hosted PostgreSQL 17.11, two real password accounts, 86 grouped Auth/RLS checks, private bucket configuration. Earlier local Supabase pgTAP 33 checks and lint passed | Private object bytes and B's persistent API integration |
 | Web | Korean library and detail, Supabase email/password session, FastAPI cursor pagination, current-page search, version-aware edits and in-tab sync refresh, read-only fixture preview | Live API persistence and mobile interop, private attachment opening, cross-library search |
-| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview | Two-account live API/RLS verification, server-only private image download, FCM delivery |
+| Mobile | Offline Android receipt, account-bound WorkManager outboxes, Supabase session client, mock-verified content and private assets, native notifications, versioned editor, durable offline library and incremental sync, isolated staging build, Korean and English UI, local image preview, rigid pebble tray and versioned workflow | Two-account live API/RLS verification, server-only private image download, FCM delivery |
+| Integration | Windows runbook, redacted preflight, two-account API smoke with optional operator-managed restart, deterministic analysis and Web rendering tests | Execution against the approved staging tuple with two disposable accounts |
 | Collaboration | Feature-branch/PR rules, PR template, CI definitions, dependency lockfiles for Python/web/mobile | GitHub branch protection, team account mapping |
 
 Phase A6 starts from the merged Phase A5 implementation in main at `7883189` (PR #5).
 
 ## Verification evidence
 
-| Check | Current evidence / limitation |
+### C1 hosted Supabase verification
+
+The shared project is `itda-integration` in Seoul, reference
+`udindscqqsqsczmkyrxs`. [Connection handoff](../supabase/integration/HANDOFF.md)
+records its API, JWT and PostgreSQL coordinates and migration versions.
+The account credential manifest is delivered separately.
+
+| Check | C1 outcome |
+| --- | --- |
+| Migrations | Both repository migrations applied, and the history matches versions `202611090001` and `202611090002` |
+| Schema | PostgreSQL 17.11, 12 application tables with RLS, eight owner-read policies, private 20 MiB `content-assets` bucket |
+| Real Auth and RLS | All 86 grouped checks passed using two real password sessions and verified Auth user IDs. Owner reads, foreign-row hiding, anonymous denial, all direct writes, server-only reads and privileged RPC denial passed |
+| Verifier regression | Eight tests passed, including missing fixtures/routes, wrong identities, malformed Auth/key data, false permission errors and credential redaction |
+| Security advisors | Four informational no-policy findings correspond to the four deliberately server-only relations, with client grants revoked |
+| Remaining | B API deployment, real private file transfer and Android/Web acceptance use this same project and private test accounts |
+
+### I1 Windows verification
+
+Reviewed `main` at `cb8338a52c4b`. Windows checks used Python 3.12.14, Node
+24.15.0, npm 11.12.1, Flutter 3.47.8, Dart 3.13.7, Android Studio's JDK,
+and a fresh Android 15 / API 35 x86_64 emulator. See
+[reproduction commands](INTEGRATION_READINESS.md#reproduce-the-checks) and the
+[Windows runbook](INTEGRATION.md#windows-integration-setup).
+
+| Check | I1 outcome |
+| --- | --- |
+| Backend and contracts | **PASS.** 13 existing Python tests, OpenAPI runtime parity and 11 example payloads, and the SQL mapping check for nine models and 12 tables. One existing Starlette/AnyIO deprecation warning. |
+| Web | **PASS.** Locked `npm ci`, typecheck, seven tests, and production Webpack build. Rendered the synthetic recommendation, partial and zero-recommendation details over loopback HTTP. A disposable catalog copy exercised the Web failed-detail branch. |
+| Flutter | **PASS.** Locked dependencies, canonical fixture check, analysis and 62 tests. Detail cases include failed analysis retaining the original and an empty recommendation list. |
+| Android build and lint | **PASS.** Default debug and test APKs assembled. Debug lint reported zero errors and eight warnings after correcting the ignored Windows SDK properties and refreshing the stale lint report. |
+| Android instrumentation | **PASS.** All 47 tests passed on the full rerun on the warmed, unlocked emulator. The first run passed 45 of 47. The receiver commit/recreation and delete-intent notification tests also passed on a focused rerun. |
+| Disposable Supabase | **PASS.** CLI 2.118.0 started a fresh local project with isolated ports and volumes. PostgreSQL 17.6 reported migrations `202611090001` and `202611090002`, and `content-assets` was private. All 33 pgTAP assertions passed, local schema lint found no errors, and local Auth health returned 200. pgTAP exercised synthetic database identities and metadata policies. The optional Windows `psql` preflight probe was **NOT TESTED**. |
+| Integration preflight and HTTP smoke | **PASS** in fixture mode. Loopback API health, bearer rejection, catalog, Web startup, 201 readback, exact replay and one matching item, changed-body conflict, versioned edit/readback, stale edit, sync replay, 404 foreign read and 400 foreign cursor. Receipt state was volatile. |
+| I1 analysis and harness regression | **PASS.** Six harness guards, four fixture result round-trips, and four Web rendering cases with the disposable preview. A failed result keeps the source and a prior dismissal, and a generated recommendation remains unaccepted. |
+| Staging preflight and smoke | **BLOCKED** with exit 2. The approved HTTPS API/Auth/Web settings and two staging accounts were unavailable. Production bearer requests on the reviewed checkout still return 501 and the worker entry point exits at the scaffold. Staging restart, real data/Storage tests, and live cross-client sync are **NOT TESTED**. |
+| Hosted analysis and FCM | **NOT TESTED.** I1 used deterministic results. Hosted evaluation for B's 25 cases and authenticated delivery are separate milestones. |
+
+### Earlier evidence
+
+| Check | Evidence and limitation at that phase |
 | --- | --- |
 | SQL parsing | Passed with temporary pglast 8.7: both migrations (27 and 14 statements), test script (60 statements), all four PL/pgSQL functions |
 | API/SQL consistency | Passed: 9 HTTP model mappings and enums against 12 explicitly owned tables |
-| pgTAP | All 33 passed in isolated PostgreSQL 17.5 using PGlite and compatibility Auth/Storage tables. Full Supabase stack, CLI lint, and Auth/Storage transport remain pending. See [data setup](../supabase/README.md#local-verification). |
+| pgTAP | All 33 passed in isolated PostgreSQL 17.5 using PGlite and compatibility Auth/Storage tables. I1 reran the same suite with the Supabase CLI. See [data setup](../supabase/README.md#local-verification). |
 | Backend tests | Passed: 13 tests, including mock idempotency/concurrency, owner isolation, version conflict, independent states, source/edit preservation, and worker stage validation |
 | OpenAPI and examples | Passed: specification validation, runtime schema parity, 11 example payload checks |
 | Web tests/typecheck/build | Passed: 7 tests for HTTP, edit/rebase and sync semantics, `next typegen && tsc --noEmit`, and production `next build --webpack` under Node 24.21 |
@@ -240,6 +293,99 @@ Instagram and YouTube URLs were exercised through the Android intent tests.
 Emulator testing used Chrome for the actual external handoff. Physical device
 verification remains outstanding.
 
+### Phase A7.1 Android checks
+
+A7.1 starts from main at `2a99485`, which includes the merged A6.2 PR #8.
+The tray projects the existing library through a bounded Box2D scene.
+See the [tray decision](decisions/0008-android-rigid-pebble-tray.md).
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, fixture parity, static analysis, and all 46 tests passed. Tests cover staggered release, collision and sleep, drag, reduced motion, account switching, stable receipt identity, archive transitions and version conflicts |
+| Android instrumentation | All 46 tests passed against the final default APK on the disposable emulator. The suite covers Android receipt, external links, sync, notification lifecycle and transport, upload retries, and staging configuration |
+| Android builds and lint | The default arm64-v8a, armeabi-v7a, and x86_64 debug APK and the x86_64 loopback mock APK built successfully. Android lint reported zero errors and eight warnings. The APKs contain the SUIT weights and the SUIT and Box2D notices |
+| Host physics | With 500 candidate identities, the three viewport fixtures simulated 10, 6, and 4 bodies. They slept after 166, 133, and 186 steps, respectively. The mean step costs were 12.1, 8.2, and 5.2 microseconds on the Windows test host |
+| Emulator UI | Captured the empty tray, cascade, settled light and dark trays, archive, and detail on a disposable Android 15 / API 35 x86_64 emulator. Returning from details preserved all five settled positions. The tray was also captured at 760 px wide with Android font scale 1.8 |
+| Emulator workflow with the mock API | Completion, drag to archive, and return to pending each received a new version. The source, edits, analysis, and notification visibility and generation stayed intact. A new native share appeared alongside the five existing items and produced one acknowledged mock record |
+
+The host timings cover simulation steps. Mobile frame timing, physical-device
+testing, and live workflow verification remain open. Long titles can truncate
+sharply on narrow pebbles. The collection and details expose the individual
+items outside the tray.
+
+### Phase A7.2 Android checks
+
+A7.2 was reviewed in [PR #12](https://github.com/kusonnim/InYeon/pull/12)
+against the A7.1 branch at `3dacfb7`. Checks used Flutter 3.47.8, Dart
+3.13.7, the Android Studio JDK,
+and a disposable Android 15 / API 35 x86_64 emulator.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependency resolution, Korean and English localization generation, fixture parity, and static analysis passed. All 52 tests passed, including source-specific details, long Korean text, empty recommendations, accessibility targets, direct archive and restore, a simulated HTTP 503, and stale-version recovery |
+| Geometry and simulation | All five painted profiles matched their rounded Box2D fixtures within 0.0015 of a normalized diameter across 120 radial samples per variant. The host fixtures capped 500 candidates at 10, 6, and 4 bodies and went to sleep after 162, 134, and 224 steps. Seven emulator pebbles kept their settled positions after visiting details and zooming the original image |
+| Android | All 47 instrumentation tests passed. The added PDF check covers the original bytes, read-only grants, owner scope, and rejected corrupt bytes. Debug lint reported zero errors and eight warnings after escaping the Windows drive separators in the generated local SDK properties |
+| APKs | Built the default multi-ABI debug APK and the loopback mock x86_64 debug APK. The mock APK installed on the emulator |
+| Workflow | The FastAPI fixture accepted pending and completed to archived, and archived to pending. Stale writes returned 409 and a foreign owner received 404. In the emulator, a pending item archived from details, a completed item archived by drag, and an archived item returned to pending. Each move advanced one version and preserved source fields, edits, analysis, recommendations, and notification state. A deliberate stale mock edit displayed the refresh action and kept the item pending |
+| Private originals | Shared a synthetic PNG and PDF through Android and confirmed both mock acknowledgments. The image preview and zoom and the original PDF in the Android viewer remained accessible after the sender copies were removed |
+| Library and account | The mock emulator displayed a paginated collection and expanded two independent saves of the same URL after a search. Account B could not see account A's saved content. The English selection survived a process restart |
+| Visual review | Captured 15 emulator screens with synthetic data, including the settled and mid-cascade tray, image, link, note and PDF details, archive, All saved, account, sign-in, editor, signed-out home, dark mode, and the PDF viewer. A dark English link detail was captured at 880 physical pixels wide with Android font scale 1.8 |
+
+Live workflow, server-only private image and PDF download, and physical-device
+visual and frame timing checks remain open.
+
+### Phase A7.3 Android checks
+
+A7.3 starts at `main` commit `5f13010`, which includes PR #10 and the
+AI extraction work from PR #11. PR #12 landed A7.2 on the A7.1 branch after
+the main merge. A7.3 carries A7.2 commit `a326981` as cherry-pick
+`d8b73a0`. The mobile and documentation trees matched A7.2 before the A7.3
+edits.
+
+#### Initial review
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependencies, fixture parity, both localizations, and static analysis passed. All 57 tests passed. The checks cover the single card and its disclosure, hidden provenance and extra recommendations, pending and failed analysis, direct edits and drafts, archive and restore, offline originals, reduced motion, and dedicated sign-in from both entry points |
+| Geometry | All five variants expose three straight sides and match their Box2D fixtures within 0.0015 normalized width across 120 radial samples per variant. The host physics fixtures capped 500 candidate items at 10, 6, and 4 bodies, with sleep after 167, 143, and 99 steps. Contrast between warm ink and the six dark pebble colors ranges from 5.79:1 to 7.91:1 |
+| Android | All 47 instrumentation tests passed on a disposable Android 15 / API 35 x86_64 emulator. Debug lint reported zero errors and eight warnings. Built the default multi-ABI and loopback mock x86_64 debug APKs |
+| Emulator UI | Captured 11 screens from the mock build, including collapsed and expanded details, image and personal note, dedicated sign-in, dark detail, and the dark tray. A dark English detail was also checked at 320 dp wide and Android font scale 1.8. The card could still expand and the archive action remained reachable by scrolling |
+| Emulator flows | The PNG and PDF shared through Android opened after the sender copies were removed. The image preview remained accessible with the network disabled. A pending item archived from the expanded card, an archived item returned to pending, and a completed triangular pebble archived by drag. Each move advanced the version once. Mock sign-in returned to Home or Account settings according to the entry point. Account B could not see account A's content |
+
+#### Full-height detail and curved pebble follow-up
+
+| Check | Result |
+| --- | --- |
+| Flutter | Fixture parity, localization generation, and static analysis passed. All 62 tests passed. The layout checks cover short and long content, fixed card and action bounds across disclosure and scrolling, a 320 dp viewport at 200% text size, light and dark themes, landscape, gesture navigation, and keyboard insets. The editor test retains focus and saves a note after rotation with the keyboard open |
+| Geometry | All five variants show three bowed sides. Each rendered outline matched its convex Box2D fixture within 0.009 normalized units across 120 radial samples. The three host physics cases retained their 10, 6, and 4 body limits and slept after 148, 155, and 166 steps |
+| Android | All 47 instrumentation tests passed on Android 15 / API 35 x86_64. Debug lint reported zero errors and eight warnings. Built the default multi-ABI and loopback mock x86_64 debug APKs |
+| Emulator UI | Captured collapsed and expanded detail, internal scrolling, the light and dark trays, 320 dp dark detail at font scale 1.8, landscape detail, and landscape editing with the keyboard open. Both footer actions retained the same Android accessibility bounds during disclosure and scrolling |
+| Emulator flows | The loopback mock confirmed archive, return to tray, and saving an edited title using the app bar while the landscape keyboard was open. Each action advanced the version once |
+
+Physical-device review and live service checks remain open. Server-only
+private image and PDF originals require an authenticated download path.
+
+### Phase A7.4 Android checks
+
+A7.4 starts from `main` at `bcddd1a` on 2026-11-12 (Asia/Seoul). Verification
+used Flutter 3.47.8, Dart 3.13.7, and a disposable Android 15 / API 35 x86_64
+emulator. The visual preview used the loopback mock, five synthetic catalog
+items with short Korean titles, and explicit changes to the mock analysis state.
+
+| Check | Result |
+| --- | --- |
+| Flutter | Locked dependencies, generated localizations, fixture parity, static analysis, and all 71 tests passed. The tests cover the mixed geometry, circular drag, stable receipt identity, newer scoped analysis snapshots, paused and disposed animations, reduced motion, and fixed detail actions. |
+| Shape and settling | Of 10,000 synthetic IDs per scope, 3,006 local and 3,001 server identities selected circles. Circle and triangle outlines were compared with their native fixtures along 120 rays. The 10-, 6-, and 4-body host scenarios slept after 175, 186, and 176 steps, with respective mean host step times of 10.5, 10.3, and 5.1 microseconds. |
+| Android builds and lint | The loopback mock and upload-disabled debug APKs and the instrumentation APK built and installed on x86_64. Debug lint reported zero errors and eight warnings. |
+| Android instrumentation | All 47 native tests passed on the upload-disabled debug APK, including share receipt, synchronization, notification, outbox, and staging configuration regressions. |
+| Emulator visuals | Seven screenshots cover the light and dark mixed tray, waiting, processing, completed analysis, and the 320 dp dark tray and processing card at 200% system text. The seeded tray showed three triangles and two circles. Two settled captures had identical tray pixels. |
+| Emulator motion | Three native Android recordings show the cascade and mixed collisions, the processing loop, and the result transition after refreshing the detail against the mock. The cascade clip starts after the Android launch splash. Review of the recordings showed the shapes approaching, joining, and separating, with the original visible and the archive footer stationary. The archive footer pixels matched across waiting, processing, and completion. |
+| Reduced motion and workflow | The connected shapes remained pixel-identical in repeated 320 dp captures with Android animation scales disabled. Back returned from processing to the tray. Dragging a circular pebble archived the mock item, and restore advanced its version with its analysis status intact. |
+
+The timings cover host simulation updates. Physical-device checks remain for
+render frame times, drag response on lower-end devices, and TalkBack interaction.
+The recordings use deterministic mock results and required no hosted model calls.
+
 ## Next concrete tasks
 
 ### Developer A — Mobile
@@ -250,6 +396,8 @@ verification remains outstanding.
 2. Agree with B on FCM device registration, revocation and dispatch. Connect
    delivery hints to the authoritative refresh path and exercise delayed,
    duplicate and cross-account delivery.
+3. Measure a full tray on lower-end Android devices and refine long labels and
+   the archive drop target using those device checks.
 
 ### Developer B — Backend and AI
 
@@ -266,12 +414,20 @@ verification remains outstanding.
 
 ### Developer C — Web and Data
 
-1. Repeat reset, pgTAP and lint on the disposable Supabase stack with Docker.
+1. Provide the approved disposable staging project and record its applied
+   migrations. Run pgTAP and lint there as appropriate and verify real Auth
+   identities, RLS, and private object transfer.
 2. Connect the web client to B's persistent Supabase/FastAPI adapter and test
    two real identities, private objects, and simultaneous Android/web edits.
 3. Validate cursor expiry and full resync with B's retention policy. Review
    cross-library search with A and B before adding a shared API operation.
 4. Configure Vercel after the real adapters and integration checks are ready.
+
+### Integration Lead — I1 acceptance
+
+Coordinate the [two-account staging text-share milestone](INTEGRATION_READINESS.md#owner-handoff-and-acceptance)
+with A, B and C. Run preflight, the authenticated smoke with API restart, and the
+Android/Web sync round trip against the pinned API revision and migrations.
 
 ## Decisions still required
 

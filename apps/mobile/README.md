@@ -1,18 +1,20 @@
 # ITDA mobile — Developer A
 
-ITDA opens to a private library of saved items. On Android, the library combines
-originals on this device with a durable copy of the signed-in account's server
+ITDA opens to a private tray of saved items. On Android, the tray and lists read
+originals on this device and a durable copy of the signed-in account's server
 catalog. The native outbox delivers assigned shares, and Android notifications
 present acknowledged items. A separate sample library uses synthetic fixtures.
 Read the root [AGENTS.md](../../AGENTS.md), [product contract](../../docs/PRODUCT.md),
-and [OpenAPI](../../contracts/openapi.yaml) before changing behavior.
+and [OpenAPI](../../contracts/openapi.yaml) before changing behavior. The
+[mobile design draft](../../docs/DESIGN.md) describes the presentation.
 
 ## Run and verify
 
 Install Flutter stable and the Android SDK. Use the JDK bundled with Android
-Studio or a compatible JDK. Repository CI pins Flutter 3.47.9. The Android runner
-and app dependency lockfile are checked in. Run from `apps/mobile` with an
-Android emulator or device.
+Studio or a compatible JDK. Forge2D builds its bundled Box2D library using the
+Android NDK. Flutter host tests also require a C toolchain, such as Visual Studio
+C++ Build Tools on Windows or clang on Linux. Repository CI pins Flutter
+3.47.9. Run from `apps/mobile` with an Android emulator or device.
 
 ~~~sh
 flutter pub get --enforce-lockfile
@@ -36,19 +38,42 @@ file copying and hashing, interrupted receipt writes, the HTTP upload protocol,
 Android notification state and actions, authenticated retries, and SQLite
 synchronization recovery. Use a disposable installation for instrumentation.
 
-## Library and details
+## Tray, lists, and workflow
 
-The library reads the active account's local snapshot first. **Load more** reads
-more items from SQLite. A receipt and server item with the same acknowledged ID
-share one card. A server deletion removes the synchronized card while retaining
-the device original. Dismissed and archived items remain accessible. **Sample
-library** is available from **Account** and from an empty device-only library.
+The home tray shows the most recent eligible pending and completed items. Its
+capacity varies from four to ten pebbles with the available viewport. **All
+saved** opens the non-archived collection, including when the viewport is too
+small for a tray. **Archive** opens the archived collection. Both use plain
+rows and search the titles and source labels of loaded items. **Load more**
+reveals additional cached pages and extends the search.
+Repeated exact URLs can expand as a group in **All saved**. Each save keeps its
+own detail route and pebble identity. **Sample library** is available from
+**Account** and from an empty device-only tray.
 
-Cards show the source type, display title, up to two lines of labeled AI
-summary, and compact status badges. Recommendations are in details. The library
-groups loaded saves with the exact same source URL, including its query and
-fragment. Expand a group to see each save's own title, timestamp, state, and
-details. The group has no effect on ingestion or synchronization.
+The first nonempty tray releases matte pebbles into a Box2D scene once per app
+session. A stable identity hash selects roughly 70% softly curved triangles and
+30% circles. Triangles use smooth side and corner arcs with a rounded six-point
+hull. Circles use a native circular fixture with the painted radius. Both forms
+share the pebble palette and available width. The home app bar carries **잇다**.
+A new visible share enters on its own. Tap a pebble for details or drag it inside
+the tray. Reduced motion prepares the resting arrangement before displaying it.
+An acknowledged receipt keeps the same pebble as its server details arrive.
+The scene sleeps at rest and rebuilds its geometry for viewport or account
+changes. See the [tray decision](../../docs/decisions/0008-android-rigid-pebble-tray.md).
+
+Drop a pending or completed item on **Archive**, or select **Archive** in
+its details. Both send one owner-scoped PATCH with the observed version and
+`workflow_status: archived`. The tray changes after the server confirms the
+move. **Return to tray** explicitly sets an archived item to pending. A local
+share stays visible while it awaits sync. A conflict asks for the latest
+version before another attempt. Analysis and notification visibility retain
+their independent controls and state.
+
+The UI bundles SUIT Regular and SemiBold from the official v2.0.5 release under
+the SIL Open Font License 1.1. **Open-source licenses** in **Account** shows
+the font license and the notice for the bundled Box2D library. [Official SUIT release](https://github.com/sun-typeface/SUIT/releases/tag/v2.0.5)
+
+## Source and details
 
 A saved title takes priority over an Android share subject or a title line
 shared alongside a URL. When these are absent, a localized label names the
@@ -57,12 +82,31 @@ requests to obtain a title. Android share subjects are local receipt metadata.
 Preserving their provenance across devices requires a contract review with
 Developer B.
 
-Details separate the original source, AI summary and coverage, recommendations,
-and personal notes. Tap a web URL or **Open original** to leave ITDA through
-Android's app-link and browser resolution. Source links work for local and
-synchronized items while analysis is pending. Recommendation references offer
-**Open resource** and **Copy link**. The original-source and reference controls
-also work in the editor. Use Android Back to return to the same ITDA screen.
+The detail card fills the viewport between the app bar and the fixed action
+area. It starts with the title, saved image, original writing or grounded
+summary, and the first recommendation when available. **Show details** reveals
+the full text, original access, saved date, analysis coverage and provenance, and
+remaining recommendations within the same card bounds. **Show less** collapses
+that content. Only the card interior scrolls. The disclosure stays directly
+above **Archive** or **Return to tray** in the safe-area footer. The first
+recommendation follows API order. A note with zero recommendations has no
+recommendation section.
+
+After acknowledgment, a pending item shows a waiting label. Processing shows
+**정리 중 / Organizing** beside a small circle and triangle that connect and
+separate. The loop pauses while the drawing is out of view or the app is in the
+background. Reduced motion presents the same status with a static pair. An
+open registered detail adopts newer analysis results from the current account's
+sync snapshot. Editing retains its observed version until the user saves or
+reviews the draft.
+
+The editor scrolls above the Android keyboard. Save and Cancel remain in a
+fixed footer or move to the app bar when the keyboard leaves little height.
+
+In expanded details, tap a web URL or **Open original** to use Android's
+app-link and browser resolution. Recommendation references offer **Open
+resource** and **Copy link**. These controls also work in the editor. Use
+Android Back to return to the same ITDA screen.
 
 External launch requires an absolute HTTP or HTTPS URL. The app rejects
 credentials and known private storage links and passes only the web URL to
@@ -78,10 +122,12 @@ before returning an in-process path. Both views preserve aspect ratio and cap
 decode dimensions. Images over 64 megapixels stay saved and show an unavailable
 preview.
 
-For a server-only image the screen explains that private download is
-unavailable. The authenticated `GET /v1/assets/{id}/download-url` contract
-requires a short-lived owner-scoped capability, and the checked-in backend
-returns 501. PDFs retain their original-file details behavior.
+For a locally saved PDF, **Open original** verifies the original receipt, file
+and account scope and gives the selected Android viewer a temporary read grant
+for that file. The file stays in the private inbox. A missing viewer or local
+file has a localized recovery message. Server-only images and PDFs require a
+private download capability. The checked-in backend returns 501 from the
+authenticated `GET /v1/assets/{id}/download-url` route.
 
 After an initial sync, server-only items are available across offline restarts
 with the same installed session. **Saved copies** identifies a catalog awaiting
@@ -91,8 +137,8 @@ the source and saved fields offline. Editing requires a current authenticated
 detail response. Sign-out clears the visible account projection. A different
 account or API destination has a separate snapshot.
 
-Tap the title or the personal notes card in editable details to focus that field
-in the existing editor. The notes card works when the note is empty. App-bar
+Tap the title or the note in expanded details to focus that field in the
+existing editor. **Edit notes** opens the field when the note is empty. App-bar
 **Edit** and the notification action also open this editor. It pre-fills the
 saved title and personal notes and shows the original in a read-only section.
 An item without a saved title shows a source-derived hint.
@@ -172,8 +218,8 @@ provider's reported MIME type when available. The local limit for text is 100,00
 characters to match content creation. Source metadata can include subject, sender
 package, declared MIME type, provider authority and display filename.
 
-Open ITDA to see the new item in **Library**. The list refreshes on app resume
-and on native receipt or upload changes.
+Open ITDA to see the new pebble or find the item in **All saved**. Both views
+refresh on app resume and on native receipt or upload changes.
 
 ## Inbox and outbox
 
@@ -213,8 +259,10 @@ acknowledgment checks.
 
 ## Upload account and state
 
-Open **Account** and use **Sign in** with a pre-existing Supabase email/password
-account. The native client stores the access and refresh tokens in an Android Keystore
+Use **Sign in** from the signed-out home or Account settings to open the
+dedicated sign-in page. Enter the email and password for a pre-existing Supabase
+account. A successful sign-in returns to the previous screen. The native
+client stores the access and refresh tokens in an Android Keystore
 encrypted vault. It refreshes the session when the token is about to expire
 or when an API request returns 401. Account sign-out clears the device session.
 Tokens stay in native code and the app only exposes account labels to Flutter.
@@ -224,7 +272,7 @@ New shares are assigned to the active user and API destination when saved.
 For A1 shares and shares received while signed out, open the item and select
 **Choose account**. Confirm the displayed account for each item. Assigned
 receipts keep that user and destination across account changes. Another
-account sees a redacted card.
+account sees a redacted row in **All saved**.
 
 | State | Behavior |
 | --- | --- |
@@ -288,8 +336,8 @@ needed. WorkManager uses the A2 session, a connected network, unique per-content
 work and exponential backoff. The original account resumes its queued events
 after signing back in.
 
-Open an eligible item in **Library** and select
-**Restore notification** after dismissal has synchronized. A queued restore
+Open the details of an eligible item and select **Restore notification** after
+dismissal has synchronized. A queued restore
 leaves the card hidden until the server confirms the current state. A version
 conflict refreshes state. A dismissal may retry at the new revision of the same
 generation with a new key. A conflicting restoration requires a fresh tap.
@@ -396,4 +444,4 @@ its synthetic feed remains available.
 The [integration contract](../../docs/INTEGRATION.md) describes the dependencies
 on real authentication, durable content and sync persistence, private assets,
 and the future FCM delivery contract. See the
-[mobile verification results](../../docs/STATUS.md#phase-a61-android-checks).
+[mobile verification results](../../docs/STATUS.md#phase-a73-android-checks).

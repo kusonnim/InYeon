@@ -80,12 +80,8 @@ internal class LocalShareStore(private val root: File) {
         val attachment = share.receipt.optJSONObject("attachment") ?: return null
         return runCatching {
             val mediaType = attachment.getString("media_type")
-            if (mediaType !in imageTypes || attachment.getString("file_ref") != ATTACHMENT_NAME) return null
-            val expected = File(File(root.canonicalFile, share.localId.toString()), ATTACHMENT_NAME)
-            val file = share.sourceFile.canonicalFile
-            if (file != expected || !file.isFile || file.length() !in 1..MAX_IMAGE_BYTES ||
-                file.length() != attachment.getLong("size_bytes")
-            ) return null
+            if (mediaType !in imageTypes) return null
+            val file = attachmentFile(share, attachment) ?: return null
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.path, bounds)
             if (bounds.outMimeType != mediaType || bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
@@ -94,6 +90,26 @@ internal class LocalShareStore(private val root: File) {
             ) return null
             file.path
         }.getOrNull()
+    }
+
+    fun pdfFile(share: StoredShare): File? {
+        if (share.receipt.stringOrNull("input_type") != "document") return null
+        val attachment = share.receipt.optJSONObject("attachment") ?: return null
+        return runCatching {
+            if (attachment.getString("media_type") != "application/pdf") return null
+            val file = attachmentFile(share, attachment) ?: return null
+            file.takeIf { sha256(it) == attachment.getString("sha256") }
+        }.getOrNull()
+    }
+
+    private fun attachmentFile(share: StoredShare, attachment: JSONObject): File? {
+        if (attachment.getString("file_ref") != ATTACHMENT_NAME) return null
+        val expected = File(File(root.canonicalFile, share.localId.toString()), ATTACHMENT_NAME)
+        val file = share.sourceFile.canonicalFile
+        return file.takeIf {
+            it == expected && it.isFile && it.length() in 1..MAX_ATTACHMENT_BYTES &&
+                it.length() == attachment.getLong("size_bytes")
+        }
     }
 
     fun entries(): List<StoredShare> = synchronized(storeLock) {
@@ -172,7 +188,7 @@ internal class LocalShareStore(private val root: File) {
         private const val RECEIPT_NAME = "receipt.json"
         private const val OUTBOX_NAME = "outbox.json"
         internal const val ATTACHMENT_NAME = "source"
-        private const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
+        private const val MAX_ATTACHMENT_BYTES = 20L * 1024 * 1024
         private const val MAX_IMAGE_PIXELS = 64_000_000L
         private val imageTypes = setOf("image/jpeg", "image/png", "image/webp")
     }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/generated/app_localizations.dart';
+import '../library/library_controller.dart';
 import '../models/content.dart';
 import '../native/share_bridge.dart';
+import 'itda_theme.dart';
 
 class PageWidth extends StatelessWidget {
   const PageWidth({super.key, required this.child});
@@ -11,33 +13,46 @@ class PageWidth extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: child,
-          ),
-        ),
-      );
+    top: false,
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: child,
+      ),
+    ),
+  );
 }
-
 class PageList extends StatelessWidget {
-  const PageList({super.key, required this.children});
+  const PageList({super.key, required this.children, this.bottomActions});
 
   final List<Widget> children;
+  final Widget? bottomActions;
 
   @override
-  Widget build(BuildContext context) => PageWidth(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          children: children,
-        ),
-      );
+  Widget build(BuildContext context) {
+    final list = ListView(
+      padding: const EdgeInsets.fromLTRB(
+        ItdaSpace.page,
+        ItdaSpace.medium,
+        ItdaSpace.page,
+        ItdaSpace.bottom,
+      ),
+      children: children,
+    );
+    final actions = bottomActions;
+    return PageWidth(
+      child: actions == null
+          ? list
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [Expanded(child: list), actions],
+            ),
+    );
+  }
 }
-
-class SectionCard extends StatelessWidget {
-  const SectionCard({
+class ContentSection extends StatelessWidget {
+  const ContentSection({
     super.key,
     required this.title,
     required this.children,
@@ -58,7 +73,7 @@ class SectionCard extends StatelessWidget {
       child: Text(title, style: theme.textTheme.titleMedium),
     );
     final content = Padding(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(vertical: ItdaSpace.tiny),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -68,35 +83,43 @@ class SectionCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: heading),
-                Icon(Icons.edit_outlined,
-                    size: 18, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ],
             ),
-          const SizedBox(height: 10),
+          const SizedBox(height: ItdaSpace.small),
           ...children,
         ],
       ),
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        clipBehavior: tap == null ? null : Clip.antiAlias,
-        child: tap == null
-            ? content
-            : Semantics(
-                button: true,
-                label: tap.label,
-                child: Tooltip(
-                  message: tap.label,
-                  excludeFromSemantics: true,
-                  child: InkWell(onTap: tap.onTap, child: content),
+      padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+      child: tap == null
+          ? content
+          : Semantics(
+              container: true,
+              button: true,
+              label: tap.label,
+              child: Tooltip(
+                message: tap.label,
+                excludeFromSemantics: true,
+                child: InkWell(
+                  onTap: tap.onTap,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minHeight: ItdaSpace.touchTarget,
+                    ),
+                    child: content,
+                  ),
                 ),
               ),
-      ),
+            ),
     );
   }
 }
-
 class StatePanel extends StatelessWidget {
   const StatePanel({
     super.key,
@@ -116,57 +139,29 @@ class StatePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: theme.colorScheme.primary, size: 26),
-            const SizedBox(height: 10),
-            Text(title, style: theme.textTheme.titleMedium),
-            if (message != null) ...[
-              const SizedBox(height: 4),
-              Text(message!, style: theme.textTheme.bodyMedium),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: theme.colorScheme.onSurfaceVariant, size: 19),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
             ],
-            if (action != null && actionLabel != null)
-              TextButton(onPressed: action, child: Text(actionLabel!)),
+          ),
+          if (message != null) ...[
+            const SizedBox(height: 4),
+            Text(message!, style: theme.textTheme.bodyMedium),
           ],
-        ),
+          if (action != null && actionLabel != null)
+            TextButton(onPressed: action, child: Text(actionLabel!)),
+        ],
       ),
     );
   }
 }
-
-class StatusPill extends StatelessWidget {
-  const StatusPill(this.label,
-      {super.key, this.highlight = false, this.error = false});
-
-  final String label;
-  final bool highlight;
-  final bool error;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final (fill, text) = switch ((error, highlight)) {
-      (true, _) => (colors.errorContainer, colors.onErrorContainer),
-      (_, true) => (colors.primaryContainer, colors.onPrimaryContainer),
-      _ => (colors.surfaceContainerHighest, colors.onSurfaceVariant),
-    };
-    return DecoratedBox(
-      decoration:
-          BoxDecoration(color: fill, borderRadius: BorderRadius.circular(10)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        child: Text(label,
-            style: theme.textTheme.labelMedium?.copyWith(color: text)),
-      ),
-    );
-  }
-}
-
 IconData sourceIcon(InputType? type) => switch (type) {
       InputType.text => Icons.notes_rounded,
       InputType.url => Icons.link_rounded,
@@ -222,21 +217,38 @@ String uploadName(AppLocalizations copy, UploadMode mode, LocalShare share) {
   };
 }
 
-String contentTitle(AppLocalizations copy, ContentItem item,
-        {LocalShare? local, LocalSource? original}) =>
+String entryTitle(AppLocalizations copy, LibraryEntry entry) {
+  final content = entry.remote;
+  return content == null
+      ? localTitle(copy, entry.local!)
+      : contentTitle(copy, content, local: entry.local);
+}
+
+String sourceCue(AppLocalizations copy, InputType? type, String? url) =>
+    _webUri(url)?.host ?? sourceName(copy, type);
+
+String contentTitle(
+  AppLocalizations copy,
+  ContentItem item, {
+  LocalShare? local,
+  LocalSource? original,
+}) =>
     _nonBlank(item.title) ??
     suggestedTitle(copy, item, local: local, original: original);
 
-String suggestedTitle(AppLocalizations copy, ContentItem item,
-        {LocalShare? local, LocalSource? original}) =>
-    _sourceTitle(
-      copy,
-      item.inputType,
-      subject: original?.subject ?? local?.subject,
-      url: original?.url ?? local?.sourceUrl ?? item.sourceUrl,
-      text: original?.text ?? local?.linkText ?? item.sourceText,
-      filename: original?.filename ?? local?.label,
-    );
+String suggestedTitle(
+  AppLocalizations copy,
+  ContentItem item, {
+  LocalShare? local,
+  LocalSource? original,
+}) => _sourceTitle(
+  copy,
+  item.inputType,
+  subject: original?.subject ?? local?.subject,
+  url: original?.url ?? local?.sourceUrl ?? item.sourceUrl,
+  text: original?.text ?? local?.linkText ?? item.sourceText,
+  filename: original?.filename ?? local?.label,
+);
 
 String localTitle(AppLocalizations copy, LocalShare share) {
   final type = share.inputType;
@@ -276,9 +288,11 @@ String _sourceTitle(AppLocalizations copy, InputType type,
     }
     return copy.linkFromHost(uri.host);
   }
+  final fileTitle = _nonBlank(filename);
+  if (type == InputType.document && fileTitle != null) return fileTitle;
   if (sharedTitle != null) return sharedTitle;
   if (type != InputType.text) {
-    return _nonBlank(filename) ?? sourceName(copy, type);
+    return fileTitle ?? sourceName(copy, type);
   }
   final firstLine = _nonBlank(text)?.split('\n').first.trim();
   return firstLine == null ? copy.noTitle : compactText(firstLine, 140);

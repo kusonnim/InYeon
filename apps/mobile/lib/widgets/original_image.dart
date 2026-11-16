@@ -4,7 +4,40 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../l10n/generated/app_localizations.dart';
+import '../native/share_bridge.dart';
+import 'itda_theme.dart';
 
+class OriginalImagePreview extends StatelessWidget {
+  const OriginalImagePreview({
+    super.key,
+    required this.original,
+    required this.loading,
+    this.onExpand,
+  });
+
+  final LocalSource? original;
+  final bool loading;
+  final VoidCallback? onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = AppLocalizations.of(context);
+    final path = original?.imagePath;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ItdaSpace.large),
+      child: path != null && onExpand != null
+          ? OriginalImage(path: path, onExpand: onExpand)
+          : loading
+          ? LinearProgressIndicator(semanticsLabel: copy.loadingImage)
+          : Text(
+              original == null
+                  ? copy.remoteImageUnavailable
+                  : copy.imageUnavailable,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+    );
+  }
+}
 class OriginalImageOverlay extends StatelessWidget {
   const OriginalImageOverlay(
       {super.key, required this.path, required this.child});
@@ -21,7 +54,6 @@ class OriginalImageOverlay extends StatelessWidget {
         ],
       );
 }
-
 class OriginalImage extends StatefulWidget {
   const OriginalImage({super.key, required this.path, this.onExpand});
 
@@ -31,7 +63,6 @@ class OriginalImage extends StatefulWidget {
   @override
   State<OriginalImage> createState() => _OriginalImageState();
 }
-
 class _OriginalImageState extends State<OriginalImage> {
   bool get _expanded => widget.onExpand == null;
   late ResizeImage _provider = _imageProvider();

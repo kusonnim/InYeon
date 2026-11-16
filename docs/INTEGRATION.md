@@ -13,6 +13,165 @@ user session. The sample library and loopback contract mock use synthetic
 data. Live authentication, transactional persistence, and storage authorization
 require verification against the real adapters.
 
+## Windows integration setup
+
+Use PowerShell in separate terminals for API, web, and Android. Install Git,
+Python 3.12 and uv, Node 22.6+ or 24 with npm, Flutter with Dart, a Gradle-compatible
+JDK, and the Android SDK with platform-tools. Add Flutter's `bin` and Android's
+`platform-tools` to `PATH` and set `JAVA_HOME` and `ANDROID_HOME` as
+needed. Supabase CLI and a local Docker Linux engine are needed for the disposable
+database suite. The optional PostgreSQL probe uses `psql`.
+
+### Synthetic environment
+
+Start FastAPI in terminal 1 from the repository root. Use a fresh shell with
+fixture settings and synthetic data only. The process holds receipts, jobs, and
+sync cursors in memory for the life of that process.
+
+```powershell
+Set-Location services/backend
+uv sync --locked --group dev
+$env:ITDA_MODE = 'fixture'
+$env:ITDA_ENVIRONMENT = 'local'
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+Start the independent web catalog preview in terminal 2. It imports the shared
+catalog and opens at `http://127.0.0.1:3000` without credentials. Open the page
+once and wait for the first dev compilation before running preflight.
+
+```powershell
+Set-Location apps/web
+npm.cmd ci
+$env:ITDA_DATA_MODE = 'fixture'
+npm.cmd run dev -- --hostname 127.0.0.1 --port 3000
+```
+
+Run the checks from the root in terminal 3. The scripts use the Python standard
+library. The commands use the backend environment installed in terminal 1.
+
+```powershell
+$itdaPython = '.\services\backend\.venv\Scripts\python.exe'
+& $itdaPython tools/integration/preflight.py --profile fixture
+& $itdaPython tools/integration/smoke.py --profile fixture
+```
+
+Expect `GET /health` to return HTTP 200 with `fixture` and `volatile-memory`.
+The preflight also checks structured HTTP 401 without a valid bearer and a
+successful catalog read using a fixture identity. A smoke run creates one
+synthetic text item and reports the replay, readback, edit, feed, and isolation
+checks. Use `--api-url` and preflight's `--web-url` to override the fixture
+loopback ports. The process restart check is skipped in fixture mode.
+
+For the Android network flow, use the separate
+[Android contract mock](../apps/mobile/README.md#loopback-contract-mock).
+The following command starts it on `127.0.0.1:8782` from the repository root.
+
+```powershell
+& .\services\backend\.venv\Scripts\python.exe apps/mobile/tool/mock_upload_server.py --seed-catalog --sync-page-size 2 --replay-sync-prefix
+```
+
+Build Android with `ITDA_UPLOAD_MODE=mock`, `ITDA_API_BASE_URL` and
+`ITDA_SUPABASE_URL` both set to `http://10.0.2.2:8782` for the emulator, and
+`ITDA_SUPABASE_PUBLISHABLE_KEY=sb_publishable_itda_mock`. In that build use the
+synthetic sign-in values from the mobile README. The other local Android option
+is `ITDA_UPLOAD_MODE=disabled`, which exercises offline receipt and the sample
+library without upload. Keep the FastAPI fixture bearer identities, Android mock
+sessions, and staging accounts in their own environments.
+
+### Authenticated staging
+
+Use an approved disposable HTTPS API, its Supabase project URL and publishable
+key, a web URL, and two distinct, confirmed email/password accounts. Have B and C
+record the API revision, database migration IDs, and Auth project used for the
+run. Keep the disposable database, Storage bucket, and accounts isolated from
+production. Pass account credentials through the team's secret channel.
+
+| Order | Service or client | Configuration and startup evidence |
+| --- | --- | --- |
+| 1 | Supabase | C applies the checked-in migrations to the disposable project, enables password Auth, creates the two test identities, and verifies private Storage and RLS. The Auth probe calls `GET /auth/v1/health` with the publishable key. |
+| 2 | FastAPI | B starts the persistent adapter in `ITDA_MODE=production` using the same Auth issuer and database. `ITDA_SUPABASE_URL` and privileged credentials belong in B's server environment. Expect `GET /health` to report `production`. Confirm 401 for absent and invalid bearers and run the authenticated smoke for data operations. The current scaffold reports `unconfigured` and returns 501 to bearer requests. |
+| 3 | Analysis worker | B supplies the command, database connection, and job claim/result evidence. For the HTTP milestone, keep the worker paused or use an approved deterministic staging worker. The checked-in `python -m worker` entry point exits with a scaffold message. |
+| 4 | Web | In a separate web shell set `ITDA_DATA_MODE=api`, `ITDA_API_BASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the approved tuple and run `npm.cmd run dev` locally. Use HTTPS for hosted sessions. Expect the signed-out library to redirect to `/login` and render the sign-in page. |
+| 5 | Android | Use the staging settings below and follow the [Android staging build and device checks](../apps/mobile/STAGING.md). Confirm the **ITDA Staging** package and destination in Account before signing in. |
+
+In the integration and Android build shell, set the staged variables using the
+approved values. Use base URLs without the `/v1` and `/auth/v1` route prefixes.
+The examples are placeholders. Keep generic Android endpoint settings in the
+separate mock/live shells.
+
+```powershell
+$env:ITDA_UPLOAD_MODE = 'staging'
+$env:ITDA_STAGING_API_BASE_URL = 'https://api.staging.example.test'
+$env:ITDA_STAGING_SUPABASE_URL = 'https://project-ref.supabase.co'
+$env:ITDA_STAGING_SUPABASE_PUBLISHABLE_KEY = Read-Host 'Staging publishable key'
+$itdaPython = '.\services\backend\.venv\Scripts\python.exe'
+& $itdaPython tools/integration/preflight.py --profile staging --web-url 'https://web.staging.example.test'
+```
+
+If C supplies read-only database access, set `PGHOST`, `PGDATABASE`, `PGUSER`,
+and `PGPORT` in that shell. Configure the password file and SSL settings required
+by the disposable instance. Add `--check-db` to preflight to issue a read-only
+catalog query for the content, job, and sync tables. Keep PostgreSQL credentials
+server-side or in the authorized operator shell. A successful probe establishes
+connectivity and table presence. See the [data guide](../supabase/README.md) for
+migration, RLS, and Storage verification on a disposable local stack.
+
+Supply the two staging accounts explicitly before running the smoke. This
+PowerShell example masks password entry, passes values through the environment,
+and clears the four values after the run.
+
+```powershell
+$env:ITDA_SMOKE_A_EMAIL = Read-Host 'Disposable account A email'
+$env:ITDA_SMOKE_A_PASSWORD = [Net.NetworkCredential]::new('', (Read-Host 'Account A password' -AsSecureString)).Password
+$env:ITDA_SMOKE_B_EMAIL = Read-Host 'Disposable account B email'
+$env:ITDA_SMOKE_B_PASSWORD = [Net.NetworkCredential]::new('', (Read-Host 'Account B password' -AsSecureString)).Password
+& $itdaPython tools/integration/smoke.py --profile staging
+Remove-Item Env:ITDA_SMOKE_A_EMAIL,Env:ITDA_SMOKE_A_PASSWORD,Env:ITDA_SMOKE_B_EMAIL,Env:ITDA_SMOKE_B_PASSWORD
+```
+
+The harness signs in at the approved Auth endpoint and uses the resulting access
+JWTs against the configured API. It verifies readback, one matching catalog item
+after replay, a versioned edit and a stale conflict, sync events, and B's denied
+read. The run leaves its synthetic item in the disposable account. With the
+operator's staging restart scheduled, add `--restart-check` in an interactive
+terminal. The harness pauses while the operator restarts the API process. After
+the operator confirms startup, it signs in again and checks the edited item and
+original idempotency receipt. Record the before/after process or deployment IDs
+outside the harness. B and C verify the ingestion transaction and row counts in
+the disposable database.
+
+### Interpreting results
+
+`PASS` records a completed assertion. `FAIL` indicates an observed mismatch.
+`BLOCKED` identifies a missing dependency, unavailable route, or service.
+`NOT TESTED` identifies an optional or downstream assertion outside the run.
+Exit codes are 0 for the executed checks passing, 1 for a failure, and 2 for a
+blocker without an observed failure. The harness uses direct HTTP connections,
+normal TLS verification, and no redirects. Evidence contains statuses and the
+synthetic marker. Keep passwords, bearer tokens, cursors, user data, and capability
+URLs out of evidence and Git. See the [readiness report](INTEGRATION_READINESS.md)
+for the boundary audit and executed checks.
+
+## Deterministic analysis checks
+
+Run the integration tests from `services/backend` with the installed backend
+development environment.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest ../../tools/integration
+```
+
+The analysis tests exercise deterministic worker stages and the fixture result
+writer. They check recommendation payloads, zero recommendations, partial
+coverage, extraction failure, source retention, independent workflow and
+notification state, and result sync. For web rendering checks, start the loopback
+preview and set `ITDA_I1_WEB_PREVIEW_URL=http://127.0.0.1:3000` before running the
+same tests. The [readiness report](INTEGRATION_READINESS.md#reproduce-the-checks)
+also describes the test-only failed-result catalog. Flutter detail tests cover
+rendering and source retention for synthetic results. Hosted model evaluation is
+a separate B milestone because the free quota cannot cover the 25 cases.
+
 ## Interface checklist
 
 | Operation | Shared behavior |
@@ -57,22 +216,6 @@ pagination limits and cursor rules. Do not construct cursors or storage paths in
 
 Replace one adapter at a time. Do not make screens dependent on a hosted model or
 add temporary privileged credentials to clients to bypass missing server work.
-
-## Architecture review of the full flow
-
-| Transition | Available evidence | Real integration still required |
-| --- | --- | --- |
-| Android share -> local persistence | Native receiver, atomic private copy and outbox receipt, Flutter pending list | Broader Android version and provider coverage |
-| Local persistence -> API | Android account-bound outbox, Supabase session client, content and private asset requests verified with a contract mock | Live Supabase JWT verification, durable idempotent ingestion and verified private storage |
-| API -> DB + job | Migrations, relationships, constraints, repository semantics | Atomic DB adapter, idempotency receipts, concurrency tests |
-| Job -> extraction -> summary/recommendations | Worker stages and coverage fixtures | Job claims/leases, real extraction, hosted model |
-| AI result -> persistence | Distinct source/generated/edit fields and failure tests | Transactional guarded writes and retry recovery |
-| Result -> notification update | Android presentation and local suppression, contract mock refresh and mutations | Owner-scoped live detail/edit and notification transactions, device registration, durable dispatch and FCM |
-| Persisted content -> mobile and web libraries | Android persists owner-scoped snapshots and page checkpoints against the contract mock. Backend sync models and SQL sequence allocation exist | Live authenticated catalog and feed adapters, two-account bootstrap/expiry/reconnect, web synchronization |
-
-This review establishes architectural feasibility, not a running Android-to-web
-system. Executed local evidence is listed in STATUS and must not be inferred from
-the existence of a test file or a configured CI job.
 
 ## End-to-end acceptance procedure for the real adapters
 

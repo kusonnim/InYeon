@@ -4,20 +4,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/generated/app_localizations.dart';
+import '../library/library_controller.dart';
+import '../library/workflow_edit.dart';
 import '../models/content.dart';
 import '../native/notification_bridge.dart';
+import '../native/saved_document.dart';
 import '../native/share_bridge.dart';
 import 'content_details.dart';
+import 'detail_card.dart';
+import 'itda_theme.dart';
 import 'library_components.dart';
 import 'original_image.dart';
 
-enum _Request { load, save, restore }
+enum _Request { load, save, restore, workflow }
 
 class RegisteredContentScreen extends StatefulWidget {
   const RegisteredContentScreen({
     super.key,
     required this.bridge,
     required this.target,
+    this.library,
     this.openEditor = false,
     this.initialContent,
     this.initialMode = UploadMode.disabled,
@@ -27,6 +33,7 @@ class RegisteredContentScreen extends StatefulWidget {
 
   final NotificationBridge bridge;
   final NoticeTarget target;
+  final LibraryController? library;
   final bool openEditor;
   final ContentItem? initialContent;
   final UploadMode initialMode;
@@ -37,7 +44,6 @@ class RegisteredContentScreen extends StatefulWidget {
   State<RegisteredContentScreen> createState() =>
       _RegisteredContentScreenState();
 }
-
 class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   final _title = TextEditingController();
   final _note = TextEditingController();
@@ -79,6 +85,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       (_) => unawaited(_checkStatus()),
       onError: (Object _) {},
     );
+    widget.library?.addListener(_useSyncedContent);
     _lifecycle = AppLifecycleListener(onResume: _checkStatus);
     unawaited(_load());
   }
@@ -86,6 +93,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   @override
   void dispose() {
     unawaited(_changes.cancel());
+    widget.library?.removeListener(_useSyncedContent);
     _lifecycle.dispose();
     _title.dispose();
     _note.dispose();
@@ -97,6 +105,32 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   bool _owns(ContentItem content) =>
       content.id == widget.target.contentId &&
       content.userId == widget.target.ownerId;
+
+  void _useSyncedContent() {
+    // Keep a draft's version until its explicit save or review.
+    final current = _item;
+    if (_locked || _busy || _editing || current == null || _error == 'http_404') {
+      return;
+    }
+    final target = widget.target;
+    final next = widget.library?.contentFor(
+      (ownerId: target.ownerId, realm: target.realm),
+      target.contentId,
+    );
+    final previous = current.content;
+    if (next == null ||
+        !_owns(next) ||
+        next.version < previous.version ||
+        (next.version == previous.version &&
+            !next.updatedAt.isAfter(previous.updatedAt))) {
+      return;
+    }
+    setState(() {
+      _item = RegisteredContent(next, current.mode, current.notice);
+      _title.text = next.title ?? '';
+      _note.text = next.userNote ?? '';
+    });
+  }
 
   Future<void> _checkStatus() async {
     if (_locked || _error == 'http_404') return;
@@ -192,6 +226,10 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
 
   void _closeImage() => setState(() => _viewingImage = false);
 
+  VoidCallback? get _openDocument => _original?.inputType == InputType.document
+      ? () => openSavedDocument(context, widget.target.toMessage())
+      : null;
+
   void _beginEdit([FocusNode? focus]) {
     if (!_canEdit || _editing || _viewingImage) return;
     setState(() => _editing = true);
@@ -236,6 +274,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
 
   Future<void> _closeEditor() async {
     if (_busy) return;
+    FocusScope.of(context).unfocus();
     final copy = AppLocalizations.of(context);
     if (_dirty) {
       final discard = await showDialog<bool>(
@@ -261,12 +300,33 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       _title.text = _item?.content.title ?? '';
       _note.text = _item?.content.userNote ?? '';
     });
+    _useSyncedContent();
   }
 
   Future<void> _restore() => _run(_Request.restore, () async {
         await widget.bridge.restore(widget.target);
         await _checkStatus();
       });
+
+  Future<void> _move(ContentItem content, WorkflowStatus destination) async {
+    if (!_canEdit) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).workflowUnavailable),
+        ),
+      );
+      return;
+    }
+    await _run(_Request.workflow, () async {
+      final updated = await changeWorkflow(
+        widget.bridge,
+        widget.target,
+        content,
+        destination,
+      );
+      if (mounted && !_locked) _accept(updated);
+    });
+  }
 
   Future<void> _run(_Request request, Future<void> Function() operation) async {
     if (_busy || _locked) return;
@@ -306,7 +366,10 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         });
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        _useSyncedContent();
+      }
     }
   }
 
@@ -315,6 +378,17 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
     final copy = AppLocalizations.of(context);
     final image = _original?.imagePath;
     final viewingImage = _viewingImage && image != null;
+    final item = _item;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final availableBodyHeight =
+        MediaQuery.sizeOf(context).height -
+        MediaQuery.paddingOf(context).vertical -
+        keyboard -
+        kToolbarHeight;
+    final shortKeyboardViewport =
+        keyboard > 0 && availableBodyHeight < ItdaSpace.touchTarget * 3;
+    final compactEditor =
+        _editing && item != null && !viewingImage && shortKeyboardViewport;
     return PopScope(
       canPop: !_editing && !viewingImage,
       onPopInvokedWithResult: (didPop, _) {
@@ -326,12 +400,33 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         }
       },
       child: Scaffold(
+        // A read-only screen can reappear while the landscape IME closes.
+        resizeToAvoidBottomInset: _editing || !shortKeyboardViewport,
         appBar: AppBar(
-          leading: viewingImage ? BackButton(onPressed: _closeImage) : null,
-          title: Text(viewingImage
-              ? copy.imageViewer
-              : (_editing ? copy.editTitle : copy.detailsTitle)),
+          leading: viewingImage
+              ? BackButton(onPressed: _closeImage)
+              : compactEditor
+              ? IconButton(
+                  tooltip: copy.cancel,
+                  onPressed: _busy ? null : _closeEditor,
+                  icon: const Icon(Icons.close),
+                )
+              : null,
+          title: Text(
+            viewingImage
+                ? copy.imageViewer
+                : (_editing ? copy.editTitle : copy.detailsTitle),
+            style: _editing || viewingImage
+                ? null
+                : Theme.of(context).textTheme.labelLarge,
+          ),
           actions: [
+            if (compactEditor)
+              IconButton(
+                tooltip: copy.saveChanges,
+                onPressed: _saveAction(item.content),
+                icon: const Icon(Icons.check),
+              ),
             if (!_locked && !_editing && !viewingImage)
               IconButton(
                 tooltip: copy.refreshContent,
@@ -348,64 +443,116 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         ),
         body: OriginalImageOverlay(
           path: viewingImage ? image : null,
-          child: Column(
-            children: [
-              if (_busy)
-                LinearProgressIndicator(semanticsLabel: copy.loadingContent),
-              Expanded(child: _body(copy)),
-            ],
-          ),
+          child: _body(copy, compactEditor: compactEditor),
         ),
       ),
     );
   }
 
-  Widget _body(AppLocalizations copy) {
+  Widget _body(AppLocalizations copy, {required bool compactEditor}) {
     if (_locked) {
-      return PageList(children: [
-        StatePanel(icon: Icons.lock_outline, title: copy.accountLocked),
-      ]);
+      return PageList(
+        children: [
+          StatePanel(icon: Icons.lock_outline, title: copy.accountLocked),
+        ],
+      );
     }
     final item = _item;
     final banner = _problem(copy);
+    final header = [
+      if (_busy)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ItdaSpace.small),
+          child: LinearProgressIndicator(semanticsLabel: copy.loadingContent),
+        ),
+      if (banner != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
+          child: banner,
+        ),
+    ];
     if (item == null) {
-      return PageList(children: [
-        if (banner != null) banner,
-        if (_original != null)
-          OriginalSource(
-            original: _original,
-            openOriginal: widget.openOriginal,
-            openImage: _expandImage,
-          )
-        else if (widget.openOriginal != null)
-          TextButton(
-              onPressed: widget.openOriginal, child: Text(copy.readOriginal)),
-        if (!_editing) ..._notificationControls(copy),
-      ]);
+      if (_original case final original?) {
+        return _originalDetails(copy, original, header);
+      }
+      return PageList(
+        children: [
+          ...header,
+          if (widget.openOriginal != null)
+            TextButton(
+              onPressed: widget.openOriginal,
+              child: Text(copy.readOriginal),
+            ),
+          if (!_editing) ..._notificationControls(copy),
+        ],
+      );
     }
-    if (_editing) return _editor(copy, item, banner);
+    if (_editing)
+      return _editor(copy, item, header, compactEditor: compactEditor);
     return ContentDetails(
       content: item.content,
-      badge: _environmentBadge(copy, item.mode),
-      openOriginal: widget.openOriginal,
+      contextLabel: _environmentBadge(copy, item.mode),
       original: _original,
       loadingOriginal: _readingOriginal,
       openImage: _expandImage,
+      openDocument: _openDocument,
       onEditTitle: _canEdit ? () => _beginEdit(_titleFocus) : null,
       onEditNotes: _canEdit ? () => _beginEdit(_noteFocus) : null,
+      primaryAction: _workflowAction(copy, item.content),
       header: [
+        ...header,
         if (!_verified && banner == null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: StatusPill(copy.savedCopies),
+            padding: const EdgeInsets.only(bottom: ItdaSpace.medium),
+            child: Text(
+              copy.savedCopies,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-        if (banner != null)
-          Padding(padding: const EdgeInsets.only(bottom: 12), child: banner)
       ],
       footer: _notificationControls(copy),
+    );
+  }
+
+  Widget _originalDetails(
+    AppLocalizations copy,
+    LocalSource original,
+    List<Widget> header,
+  ) {
+    final image = original.inputType == InputType.image;
+    final source = sourceCue(copy, original.inputType, original.url);
+    final title = original.filename ?? original.subject ?? source;
+    final text = readableSourceText(original.text, original.url);
+    return DetailCard(
+      children: (expanded) => [
+        ...header,
+        ContentHeading(title: title),
+        if (image)
+          OriginalImagePreview(
+            original: original,
+            loading: _readingOriginal,
+            onExpand: _expandImage,
+          )
+        else if (text != null && text.trim() != title.trim())
+          DetailText(text: text, expanded: expanded),
+        if (expanded) ...[
+          const Divider(height: ItdaSpace.bottom),
+          if (source != title)
+            Padding(
+              padding: const EdgeInsets.only(bottom: ItdaSpace.small),
+              child: Text(source, style: Theme.of(context).textTheme.bodySmall),
+            ),
+          OriginalSource(
+            original: original,
+            displayedTitle: title,
+            showImage: false,
+            showText: image,
+            openSavedCopy: _openDocument == null ? widget.openOriginal : null,
+            openDocument: _openDocument,
+          ),
+          if (!_editing) ..._notificationControls(copy),
+        ],
+      ],
     );
   }
 
@@ -413,6 +560,19 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
       mode == UploadMode.mock
           ? copy.mockContent
           : uploadEnvironmentLabel(copy, mode);
+
+  Widget _workflowAction(AppLocalizations copy, ContentItem content) {
+    final destination = nextWorkflow(content.workflowStatus);
+    final restoring = destination == WorkflowStatus.pending;
+    return FilledButton.icon(
+      onPressed: _canEdit ? () => _move(content, destination) : null,
+      icon: Icon(
+        restoring ? Icons.unarchive_outlined : Icons.archive_outlined,
+        size: 19,
+      ),
+      label: Text(restoring ? copy.returnToTray : copy.archiveAction),
+    );
+  }
 
   Widget? _problem(AppLocalizations copy) {
     if (_conflict) {
@@ -432,13 +592,14 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
             : Icons.info_outline_rounded,
         title: switch (error) {
           'network_unavailable' => copy.offlineTitle,
+          'version_conflict' => copy.workflowConflict,
           'notification_unavailable' => copy.restoreUnavailable,
           _ =>
             _item == null ? copy.contentUnavailable : copy.operationUnconfirmed,
         },
         message: _item != null && !_verified ? copy.cachedContent : null,
         action: _busy ? null : _load,
-        actionLabel: copy.retry,
+        actionLabel: error == 'version_conflict' ? copy.loadLatest : copy.retry,
       );
     }
     return null;
@@ -451,7 +612,7 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
         (!notice.dismissed && notice.pending == null && notice.error == null))
       return [];
     return [
-      SectionCard(
+      ContentSection(
         title: copy.notificationPermission,
         children: [
           if (notice.dismissed) Text(copy.dismissed),
@@ -467,101 +628,123 @@ class _RegisteredContentScreenState extends State<RegisteredContentScreen> {
   }
 
   Widget _editor(
-          AppLocalizations copy, RegisteredContent item, Widget? banner) =>
-      PageList(
-        children: [
-          if (_environmentBadge(copy, item.mode) case final label?)
-            Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: StatusPill(label)),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(copy.editFieldsHelp,
-                style: Theme.of(context).textTheme.bodyLarge),
-          ),
-          if (banner != null)
-            Padding(padding: const EdgeInsets.only(bottom: 12), child: banner),
-          if (_reviewDraft && _dirty)
-            SectionCard(
-              title: copy.latestSavedValues,
-              children: [
-                Text(copy.reviewDraft),
-                if (_titleChanged) ...[
-                  const SizedBox(height: 8),
-                  Text(copy.titleField,
-                      style: Theme.of(context).textTheme.labelLarge),
-                  Text(item.content.title ?? copy.noTitle),
-                ],
-                if (_noteChanged) ...[
-                  const SizedBox(height: 8),
-                  Text(copy.notes,
-                      style: Theme.of(context).textTheme.labelLarge),
-                  Text(item.content.userNote ?? copy.noNotes),
-                ],
-              ],
+    AppLocalizations copy,
+    RegisteredContent item,
+    List<Widget> header, {
+    required bool compactEditor,
+  }) => PageList(
+    bottomActions: compactEditor
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(
+              ItdaSpace.page,
+              ItdaSpace.small,
+              ItdaSpace.page,
+              ItdaSpace.tiny,
             ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _title,
-                focusNode: _titleFocus,
-                enabled: !_busy,
-                maxLength: 500,
-                minLines: 1,
-                maxLines: 3,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: copy.titleField,
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                  hintText:
-                      suggestedTitle(copy, item.content, original: _original),
-                  hintMaxLines: 2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _note,
-                focusNode: _noteFocus,
-                enabled: !_busy,
-                maxLength: 10000,
-                minLines: 4,
-                maxLines: 8,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                    labelText: copy.notes, alignLabelWithHint: true),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
             child: Wrap(
-              spacing: 10,
-              runSpacing: 4,
+              spacing: ItdaSpace.medium,
+              runSpacing: ItdaSpace.tiny,
               children: [
                 FilledButton(
-                  onPressed: !_busy && _verified && !_conflict && _dirty
-                      ? () => _save(item.content)
-                      : null,
+                  onPressed: _saveAction(item.content),
                   child: Text(copy.saveChanges),
                 ),
                 TextButton(
-                    onPressed: _busy ? null : _closeEditor,
-                    child: Text(copy.cancel)),
+                  onPressed: _busy ? null : _closeEditor,
+                  child: Text(copy.cancel),
+                ),
               ],
             ),
           ),
-          OriginalSource.fromContent(
-            item.content,
-            original: _original,
-            loadingOriginal: _readingOriginal,
-            openOriginal: widget.openOriginal,
-            openImage: _expandImage,
+    children: [
+      if (_environmentBadge(copy, item.mode) case final label?)
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+      const SizedBox(height: ItdaSpace.medium),
+      ...header,
+      if (_reviewDraft && _dirty)
+        ContentSection(
+          title: copy.latestSavedValues,
+          children: [
+            Text(copy.reviewDraft),
+            if (_titleChanged) ...[
+              const SizedBox(height: 8),
+              Text(
+                copy.titleField,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              Text(item.content.title ?? copy.noTitle),
+            ],
+            if (_noteChanged) ...[
+              const SizedBox(height: 8),
+              Text(copy.notes, style: Theme.of(context).textTheme.labelLarge),
+              Text(item.content.userNote ?? copy.noNotes),
+            ],
+          ],
+        ),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _title,
+            focusNode: _titleFocus,
+            enabled: !_busy,
+            maxLength: 500,
+            buildCounter: _fieldCounter,
+            minLines: 1,
+            maxLines: 3,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: copy.titleField,
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              hintText: suggestedTitle(copy, item.content, original: _original),
+              hintMaxLines: 2,
+            ),
           ),
-          RecommendationSection(
-              title: copy.reviewSuggestions,
-              items: item.content.recommendations),
+          const SizedBox(height: ItdaSpace.large),
+          TextField(
+            controller: _note,
+            focusNode: _noteFocus,
+            enabled: !_busy,
+            maxLength: 10000,
+            buildCounter: _fieldCounter,
+            minLines: 4,
+            maxLines: 8,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: copy.notes,
+              alignLabelWithHint: true,
+            ),
+          ),
         ],
-      );
+      ),
+      OriginalSource.fromContent(
+        item.content,
+        original: _original,
+        loadingOriginal: _readingOriginal,
+        openImage: _expandImage,
+        openDocument: _openDocument,
+      ),
+      RecommendationSection(
+        title: copy.reviewSuggestions,
+        items: item.content.recommendations,
+      ),
+    ],
+  );
+
+  VoidCallback? _saveAction(ContentItem content) =>
+      _canEdit && !_conflict && _dirty ? () => _save(content) : null;
+
+  Widget? _fieldCounter(
+    BuildContext context, {
+    required int currentLength,
+    required bool isFocused,
+    required int? maxLength,
+  }) => maxLength != null && currentLength >= maxLength - 20
+      ? Text('$currentLength / $maxLength')
+      : null;
 }

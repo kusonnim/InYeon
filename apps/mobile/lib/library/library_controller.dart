@@ -25,6 +25,9 @@ final class LibraryEntry {
   }
 
   String? get serverId => remote?.id ?? local?.serverContentId;
+  String get pebbleId => local == null ? key : 'local:${local!.localId}';
+  DateTime get pebbleSavedAt => local?.receivedAt ?? savedAt;
+  bool get archived => remote?.workflowStatus == WorkflowStatus.archived;
 }
 
 class LibraryController extends ChangeNotifier {
@@ -173,6 +176,9 @@ class LibraryController extends ChangeNotifier {
       if (_current(request, owner)) notifyListeners();
     }
   }
+
+  ContentItem? contentFor(AccountScope owner, String id) =>
+      scope == owner ? _contents[id] : null;
 
   void updateItem(AccountScope owner, ContentItem item) {
     if (_disposed ||

@@ -1,6 +1,9 @@
 package com.itda.itda_mobile
 
+import java.io.File
 import java.util.UUID
+
+internal data class SavedPdf(val localId: UUID, val file: File, val filename: String)
 
 internal class LocalOriginals(private val store: LocalShareStore, private val activeOwner: () -> UploadOwner?) {
     fun read(localId: UUID): Map<String, Any?> {
@@ -14,6 +17,24 @@ internal class LocalOriginals(private val store: LocalShareStore, private val ac
         return describe(share)
     }
 
+    fun pdf(localId: UUID): SavedPdf = pdf(
+        store.read(localId) ?: throw UploadProblem.permanent("local_share_missing"),
+    )
+
+    fun registeredPdf(ref: NoticeRef): SavedPdf {
+        requireOwner(ref.owner)
+        return pdf(store.acknowledged(ref) ?: throw UploadProblem.permanent("local_share_missing"))
+    }
+
+    private fun pdf(share: StoredShare): SavedPdf {
+        val owner = share.progress.owner
+        requireOwner(owner)
+        val file = store.pdfFile(share) ?: throw UploadProblem.permanent("document_unavailable")
+        val filename = share.receipt.getJSONObject("attachment").getString("filename")
+        requireOwner(owner)
+        return SavedPdf(share.localId, file, filename)
+    }
+
     private fun describe(share: StoredShare): Map<String, Any?> {
         val owner = share.progress.owner
         requireOwner(owner)
@@ -24,7 +45,7 @@ internal class LocalOriginals(private val store: LocalShareStore, private val ac
             "source_url" to receipt.stringOrNull("source_url"),
             "subject" to receipt.shareSubject(),
             "filename" to receipt.optJSONObject("attachment")?.stringOrNull("filename"),
-            // This path remains inside the app process. There is no exported file provider.
+            // The image path remains inside the app process.
             "image_path" to store.imagePath(share),
         )
         requireOwner(owner)

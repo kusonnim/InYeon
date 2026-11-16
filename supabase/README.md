@@ -25,6 +25,10 @@ uploads, worker claim/retry logic, and FCM delivery remain implementation work.
 
 ## Local verification
 
+The shared C1 hosted integration project and real-account verification are
+recorded in [the environment handoff](integration/HANDOFF.md). The reusable
+[HTTP RLS probe](integration/README.md) works independently of B's API.
+
 Install the Supabase CLI and run a Docker-compatible container runtime. From the
 repository root, against the disposable local stack only:
 

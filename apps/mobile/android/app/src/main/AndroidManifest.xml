@@ -9,6 +9,11 @@
         android:networkSecurityConfig="${itdaNetworkPolicy}"
         android:icon="@mipmap/ic_launcher">
         <receiver android:name=".NoticeDismissReceiver" android:exported="false"/>
+        <provider
+            android:name=".SavedPdfProvider"
+            android:authorities="${applicationId}.saved-pdf"
+            android:exported="false"
+            android:grantUriPermissions="true"/>
         <activity
             android:name=".ShareReceiverActivity"
             android:exported="true"

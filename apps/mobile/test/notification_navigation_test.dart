@@ -25,19 +25,27 @@ void main() {
     addTearDown(adapter.events.close);
   });
 
-  testWidgets('opens the scoped details from a cold notification tap',
-      (tester) async {
-    adapter.navigation =
-        NoticeNavigation(adapter.target, NoticeDestination.details);
-    await tester.pumpWidget(ItdaApp(
+  testWidgets('opens the scoped details from a cold notification tap', (
+    tester,
+  ) async {
+    adapter.navigation = NoticeNavigation(
+      adapter.target,
+      NoticeDestination.details,
+    );
+    await tester.pumpWidget(
+      ItdaApp(
         initialLocale: const Locale('en'),
         api: api,
-        notificationBridge: adapter));
+        notificationBridge: adapter,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(adapter.opened, [adapter.target]);
     expect(find.text('Content details'), findsOneWidget);
+    expect(find.text('Open original'), findsNothing);
+    await _expandDetails(tester);
     expect(find.text('Mock content'), findsOneWidget);
-    expect(find.text('Original source'), findsOneWidget);
+    expect(find.text('Open original'), findsOneWidget);
   });
 
   testWidgets(
@@ -93,34 +101,108 @@ void main() {
     expect(adapter.patch, isNull);
   });
 
-  testWidgets('a source-derived title hint does not become a field edit',
-      (tester) async {
+  testWidgets(
+    'the keyboard leaves the focused note and editor actions reachable',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 640);
+      const safeArea = FakeViewPadding(top: 24, bottom: 20);
+      tester.view.padding = safeArea;
+      tester.view.viewPadding = safeArea;
+      addTearDown(tester.view.reset);
+      adapter.navigation = NoticeNavigation(
+        adapter.target,
+        NoticeDestination.edit,
+      );
+      await tester.pumpWidget(
+        ItdaApp(
+          initialLocale: const Locale('en'),
+          api: api,
+          notificationBridge: adapter,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final note = find.byType(TextField).last;
+      await tester.ensureVisible(note);
+      await tester.showKeyboard(note);
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      tester.view.padding = const FakeViewPadding(top: 24);
+      await tester.pumpAndSettle();
+      tester.testTextInput.enterText('Bring the handout.');
+      await tester.pumpAndSettle();
+
+      final save = find.text('Save changes').hitTestable();
+      expect(save, findsOneWidget);
+      expect(find.text('Cancel').hitTestable(), findsOneWidget);
+      expect(tester.getBottomLeft(save).dy, lessThan(640 - 260));
+      _expectReachableNote(tester);
+
+      tester.view.physicalSize = const Size(640, 320);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 190);
+      await tester.pumpAndSettle();
+      final compactSave = find.byTooltip('Save changes').hitTestable();
+      expect(compactSave, findsOneWidget);
+      expect(find.byTooltip('Cancel').hitTestable(), findsOneWidget);
+      expect(tester.getBottomLeft(compactSave).dy, lessThan(320 - 190));
+      expect(tester.widget<TextField>(note).focusNode!.hasFocus, isTrue);
+      tester.testTextInput.enterText('Bring both handouts.');
+      await tester.pumpAndSettle();
+      _expectReachableNote(tester);
+
+      await tester.tap(compactSave);
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding();
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 20);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(adapter.patch!.userNote, 'Bring both handouts.');
+      expect(adapter.patch!.title, isNull);
+      expect(find.text('Content details'), findsOneWidget);
+      expect(find.text('Archive').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a source-derived title hint does not become a field edit', (
+    tester,
+  ) async {
     final item = _catalogItem({'title': null, 'user_note': null});
     adapter.content = item;
     adapter.localSource = const LocalSource(subject: 'Original shared title');
-    adapter.navigation =
-        NoticeNavigation(adapter.target, NoticeDestination.details);
-    await tester.pumpWidget(ItdaApp(
+    adapter.navigation = NoticeNavigation(
+      adapter.target,
+      NoticeDestination.details,
+    );
+    await tester.pumpWidget(
+      ItdaApp(
         initialLocale: const Locale('en'),
         api: api,
-        notificationBridge: adapter));
+        notificationBridge: adapter,
+      ),
+    );
     await tester.pumpAndSettle();
-    await _showControl(tester, 'No notes yet.');
-    await tester.tap(find.text('No notes yet.').hitTestable());
+    await _expandDetails(tester);
+    await _showControl(tester, 'Edit notes');
+    await tester.tap(find.text('Edit notes').hitTestable());
     await tester.pumpAndSettle();
-    final fields =
-        tester.widgetList<TextField>(find.byType(TextField)).toList();
+    final fields = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .toList();
     expect(fields.first.decoration!.hintText, 'Original shared title');
     expect(fields.first.controller!.text, isEmpty);
     expect(fields.last.controller!.text, isEmpty);
     expect(fields.last.focusNode!.hasFocus, isTrue);
     await _showControl(tester, 'Save changes');
     expect(
-        tester
-            .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Save changes'))
-            .onPressed,
-        isNull);
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
     await tester.enterText(find.byType(TextField).last, 'My note only.');
     await tester.pump();
     await _showControl(tester, 'Save changes');
@@ -132,45 +214,56 @@ void main() {
     });
   });
 
-  testWidgets('notes tap focuses the saved note and supports discard and clear',
-      (tester) async {
-    final item = _catalogItem({'user_note': 'A saved note'});
-    adapter.content = item;
-    adapter.navigation =
-        NoticeNavigation(adapter.target, NoticeDestination.details);
-    await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
-    await tester.pumpAndSettle();
-    await _showControl(tester, 'A saved note');
-    expect(find.byTooltip('메모 수정'), findsOneWidget);
-    await tester.tap(find.text('A saved note').hitTestable());
-    await tester.pumpAndSettle();
-    final notes = find.byType(TextField).last;
-    expect(tester.widget<TextField>(notes).focusNode!.hasFocus, isTrue);
-    expect(tester.widget<TextField>(notes).controller!.text, item.userNote);
-    await tester.enterText(notes, 'Discard this draft');
-    await tester.pumpAndSettle();
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('작성 내용 지우기'));
-    await tester.pumpAndSettle();
-    expect(adapter.patch, isNull);
+  testWidgets(
+    'notes tap focuses the saved note and supports discard and clear',
+    (tester) async {
+      final item = _catalogItem({'user_note': 'A saved note'});
+      adapter.content = item;
+      adapter.navigation = NoticeNavigation(
+        adapter.target,
+        NoticeDestination.details,
+      );
+      await tester.pumpWidget(ItdaApp(api: api, notificationBridge: adapter));
+      await tester.pumpAndSettle();
+      await _expandDetails(tester, '상세히 보기');
+      await _showControl(tester, 'A saved note');
+      expect(find.byTooltip('메모 수정'), findsOneWidget);
+      await tester.tap(find.text('A saved note').hitTestable());
+      await tester.pumpAndSettle();
+      final notes = find.byType(TextField).last;
+      expect(tester.widget<TextField>(notes).focusNode!.hasFocus, isTrue);
+      expect(tester.widget<TextField>(notes).controller!.text, item.userNote);
+      await tester.enterText(notes, 'Discard this draft');
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('작성 내용 지우기'));
+      await tester.pumpAndSettle();
+      expect(adapter.patch, isNull);
 
-    await _showControl(tester, 'A saved note');
-    await tester.tap(find.text('A saved note').hitTestable());
-    await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(notes).controller!.text, item.userNote);
-    await tester.enterText(notes, '');
-    await tester.pumpAndSettle();
-    adapter.content =
-        _catalogItem({'user_note': null, 'version': item.version + 1});
-    await _showControl(tester, '변경 사항 저장');
-    await tester.tap(find.text('변경 사항 저장').hitTestable());
-    await tester.pumpAndSettle();
-    expect(adapter.patch!.toJson(),
-        {'expected_version': item.version, 'user_note': null});
-    await _showControl(tester, '아직 메모가 없어요.');
-    expect(find.text('아직 메모가 없어요.'), findsOneWidget);
-  });
+      await _expandDetails(tester, '상세히 보기');
+      await _showControl(tester, 'A saved note');
+      await tester.tap(find.text('A saved note').hitTestable());
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(notes).controller!.text, item.userNote);
+      await tester.enterText(notes, '');
+      await tester.pumpAndSettle();
+      adapter.content = _catalogItem({
+        'user_note': null,
+        'version': item.version + 1,
+      });
+      await _showControl(tester, '변경 사항 저장');
+      await tester.tap(find.text('변경 사항 저장').hitTestable());
+      await tester.pumpAndSettle();
+      expect(adapter.patch!.toJson(), {
+        'expected_version': item.version,
+        'user_note': null,
+      });
+      await _expandDetails(tester, '상세히 보기');
+      await _showControl(tester, '메모 수정');
+      expect(find.text('메모 수정'), findsOneWidget);
+    },
+  );
 
   testWidgets(
       'a sync update and conflict keep the draft and preserve a server note',
@@ -261,6 +354,7 @@ void main() {
         api: api,
         notificationBridge: adapter));
     await tester.pumpAndSettle();
+    await _expandDetails(tester);
     final restore = find.text('Restore notification');
     await tester.scrollUntilVisible(
       restore.hitTestable(),
@@ -276,22 +370,31 @@ void main() {
     expect(restore, findsNothing);
   });
 
-  testWidgets('hides loaded content when the original account loses access',
-      (tester) async {
-    adapter.navigation =
-        NoticeNavigation(adapter.target, NoticeDestination.details);
-    await tester.pumpWidget(ItdaApp(
+  testWidgets('hides loaded content when the original account loses access', (
+    tester,
+  ) async {
+    adapter.navigation = NoticeNavigation(
+      adapter.target,
+      NoticeDestination.details,
+    );
+    await tester.pumpWidget(
+      ItdaApp(
         initialLocale: const Locale('en'),
         api: api,
-        notificationBridge: adapter));
+        notificationBridge: adapter,
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Original source'), findsOneWidget);
+    await _expandDetails(tester);
+    expect(find.text('Open original'), findsOneWidget);
     adapter.authorized = false;
     adapter.events.add(null);
     await tester.pumpAndSettle();
-    expect(find.text('Original source'), findsNothing);
-    expect(find.text('Sign in with the account that saved this content.'),
-        findsOneWidget);
+    expect(find.text('Open original'), findsNothing);
+    expect(
+      find.text('Sign in with the account that saved this content.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('opens an offline acknowledged image and zooms it in place',
@@ -378,6 +481,55 @@ void main() {
         'This image has no copy on this device. Private download is unavailable.');
     expect(find.byType(OriginalImage), findsNothing);
   });
+  testWidgets('uses the saved PDF filename and opens the scoped original', (
+    tester,
+  ) async {
+    adapter.content = _catalogItem({
+      'input_type': 'document',
+      'source_text': null,
+      'source_url': null,
+      'title': null,
+      'analysis': null,
+      'analysis_status': 'pending',
+      'recommendations': <Object>[],
+    });
+    adapter.localSource = const LocalSource(
+      inputType: InputType.document,
+      subject: 'Shared attachment',
+      filename: 'Field notes.pdf',
+    );
+    adapter.navigation = NoticeNavigation(
+      adapter.target,
+      NoticeDestination.details,
+    );
+    const channel = MethodChannel('com.itda.itda_mobile/local_shares');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      throw PlatformException(code: 'document_viewer_unavailable');
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(
+      ItdaApp(
+        initialLocale: const Locale('en'),
+        api: api,
+        notificationBridge: adapter,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Field notes.pdf'), findsOneWidget);
+    expect(find.text('Shared attachment'), findsNothing);
+    expect(find.text('Recommendations'), findsNothing);
+    expect(find.text('Open original'), findsNothing);
+    await _expandDetails(tester);
+    await _showControl(tester, 'Open original');
+    await tester.tap(find.text('Open original').hitTestable());
+    await tester.pumpAndSettle();
+    expect(calls.single.method, 'openSavedDocument');
+    expect(calls.single.arguments, adapter.target.toMessage());
+    expect(find.text('Install a PDF viewer to open this file.'), findsOneWidget);
+  });
 }
 
 ContentItem _catalogItem(Map<String, dynamic> changes) {
@@ -390,6 +542,14 @@ ContentItem _catalogItem(Map<String, dynamic> changes) {
   });
 }
 
+void _expectReachableNote(WidgetTester tester) {
+  final viewport = tester.getRect(find.byType(ListView));
+  final note = find.byType(TextField).last;
+  final field = tester.getRect(note);
+  expect(viewport.overlaps(field), isTrue, reason: '$field in $viewport');
+  expect(tester.widget<TextField>(note).focusNode!.hasFocus, isTrue);
+}
+
 Future<void> _showControl(WidgetTester tester, String label,
     {double delta = 180}) async {
   final control = find.text(label).hitTestable();
@@ -398,6 +558,11 @@ Future<void> _showControl(WidgetTester tester, String label,
       scrollable: find.byType(Scrollable).first);
 }
 
+Future<void> _expandDetails(WidgetTester tester, [String label = 'Show details']) async {
+  await _showControl(tester, label);
+  await tester.tap(find.text(label).hitTestable());
+  await tester.pumpAndSettle();
+}
 class _NotificationAdapter implements NotificationBridge {
   _NotificationAdapter(this.content);
 
